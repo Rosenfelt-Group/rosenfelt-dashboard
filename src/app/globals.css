@@ -1,0 +1,34 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-brand-offwhite text-brand-black antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl border border-brand-border p-5;
+  }
+  .btn-primary {
+    @apply bg-brand-orange text-white px-4 py-2 rounded-lg text-sm font-medium
+           hover:bg-brand-orange-dark transition-colors;
+  }
+  .btn-ghost {
+    @apply bg-transparent text-brand-muted px-4 py-2 rounded-lg text-sm font-medium
+           hover:bg-brand-border transition-colors;
+  }
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+  }
+  .badge-success { @apply badge bg-green-50 text-green-700; }
+  .badge-error   { @apply badge bg-red-50 text-red-700; }
+  .badge-warning { @apply badge bg-amber-50 text-amber-700; }
+  .badge-neutral { @apply badge bg-gray-100 text-gray-600; }
+  .badge-orange  { @apply badge bg-orange-50 text-brand-orange; }
+}
