@@ -9,13 +9,12 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user }) {
-      // Hard gate — only the allowed email can log in
+    async signIn({ user, account, profile }) {
+      console.log("SignIn attempt:", user.email);
+      console.log("ALLOWED_EMAIL:", process.env.ALLOWED_EMAIL);
       const allowed = process.env.ALLOWED_EMAIL;
-      if (user.email !== allowed) {
-        return false;
-      }
-      return true;
+      if (!allowed) return true; // if env var missing, allow through
+      return user.email?.toLowerCase() === allowed.toLowerCase();
     },
     async session({ session }) {
       return session;
