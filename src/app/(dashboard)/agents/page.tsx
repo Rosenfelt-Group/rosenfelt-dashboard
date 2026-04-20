@@ -4,6 +4,7 @@ import { WorkflowLog, AgentStatus, Agent } from "@/types";
 import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow } from "date-fns";
 import clsx from "clsx";
+import Link from "next/link";
 
 export default function AgentsPage() {
   const [status, setStatus] = useState<AgentStatus[]>([]);
@@ -73,7 +74,11 @@ export default function AgentsPage() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-medium text-brand-black">Execution log</h2>
-          <div className="flex gap-1">
+          <div className="flex items-center gap-3">
+            <Link href="/agents/history" className="text-xs text-brand-orange hover:underline">
+             View full history →
+            </Link>
+            <div className="flex gap-1">
             {(["all", "riley", "jordan", "avery"] as const).map(a => (
               <button
                 key={a}
@@ -88,6 +93,7 @@ export default function AgentsPage() {
                 {a}
               </button>
             ))}
+          </div>
           </div>
         </div>
 
