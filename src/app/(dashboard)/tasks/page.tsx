@@ -2,13 +2,14 @@
 import { useEffect, useState } from "react";
 import { Task, TaskStatus, Agent } from "@/types";
 import { AgentBadge } from "@/components/AgentBadge";
-import { formatDistanceToNow, isPast, parseISO } from "date-fns";
+import { isPast, parseISO } from "date-fns";
 import clsx from "clsx";
 
-const COLUMNS: { status: TaskStatus; label: string }[] = [
-  { status: "open",        label: "Open" },
-  { status: "in_progress", label: "In Progress" },
-  { status: "done",        label: "Done" },
+const COLUMNS: { status: TaskStatus; label: string; color: string }[] = [
+  { status: "open",        label: "Open",      color: "text-brand-black" },
+  { status: "in_progress", label: "In Progress", color: "text-amber-600" },
+  { status: "deferred",    label: "Deferred",  color: "text-blue-500" },
+  { status: "done",        label: "Done",      color: "text-green-600" },
 ];
 
 const PRIORITY_COLORS = {
@@ -17,12 +18,26 @@ const PRIORITY_COLORS = {
   low:    "bg-gray-100 text-gray-500",
 };
 
-function TaskCard({ task, onUpdate }: { task: Task; onUpdate: (id: string, updates: Partial<Task>) => void }) {
-  const overdue = task.due_date && !["done","cancelled"].includes(task.status) && isPast(parseISO(task.due_date));
+function TaskCard({ task, onUpdate, onDelete }: {
+  task: Task;
+  onUpdate: (id: string, updates: Partial<Task>) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const overdue = task.due_date && !["done","cancelled","deferred"].includes(task.status) && isPast(parseISO(task.due_date));
+
+  const otherStatuses = COLUMNS.filter(c => c.status !== task.status);
 
   return (
     <div className="bg-white rounded-lg border border-brand-border p-3 space-y-2">
-      <p className="text-sm font-medium text-brand-black leading-snug">{task.title}</p>
+      <button
+        className="w-full text-left"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <p className="text-sm font-medium text-brand-black leading-snug">{task.title}</p>
+      </button>
+
       <div className="flex items-center gap-2 flex-wrap">
         <AgentBadge agent={task.assigned_agent} size="sm" />
         <span className={clsx("badge text-xs", PRIORITY_COLORS[task.priority])}>
@@ -34,20 +49,63 @@ function TaskCard({ task, onUpdate }: { task: Task; onUpdate: (id: string, updat
             {new Date(task.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
           </span>
         )}
+        {task.category && (
+          <span className="text-xs text-brand-muted">{task.category}</span>
+        )}
       </div>
-      {/* Status move buttons */}
-      <div className="flex gap-1 pt-1">
-        {COLUMNS.filter(c => c.status !== task.status).map(col => (
-          <button
-            key={col.status}
-            onClick={() => onUpdate(task.id, { status: col.status })}
-            className="text-xs px-2 py-1 rounded bg-brand-offwhite text-brand-muted
-                       hover:bg-brand-border transition-colors"
-          >
-            → {col.label}
-          </button>
-        ))}
-      </div>
+
+      {expanded && (
+        <div className="pt-1 space-y-2">
+          {task.description && (
+            <p className="text-xs text-brand-muted">{task.description}</p>
+          )}
+          {task.notes && (
+            <p className="text-xs text-brand-muted italic">{task.notes}</p>
+          )}
+
+          {/* Status move buttons */}
+          <div className="flex gap-1 flex-wrap">
+            {otherStatuses.map(col => (
+              <button
+                key={col.status}
+                onClick={() => onUpdate(task.id, { status: col.status })}
+                className="text-xs px-2 py-1 rounded bg-brand-offwhite text-brand-muted
+                           hover:bg-brand-border transition-colors"
+              >
+                → {col.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Delete */}
+          <div className="pt-1 border-t border-brand-border">
+            {confirming ? (
+              <div className="flex gap-2 items-center">
+                <span className="text-xs text-red-600">Delete permanently?</span>
+                <button
+                  onClick={() => { onDelete(task.id); setConfirming(false); }}
+                  className="text-xs px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+                >
+                  Yes, delete
+                </button>
+                <button
+                  onClick={() => setConfirming(false)}
+                  className="text-xs px-2 py-1 rounded bg-brand-offwhite text-brand-muted hover:bg-brand-border transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirming(true)}
+                className="text-xs text-red-500 hover:text-red-700 transition-colors"
+              >
+                Delete task
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -73,40 +131,23 @@ function NewTaskForm({ onSave, onCancel }: { onSave: (t: Partial<Task>) => void;
         }}
       />
       <div className="flex gap-2">
-        <select
-          value={agent}
-          onChange={e => setAgent(e.target.value as Agent)}
-          className="flex-1 text-xs border border-brand-border rounded px-2 py-1.5
-                     focus:outline-none focus:border-brand-orange"
-        >
-          {(["riley","jordan","avery","brian"] as Agent[]).map(a => (
-            <option key={a} value={a}>{a}</option>
-          ))}
+        <select value={agent} onChange={e => setAgent(e.target.value as Agent)}
+          className="flex-1 text-xs border border-brand-border rounded px-2 py-1.5 focus:outline-none focus:border-brand-orange">
+          {(["riley","jordan","avery","brian"] as Agent[]).map(a => <option key={a} value={a}>{a}</option>)}
         </select>
-        <select
-          value={priority}
-          onChange={e => setPriority(e.target.value as Task["priority"])}
-          className="flex-1 text-xs border border-brand-border rounded px-2 py-1.5
-                     focus:outline-none focus:border-brand-orange"
-        >
+        <select value={priority} onChange={e => setPriority(e.target.value as Task["priority"])}
+          className="flex-1 text-xs border border-brand-border rounded px-2 py-1.5 focus:outline-none focus:border-brand-orange">
           <option value="high">High</option>
           <option value="medium">Medium</option>
           <option value="low">Low</option>
         </select>
-        <input
-          type="date"
-          value={dueDate}
-          onChange={e => setDueDate(e.target.value)}
-          className="flex-1 text-xs border border-brand-border rounded px-2 py-1.5
-                     focus:outline-none focus:border-brand-orange"
-        />
+        <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+          className="flex-1 text-xs border border-brand-border rounded px-2 py-1.5 focus:outline-none focus:border-brand-orange" />
       </div>
       <div className="flex gap-2">
-        <button
-          disabled={!title.trim()}
+        <button disabled={!title.trim()}
           onClick={() => title.trim() && onSave({ title, assigned_agent: agent, priority, due_date: dueDate || undefined, status: "open" })}
-          className="btn-primary text-xs py-1.5 disabled:opacity-40"
-        >
+          className="btn-primary text-xs py-1.5 disabled:opacity-40">
           Add task
         </button>
         <button onClick={onCancel} className="btn-ghost text-xs py-1.5">Cancel</button>
@@ -119,6 +160,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [filter, setFilter] = useState<Agent | "all">("all");
 
   useEffect(() => {
     fetch("/api/tasks")
@@ -147,57 +189,71 @@ export default function TasksPage() {
     setTasks(prev => prev.map(t => t.id === id ? updated : t));
   }
 
-  const byStatus = (status: TaskStatus) => tasks.filter(t => t.status === status);
+  async function handleDelete(id: string) {
+    await fetch("/api/tasks", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    setTasks(prev => prev.filter(t => t.id !== id));
+  }
+
+  const filtered = filter === "all" ? tasks : tasks.filter(t => t.assigned_agent === filter);
+  const byStatus = (status: TaskStatus) => filtered.filter(t => t.status === status);
+
+  const agents: (Agent | "all")[] = ["all", "riley", "jordan", "avery", "brian"];
 
   if (loading) {
-    return (
-      <div className="p-8">
-        <div className="grid grid-cols-3 gap-4">
-          {[1,2,3].map(i => <div key={i} className="card animate-pulse h-64" />)}
-        </div>
-      </div>
-    );
+    return <div className="p-8"><div className="grid grid-cols-4 gap-4">{[1,2,3,4].map(i => <div key={i} className="card animate-pulse h-64" />)}</div></div>;
   }
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-semibold text-brand-black">Tasks</h1>
           <p className="text-sm text-brand-muted mt-0.5">
-            {tasks.filter(t => t.status !== "done").length} active ·{" "}
-            {tasks.filter(t => t.status === "done").length} done
+            {tasks.filter(t => t.status === "open" || t.status === "in_progress").length} active ·{" "}
+            {tasks.filter(t => t.status === "done").length} done ·{" "}
+            {tasks.filter(t => t.status === "deferred").length} deferred
           </p>
         </div>
-        <button onClick={() => setAdding(true)} className="btn-primary">
-          + Add task
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Agent filter */}
+          <div className="flex gap-1">
+            {agents.map(a => (
+              <button key={a} onClick={() => setFilter(a)}
+                className={clsx("px-2.5 py-1 rounded-full text-xs transition-colors capitalize",
+                  filter === a ? "bg-brand-orange text-white" : "bg-brand-offwhite text-brand-muted hover:bg-brand-border"
+                )}>
+                {a}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setAdding(true)} className="btn-primary">+ Add task</button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         {COLUMNS.map(col => (
           <div key={col.status}>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-medium text-brand-black">{col.label}</h2>
+              <h2 className={clsx("text-sm font-medium", col.color)}>{col.label}</h2>
               <span className="text-xs text-brand-muted bg-brand-border px-2 py-0.5 rounded-full">
                 {byStatus(col.status).length}
               </span>
             </div>
-
             <div className="space-y-2">
-              {/* New task form — only shows in Open column */}
               {col.status === "open" && adding && (
                 <NewTaskForm onSave={handleCreate} onCancel={() => setAdding(false)} />
               )}
-
-              {byStatus(col.status).length === 0 && !adding && (
+              {byStatus(col.status).length === 0 && !(col.status === "open" && adding) && (
                 <div className="border-2 border-dashed border-brand-border rounded-lg p-4 text-center">
                   <p className="text-xs text-brand-muted">No {col.label.toLowerCase()} tasks</p>
                 </div>
               )}
-
               {byStatus(col.status).map(task => (
-                <TaskCard key={task.id} task={task} onUpdate={handleUpdate} />
+                <TaskCard key={task.id} task={task} onUpdate={handleUpdate} onDelete={handleDelete} />
               ))}
             </div>
           </div>

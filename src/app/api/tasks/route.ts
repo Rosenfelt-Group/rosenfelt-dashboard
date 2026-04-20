@@ -53,3 +53,21 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { id } = await req.json();
+    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+    const { error } = await supabaseAdmin
+      .from("tasks")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error("Task delete error:", err);
+    return NextResponse.json({ error: "Failed to delete task" }, { status: 500 });
+  }
+}
