@@ -6,10 +6,10 @@ import { isPast, parseISO } from "date-fns";
 import clsx from "clsx";
 
 const COLUMNS: { status: TaskStatus; label: string; color: string }[] = [
-  { status: "open",        label: "Open",      color: "text-brand-black" },
-  { status: "in_progress", label: "In Progress", color: "text-amber-600" },
-  { status: "deferred",    label: "Deferred",  color: "text-blue-500" },
-  { status: "done",        label: "Done",      color: "text-green-600" },
+  { status: "open",        label: "Open",        color: "text-brand-black" },
+  { status: "in_progress", label: "In Progress",  color: "text-amber-600" },
+  { status: "deferred",    label: "Deferred",     color: "text-blue-500" },
+  { status: "done",        label: "Done",         color: "text-green-600" },
 ];
 
 const PRIORITY_COLORS = {
@@ -26,15 +26,11 @@ function TaskCard({ task, onUpdate, onDelete }: {
   const [expanded, setExpanded] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const overdue = task.due_date && !["done","cancelled","deferred"].includes(task.status) && isPast(parseISO(task.due_date));
-
   const otherStatuses = COLUMNS.filter(c => c.status !== task.status);
 
   return (
     <div className="bg-white rounded-lg border border-brand-border p-3 space-y-2">
-      <button
-        className="w-full text-left"
-        onClick={() => setExpanded(!expanded)}
-      >
+      <button className="w-full text-left" onClick={() => setExpanded(!expanded)}>
         <p className="text-sm font-medium text-brand-black leading-snug">{task.title}</p>
       </button>
 
@@ -161,6 +157,8 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [filter, setFilter] = useState<Agent | "all">("all");
+  // Mobile: which status column is active
+  const [mobileTab, setMobileTab] = useState<TaskStatus>("open");
 
   useEffect(() => {
     fetch("/api/tasks")
@@ -200,65 +198,170 @@ export default function TasksPage() {
 
   const filtered = filter === "all" ? tasks : tasks.filter(t => t.assigned_agent === filter);
   const byStatus = (status: TaskStatus) => filtered.filter(t => t.status === status);
-
   const agents: (Agent | "all")[] = ["all", "riley", "jordan", "avery", "brian"];
 
   if (loading) {
-    return <div className="p-8"><div className="grid grid-cols-4 gap-4">{[1,2,3,4].map(i => <div key={i} className="card animate-pulse h-64" />)}</div></div>;
+    return (
+      <div className="p-4 md:p-8">
+        <div className="hidden md:grid grid-cols-4 gap-4">
+          {[1,2,3,4].map(i => <div key={i} className="card animate-pulse h-64" />)}
+        </div>
+        <div className="md:hidden space-y-2">
+          {[1,2,3].map(i => <div key={i} className="card animate-pulse h-20" />)}
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl font-semibold text-brand-black">Tasks</h1>
-          <p className="text-sm text-brand-muted mt-0.5">
-            {tasks.filter(t => t.status === "open" || t.status === "in_progress").length} active ·{" "}
-            {tasks.filter(t => t.status === "done").length} done ·{" "}
-            {tasks.filter(t => t.status === "deferred").length} deferred
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Agent filter */}
-          <div className="flex gap-1">
+    <>
+      {/* ─────────────────────────────────────────────────────────
+          MOBILE LAYOUT  (hidden on md+)
+      ───────────────────────────────────────────────────────── */}
+      <div className="md:hidden flex flex-col h-full pt-12 pb-20">
+
+        {/* Header */}
+        <div className="px-4 pt-4 pb-2 bg-white border-b border-brand-border">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h1 className="text-lg font-semibold text-brand-black">Tasks</h1>
+              <p className="text-xs text-brand-muted">
+                {tasks.filter(t => t.status === "open" || t.status === "in_progress").length} active ·{" "}
+                {tasks.filter(t => t.status === "done").length} done
+              </p>
+            </div>
+            <button onClick={() => setAdding(true)} className="btn-primary text-sm px-3 py-1.5">
+              + Add
+            </button>
+          </div>
+
+          {/* Agent filter — scrollable chips */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-none">
             {agents.map(a => (
               <button key={a} onClick={() => setFilter(a)}
-                className={clsx("px-2.5 py-1 rounded-full text-xs transition-colors capitalize",
-                  filter === a ? "bg-brand-orange text-white" : "bg-brand-offwhite text-brand-muted hover:bg-brand-border"
+                className={clsx(
+                  "px-3 py-1 rounded-full text-xs whitespace-nowrap transition-colors capitalize flex-shrink-0",
+                  filter === a
+                    ? "bg-brand-orange text-white"
+                    : "bg-brand-offwhite text-brand-muted"
                 )}>
                 {a}
               </button>
             ))}
           </div>
-          <button onClick={() => setAdding(true)} className="btn-primary">+ Add task</button>
+        </div>
+
+        {/* Status tab switcher */}
+        <div className="flex border-b border-brand-border bg-white">
+          {COLUMNS.map(col => {
+            const count = byStatus(col.status).length;
+            const active = mobileTab === col.status;
+            return (
+              <button
+                key={col.status}
+                onClick={() => setMobileTab(col.status)}
+                className={clsx(
+                  "flex-1 py-2.5 text-xs font-medium transition-colors relative",
+                  active ? col.color : "text-brand-muted"
+                )}
+              >
+                {col.label}
+                <span className={clsx(
+                  "ml-1 text-[10px] px-1 rounded-full",
+                  active ? "bg-brand-border" : "bg-transparent"
+                )}>
+                  {count}
+                </span>
+                {active && (
+                  <span className="absolute bottom-0 inset-x-0 h-0.5 bg-brand-orange rounded-full" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Task list for active tab */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-brand-offwhite">
+          {/* New task form — only shows on Open tab */}
+          {mobileTab === "open" && adding && (
+            <NewTaskForm onSave={handleCreate} onCancel={() => setAdding(false)} />
+          )}
+
+          {byStatus(mobileTab).length === 0 && !(mobileTab === "open" && adding) ? (
+            <div className="border-2 border-dashed border-brand-border rounded-lg p-8 text-center mt-4">
+              <p className="text-sm text-brand-muted">
+                No {COLUMNS.find(c => c.status === mobileTab)?.label.toLowerCase()} tasks
+              </p>
+              {mobileTab === "open" && (
+                <button onClick={() => setAdding(true)} className="mt-2 text-xs text-brand-orange">
+                  + Add one
+                </button>
+              )}
+            </div>
+          ) : (
+            byStatus(mobileTab).map(task => (
+              <TaskCard key={task.id} task={task} onUpdate={handleUpdate} onDelete={handleDelete} />
+            ))
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
-        {COLUMNS.map(col => (
-          <div key={col.status}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className={clsx("text-sm font-medium", col.color)}>{col.label}</h2>
-              <span className="text-xs text-brand-muted bg-brand-border px-2 py-0.5 rounded-full">
-                {byStatus(col.status).length}
-              </span>
-            </div>
-            <div className="space-y-2">
-              {col.status === "open" && adding && (
-                <NewTaskForm onSave={handleCreate} onCancel={() => setAdding(false)} />
-              )}
-              {byStatus(col.status).length === 0 && !(col.status === "open" && adding) && (
-                <div className="border-2 border-dashed border-brand-border rounded-lg p-4 text-center">
-                  <p className="text-xs text-brand-muted">No {col.label.toLowerCase()} tasks</p>
-                </div>
-              )}
-              {byStatus(col.status).map(task => (
-                <TaskCard key={task.id} task={task} onUpdate={handleUpdate} onDelete={handleDelete} />
+      {/* ─────────────────────────────────────────────────────────
+          DESKTOP LAYOUT  (hidden on mobile)
+      ───────────────────────────────────────────────────────── */}
+      <div className="hidden md:block p-8">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-xl font-semibold text-brand-black">Tasks</h1>
+            <p className="text-sm text-brand-muted mt-0.5">
+              {tasks.filter(t => t.status === "open" || t.status === "in_progress").length} active ·{" "}
+              {tasks.filter(t => t.status === "done").length} done ·{" "}
+              {tasks.filter(t => t.status === "deferred").length} deferred
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1">
+              {agents.map(a => (
+                <button key={a} onClick={() => setFilter(a)}
+                  className={clsx("px-2.5 py-1 rounded-full text-xs transition-colors capitalize",
+                    filter === a
+                      ? "bg-brand-orange text-white"
+                      : "bg-brand-offwhite text-brand-muted hover:bg-brand-border"
+                  )}>
+                  {a}
+                </button>
               ))}
             </div>
+            <button onClick={() => setAdding(true)} className="btn-primary">+ Add task</button>
           </div>
-        ))}
+        </div>
+
+        <div className="grid grid-cols-4 gap-4">
+          {COLUMNS.map(col => (
+            <div key={col.status}>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className={clsx("text-sm font-medium", col.color)}>{col.label}</h2>
+                <span className="text-xs text-brand-muted bg-brand-border px-2 py-0.5 rounded-full">
+                  {byStatus(col.status).length}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {col.status === "open" && adding && (
+                  <NewTaskForm onSave={handleCreate} onCancel={() => setAdding(false)} />
+                )}
+                {byStatus(col.status).length === 0 && !(col.status === "open" && adding) && (
+                  <div className="border-2 border-dashed border-brand-border rounded-lg p-4 text-center">
+                    <p className="text-xs text-brand-muted">No {col.label.toLowerCase()} tasks</p>
+                  </div>
+                )}
+                {byStatus(col.status).map(task => (
+                  <TaskCard key={task.id} task={task} onUpdate={handleUpdate} onDelete={handleDelete} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

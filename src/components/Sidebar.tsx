@@ -32,55 +32,97 @@ function Icon({ name }: { name: string }) {
   );
 }
 
+// Bottom 5 nav items shown on mobile
+const mobileNav = nav.filter(n => ["overview","chat","tasks","crm","agents"].includes(n.href.replace("/","")));
+
 export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-52 bg-white border-r border-brand-border
-                      flex flex-col z-10">
-      {/* Brand */}
-      <div className="px-5 py-5 border-b border-brand-border">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 bg-brand-orange rounded-lg flex items-center justify-center flex-shrink-0">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+    <>
+      {/* ── Desktop sidebar (hidden on mobile) ── */}
+      <aside className="hidden md:flex fixed inset-y-0 left-0 w-52 bg-white border-r border-brand-border
+                        flex-col z-10">
+        {/* Brand */}
+        <div className="px-5 py-5 border-b border-brand-border">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 bg-brand-orange rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                   stroke="white" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M12 7v5l3 1.5"/>
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-brand-black leading-tight">Rosenfelt Group</p>
+              <p className="text-xs text-brand-muted leading-tight">Control Center</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
+          {nav.map((item) => {
+            const active = pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={clsx(
+                  "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors",
+                  active
+                    ? "bg-orange-50 text-brand-orange font-medium"
+                    : "text-brand-muted hover:bg-brand-offwhite hover:text-brand-black"
+                )}
+              >
+                <Icon name={item.icon} />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Footer */}
+        <div className="px-3 py-3 border-t border-brand-border">
+          <p className="text-xs text-brand-muted px-3">brian@rosenfeltgroup.com</p>
+        </div>
+      </aside>
+
+      {/* ── Mobile top bar ── */}
+      <header className="md:hidden fixed top-0 inset-x-0 h-12 bg-white border-b border-brand-border
+                         flex items-center px-4 z-20">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 bg-brand-orange rounded-md flex items-center justify-center flex-shrink-0">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                  stroke="white" strokeWidth="2" strokeLinecap="round">
               <circle cx="12" cy="12" r="9"/>
               <path d="M12 7v5l3 1.5"/>
             </svg>
           </div>
-          <div>
-            <p className="text-xs font-semibold text-brand-black leading-tight">Rosenfelt Group</p>
-            <p className="text-xs text-brand-muted leading-tight">Control Center</p>
-          </div>
+          <p className="text-sm font-semibold text-brand-black">Rosenfelt Group</p>
         </div>
-      </div>
+      </header>
 
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-        {nav.map((item) => {
+      {/* ── Mobile bottom tab bar ── */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-brand-border
+                      flex items-center justify-around z-20 pb-safe">
+        {mobileNav.map((item) => {
           const active = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
               className={clsx(
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors",
-                active
-                  ? "bg-orange-50 text-brand-orange font-medium"
-                  : "text-brand-muted hover:bg-brand-offwhite hover:text-brand-black"
+                "flex flex-col items-center gap-0.5 px-3 py-2 min-w-[56px] transition-colors",
+                active ? "text-brand-orange" : "text-brand-muted"
               )}
             >
               <Icon name={item.icon} />
-              {item.label}
+              <span className="text-[10px] font-medium">{item.label}</span>
             </Link>
           );
         })}
       </nav>
-
-      {/* Footer */}
-      <div className="px-3 py-3 border-t border-brand-border">
-        <p className="text-xs text-brand-muted px-3">brian@rosenfeltgroup.com</p>
-      </div>
-    </aside>
+    </>
   );
 }
