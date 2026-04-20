@@ -4,6 +4,9 @@ import { WorkflowLog, Agent } from "@/types";
 import clsx from "clsx";
 import { formatDistanceToNow, parseISO } from "date-fns";
 
+// Extend WorkflowLog locally to include actions_summary
+type WorkflowLogExtended = WorkflowLog & { actions_summary?: string };
+
 const AGENTS: Agent[] = ["riley", "jordan", "avery"];
 
 const AGENT_COLORS: Record<string, string> = {
@@ -26,6 +29,27 @@ const STATUS_DOT = {
   pending: "bg-amber-400",
 };
 
+// Parse actions_summary into structured parts
+function parseActionsSummary(summary?: string): { tools: string[]; response: string } {
+  if (!summary) return { tools: [], response: "" };
+  const toolMatch = summary.match(/Tools: ([^|]+)/);
+  const responseMatch = summary.match(/Response: (.+)/);
+  const tools = toolMatch
+    ? toolMatch[1].split(",").map(t => t.trim()).filter(Boolean)
+    : [];
+  const response = responseMatch ? responseMatch[1].trim() : "";
+  return { tools, response };
+}
+
+// Tool badge colors
+function toolColor(tool: string): string {
+  if (tool.startsWith("SSH") || tool.startsWith("Docker")) return "bg-slate-100 text-slate-700";
+  if (tool.startsWith("n8n")) return "bg-violet-50 text-violet-700";
+  if (tool.startsWith("WP")) return "bg-sky-50 text-sky-700";
+  if (tool.startsWith("Supabase")) return "bg-emerald-50 text-emerald-700";
+  return "bg-gray-100 text-gray-600";
+}
+
 function AgentChip({ agent }: { agent: string }) {
   return (
     <span className={clsx(
@@ -47,9 +71,10 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
   );
 }
 
-function LogRow({ log }: { log: WorkflowLog }) {
+function LogRow({ log }: { log: WorkflowLogExtended }) {
   const [expanded, setExpanded] = useState(false);
   const ago = formatDistanceToNow(parseISO(log.created_at), { addSuffix: true });
+  const { tools, response } = parseActionsSummary(log.actions_summary);
 
   return (
     <div className="border-b border-brand-border last:border-0">
@@ -61,10 +86,28 @@ function LogRow({ log }: { log: WorkflowLog }) {
           {/* Status dot */}
           <span className={clsx("w-2 h-2 rounded-full flex-shrink-0", STATUS_DOT[log.status])} />
 
-          {/* Workflow name */}
-          <span className="text-sm font-medium text-brand-black flex-1 text-left truncate">
-            {log.workflow_name ?? "Unknown workflow"}
-          </span>
+          {/* Workflow name + trigger */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-brand-black truncate">
+                {log.trigger_text ?? "Unknown trigger"}
+              </span>
+            </div>
+            {/* Tool badges inline */}
+            {tools.length > 0 && (
+              <div className="flex gap-1 flex-wrap mt-1">
+                {tools.map((t, i) => (
+                  <span key={i} className={clsx("text-[10px] px-1.5 py-0.5 rounded font-medium", toolColor(t))}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+            )}
+            {/* Response snippet */}
+            {response && !expanded && (
+              <p className="text-xs text-brand-muted truncate mt-0.5">{response}</p>
+            )}
+          </div>
 
           {/* Agent chip */}
           <AgentChip agent={log.agent} />
@@ -76,7 +119,7 @@ function LogRow({ log }: { log: WorkflowLog }) {
 
           {/* Duration */}
           {log.duration_ms && (
-            <span className="text-xs text-brand-muted hidden md:inline">
+            <span className="text-xs text-brand-muted hidden md:inline flex-shrink-0">
               {log.duration_ms < 1000 ? `${log.duration_ms}ms` : `${(log.duration_ms / 1000).toFixed(1)}s`}
             </span>
           )}
@@ -88,14 +131,29 @@ function LogRow({ log }: { log: WorkflowLog }) {
 
       {expanded && (
         <div className="px-4 pb-3 space-y-2 bg-brand-offwhite">
-          {log.trigger_text && (
+          {/* Full response */}
+          {response && (
             <div>
-              <p className="text-xs font-medium text-brand-muted mb-0.5">Trigger</p>
+              <p className="text-xs font-medium text-brand-muted mb-0.5">Response</p>
               <p className="text-xs text-brand-black bg-white rounded px-3 py-2 border border-brand-border">
-                {log.trigger_text}
+                {response}
               </p>
             </div>
           )}
+          {/* Tools detail */}
+          {tools.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-brand-muted mb-1">Tools used</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {tools.map((t, i) => (
+                  <span key={i} className={clsx("text-xs px-2 py-1 rounded font-medium border", toolColor(t))}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Error */}
           {log.error_message && (
             <div>
               <p className="text-xs font-medium text-red-600 mb-0.5">Error</p>
@@ -104,9 +162,10 @@ function LogRow({ log }: { log: WorkflowLog }) {
               </p>
             </div>
           )}
+          {/* Meta */}
           <div className="flex gap-4 text-xs text-brand-muted">
-            {log.workflow_id   && <span>Workflow: <code className="text-brand-black">{log.workflow_id}</code></span>}
-            {log.execution_id  && <span>Execution: <code className="text-brand-black">{log.execution_id}</code></span>}
+            {log.workflow_id  && <span>Workflow: <code className="text-brand-black">{log.workflow_id}</code></span>}
+            {log.execution_id && <span>Execution: <code className="text-brand-black">{log.execution_id}</code></span>}
           </div>
         </div>
       )}
@@ -115,9 +174,9 @@ function LogRow({ log }: { log: WorkflowLog }) {
 }
 
 export default function AgentHistoryPage() {
-  const [logs,      setLogs]      = useState<WorkflowLog[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [agentTab,  setAgentTab]  = useState<Agent | "all">("all");
+  const [logs,         setLogs]         = useState<WorkflowLogExtended[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [agentTab,     setAgentTab]     = useState<Agent | "all">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "success" | "error">("all");
 
   useEffect(() => {
@@ -126,25 +185,22 @@ export default function AgentHistoryPage() {
       .then(d => { setLogs(d); setLoading(false); });
   }, []);
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
-  const total      = logs.length;
-  const errors     = logs.filter(l => l.status === "error").length;
+  const total       = logs.length;
+  const errors      = logs.filter(l => l.status === "error").length;
   const successRate = total > 0 ? Math.round(((total - errors) / total) * 100) : 0;
   const avgDuration = logs.filter(l => l.duration_ms).length > 0
     ? Math.round(logs.filter(l => l.duration_ms).reduce((a, l) => a + (l.duration_ms ?? 0), 0) / logs.filter(l => l.duration_ms).length)
     : 0;
 
-  // Per-agent stats
   const agentStats = AGENTS.map(a => {
-    const agentLogs = logs.filter(l => l.agent === a);
-    const agentErrors = agentLogs.filter(l => l.status === "error").length;
-    const last = agentLogs[0];
-    return { agent: a, total: agentLogs.length, errors: agentErrors, last };
+    const al = logs.filter(l => l.agent === a);
+    const ae = al.filter(l => l.status === "error").length;
+    const last = al[0];
+    return { agent: a, total: al.length, errors: ae, last };
   });
 
-  // ── Filtered list ──────────────────────────────────────────────────────────
   const filtered = logs
-    .filter(l => agentTab  === "all" || l.agent  === agentTab)
+    .filter(l => agentTab     === "all" || l.agent  === agentTab)
     .filter(l => statusFilter === "all" || l.status === statusFilter);
 
   if (loading) {
@@ -158,7 +214,6 @@ export default function AgentHistoryPage() {
     );
   }
 
-  // ── Empty state (no logs yet) ──────────────────────────────────────────────
   if (total === 0) {
     return (
       <div className="p-4 md:p-8">
@@ -173,8 +228,7 @@ export default function AgentHistoryPage() {
           </div>
           <p className="text-sm font-medium text-brand-black mb-1">No logs yet</p>
           <p className="text-xs text-brand-muted max-w-xs">
-            Logs will appear here once your n8n agents are wired to write to Supabase.
-            Check the setup instructions in the dashboard.
+            Logs will appear here once your agents are wired to write to Supabase.
           </p>
         </div>
       </div>
@@ -183,14 +237,12 @@ export default function AgentHistoryPage() {
 
   return (
     <div className="p-4 md:p-8 space-y-6 pb-24 md:pb-8">
-
-      {/* Header */}
       <div>
         <h1 className="text-xl font-semibold text-brand-black">Agent History</h1>
         <p className="text-sm text-brand-muted mt-0.5">Execution logs from all agents</p>
       </div>
 
-      {/* ── Stats row ── */}
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Total executions" value={total} />
         <StatCard label="Success rate"     value={`${successRate}%`} sub={`${errors} error${errors !== 1 ? "s" : ""}`} />
@@ -198,15 +250,13 @@ export default function AgentHistoryPage() {
         <StatCard label="Errors"           value={errors} sub={errors > 0 ? "tap to filter" : "all clear"} />
       </div>
 
-      {/* ── Per-agent summary ── */}
+      {/* Per-agent summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {agentStats.map(({ agent, total: t, errors: e, last }) => (
           <div key={agent} className="card py-3 px-4">
             <div className="flex items-center justify-between mb-2">
               <AgentChip agent={agent} />
-              {last && (
-                <span className={clsx("w-2 h-2 rounded-full", STATUS_DOT[last.status])} title={last.status} />
-              )}
+              {last && <span className={clsx("w-2 h-2 rounded-full", STATUS_DOT[last.status])} />}
             </div>
             <p className="text-2xl font-semibold text-brand-black">{t}</p>
             <p className="text-xs text-brand-muted">
@@ -217,34 +267,26 @@ export default function AgentHistoryPage() {
         ))}
       </div>
 
-      {/* ── Log feed ── */}
+      {/* Log feed */}
       <div>
-        {/* Filters */}
         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-          {/* Agent tabs */}
           <div className="flex gap-1">
             {(["all", ...AGENTS] as (Agent | "all")[]).map(a => (
               <button key={a} onClick={() => setAgentTab(a)}
                 className={clsx(
                   "px-2.5 py-1 rounded-full text-xs transition-colors capitalize",
-                  agentTab === a
-                    ? "bg-brand-orange text-white"
-                    : "bg-brand-offwhite text-brand-muted hover:bg-brand-border"
+                  agentTab === a ? "bg-brand-orange text-white" : "bg-brand-offwhite text-brand-muted hover:bg-brand-border"
                 )}>
                 {a}
               </button>
             ))}
           </div>
-
-          {/* Status filter */}
           <div className="flex gap-1">
             {(["all","success","error"] as const).map(s => (
               <button key={s} onClick={() => setStatusFilter(s)}
                 className={clsx(
                   "px-2.5 py-1 rounded-full text-xs transition-colors capitalize",
-                  statusFilter === s
-                    ? "bg-brand-orange text-white"
-                    : "bg-brand-offwhite text-brand-muted hover:bg-brand-border"
+                  statusFilter === s ? "bg-brand-orange text-white" : "bg-brand-offwhite text-brand-muted hover:bg-brand-border"
                 )}>
                 {s}
               </button>
@@ -252,7 +294,6 @@ export default function AgentHistoryPage() {
           </div>
         </div>
 
-        {/* Log rows */}
         <div className="card p-0 overflow-hidden">
           {filtered.length === 0 ? (
             <div className="py-12 text-center">
@@ -262,7 +303,6 @@ export default function AgentHistoryPage() {
             filtered.map(log => <LogRow key={log.id} log={log} />)
           )}
         </div>
-
         <p className="text-xs text-brand-muted mt-2 text-right">
           Showing {filtered.length} of {total} executions
         </p>
