@@ -1,4 +1,4 @@
-export type TaskStatus = "open" | "in_progress" | "done" | "cancelled";
+export type TaskStatus = "open" | "in_progress" | "deferred" | "done" | "cancelled";
 export type TaskPriority = "high" | "medium" | "low";
 export type Agent = "riley" | "jordan" | "avery" | "brian" | "sam";
 
