@@ -1,19 +1,10 @@
-import { auth } from "@/auth";
-import { NextRequest } from "next/server";
+import { withAuth } from "next-auth/middleware";
 
-export default auth((req: NextRequest & { auth: unknown }) => {
-  const isAuth = !!req.auth;
-  const isLoginPage = req.nextUrl.pathname.startsWith("/login");
-
-  if (isLoginPage && isAuth) {
-    return Response.redirect(new URL("/overview", req.nextUrl));
-  }
-
-  if (!isLoginPage && !isAuth) {
-    return Response.redirect(new URL("/login", req.nextUrl));
-  }
+export default withAuth({
+  secret: process.env.NEXTAUTH_SECRET,
+  pages: { signIn: "/login" },
 });
 
 export const config = {
-  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico|manifest.json|icon-.*\\.png).*)" ],
+  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico|manifest.json|icon-.*\\.png|login).*)" ],
 };
