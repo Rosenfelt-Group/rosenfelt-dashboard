@@ -32,3 +32,11 @@
   .badge-neutral { @apply badge bg-gray-100 text-gray-600; }
   .badge-orange  { @apply badge bg-orange-50 text-brand-orange; }
 }
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out;
+}
