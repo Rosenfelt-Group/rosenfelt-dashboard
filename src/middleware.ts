@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
+import { NextRequest } from "next/server";
 
-export default auth((req) => {
+export default auth((req: NextRequest & { auth: unknown }) => {
   const isAuth = !!req.auth;
   const isLoginPage = req.nextUrl.pathname.startsWith("/login");
 
