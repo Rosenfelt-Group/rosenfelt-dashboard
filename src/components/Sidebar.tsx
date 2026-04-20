@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import clsx from "clsx";
 
 const nav = [
@@ -37,6 +37,12 @@ const mobileNav = nav.filter(n => ["overview","chat","tasks","crm","agents"].inc
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  };
 
   return (
     <>
@@ -84,7 +90,15 @@ export function Sidebar() {
 
         {/* Footer */}
         <div className="px-3 py-3 border-t border-brand-border">
-          <p className="text-xs text-brand-muted px-3">brian@rosenfeltgroup.com</p>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2.5 px-3 py-2 w-full rounded-lg text-sm text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Sign out
+          </button>
         </div>
       </aside>
 
