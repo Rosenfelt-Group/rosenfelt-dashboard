@@ -1,98 +1,65 @@
+import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
 
-export async function POST(req: NextRequest) {
-  try {
-    const { message, agent, chatId } = await req.json();
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
-    if (!message || !agent) {
-      return NextResponse.json({ error: "Missing message or agent" }, { status: 400 });
-    }
+export async function GET(request: NextRequest) {
+  const agent = request.nextUrl.searchParams.get("agent");
+  if (!agent) return NextResponse.json({ error: "agent required" }, { status: 400 });
 
-    if (agent !== "jordan") {
-      return NextResponse.json({
-        response: `${agent} is not yet migrated to the new stack. Use Telegram to reach ${agent} for now.`,
-        agent,
-      });
-    }
+  const { data, error } = await supabase
+    .from("agent_memory")
+    .select("*")
+    .eq("agent", agent)
+    .order("updated_at", { ascending: false });
 
-    const agentUrl = process.env.JORDAN_AGENT_URL;
-    const secret = process.env.JORDAN_WEBHOOK_SECRET;
-
-    if (!agentUrl) {
-      return NextResponse.json({ error: "Jordan agent URL not configured" }, { status: 500 });
-    }
-
-    const sessionChatId = chatId || "dashboard_brian";
-
-    // Record timestamp BEFORE sending so we only fetch the NEW response
-    const sentAt = new Date().toISOString();
-
-    const res = await fetch(`${agentUrl}/webhook/jordan`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Webhook-Secret": secret || "",
-      },
-      body: JSON.stringify({
-        text: message,
-        chatId: sessionChatId,
-        botToken: "",
-      }),
-    });
-
-    if (!res.ok) {
-      throw new Error(`Jordan agent returned ${res.status}`);
-    }
-
-    // Poll for the response — check every second for up to 30 seconds
-    let response = "";
-    for (let i = 0; i < 30; i++) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const { data } = await supabaseAdmin
-        .from("conversations")
-        .select("content, created_at")
-        .eq("session_id", `jordan_${sessionChatId}`)
-        .eq("agent", "jordan")
-        .eq("role", "assistant")
-        .gte("created_at", sentAt)          // only messages AFTER we sent
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (data && data.length > 0) {
-        response = data[0].content;
-        break;
-      }
-    }
-
-    if (!response) {
-      response = "Jordan is taking longer than expected. Check back in a moment or ask via Telegram.";
-    }
-
-    return NextResponse.json({ response, agent });
-  } catch (err) {
-    console.error("Chat API error:", err);
-    return NextResponse.json({ error: "Failed to reach agent" }, { status: 500 });
-  }
+  if (error) return NextResponse.json([], { status: 500 });
+  return NextResponse.json(data ?? []);
 }
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const agent = searchParams.get("agent") || "jordan";
-  const chatId = searchParams.get("chatId") || "dashboard_brian";
+export async function POST(request: NextRequest) {
+  const body = await request.json();
+  const { agent, memory_key, memory_value, category = "general", source = "manual", rating = 0 } = body;
 
-  try {
-    const { data } = await supabaseAdmin
-      .from("conversations")
-      .select("role, content, created_at")
-      .eq("session_id", `${agent}_${chatId}`)
-      .eq("agent", agent)
-      .order("created_at", { ascending: true })
-      .limit(50);
-
-    return NextResponse.json(data ?? []);
-  } catch (err) {
-    return NextResponse.json([], { status: 500 });
+  if (!agent || !memory_key || !memory_value) {
+    return NextResponse.json({ error: "agent, memory_key, memory_value required" }, { status: 400 });
   }
+
+  const { data, error } = await supabase
+    .from("agent_memory")
+    .upsert({ agent, memory_key, memory_value, category, source, rating,
+              updated_at: new Date().toISOString() },
+             { onConflict: "agent,memory_key" })
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
+}
+
+export async function PATCH(request: NextRequest) {
+  const { id, ...updates } = await request.json();
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  const { data, error } = await supabase
+    .from("agent_memory")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
+}
+
+export async function DELETE(request: NextRequest) {
+  const { id } = await request.json();
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  const { error } = await supabase.from("agent_memory").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
 }
