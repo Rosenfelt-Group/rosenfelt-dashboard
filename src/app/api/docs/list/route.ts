@@ -15,7 +15,10 @@ export async function GET() {
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: `Failed to reach Jordan: ${detail}` }, { status: 502 });
+    const msg = e instanceof Error ? e.message : String(e);
+    const cause = e instanceof Error && (e as any).cause instanceof Error
+      ? (e as any).cause.message
+      : String((e as any)?.cause ?? "");
+    return NextResponse.json({ error: `${msg}: ${cause}` }, { status: 502 });
   }
 }
