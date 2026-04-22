@@ -1,8 +1,9 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import clsx from "clsx";
+import type { Role } from "@/lib/session";
 
 const nav = [
   { label: "Overview",     href: "/overview",            icon: "grid"     },
@@ -16,6 +17,7 @@ const nav = [
   { label: "Intelligence", href: "/agents/intelligence", icon: "brain"    },
   { label: "Cost",         href: "/cost",                icon: "dollar"   },
   { label: "Backup",       href: "/backup",              icon: "archive"  },
+  { label: "Users",        href: "/users",               icon: "shield"   },
 ];
 
 function Icon({ name }: { name: string }) {
@@ -31,6 +33,7 @@ function Icon({ name }: { name: string }) {
     brain:    <><path d="M9.5 2a2.5 2.5 0 0 1 5 0"/><path d="M9.5 2C6 2 4 5 4 7.5c0 1.5.5 2.5 1.5 3.5L4 14c0 3 2 5 5 5h6c3 0 5-2 5-5l-1.5-3c1-.9 1.5-2 1.5-3.5C20 5 18 2 14.5 2"/><path d="M12 6v6"/><path d="M9 9h6"/></>,
     dollar:   <><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></>,
     archive:  <><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></>,
+    shield:   <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>,
   };
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -40,12 +43,23 @@ function Icon({ name }: { name: string }) {
   );
 }
 
-// Bottom 5 nav items shown on mobile
-const mobileNav = nav.filter(n => ["overview","chat","tasks","crm","agents"].includes(n.href.replace("/","")));
+const ADMIN_ONLY_HREFS = new Set(["/chat", "/users"]);
+const mobileNavHrefs = new Set(["overview", "chat", "tasks", "crm", "agents"]);
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [role, setRole] = useState<Role>("viewer");
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.role) setRole(data.role); })
+      .catch(() => {});
+  }, []);
+
+  const visibleNav = nav.filter(item => role === "admin" || !ADMIN_ONLY_HREFS.has(item.href));
+  const visibleMobileNav = visibleNav.filter(n => mobileNavHrefs.has(n.href.replace("/", "")));
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -76,7 +90,7 @@ export function Sidebar() {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-          {nav.map((item) => {
+          {visibleNav.map((item) => {
             const active = pathname.startsWith(item.href);
             return (
               <Link
@@ -128,7 +142,7 @@ export function Sidebar() {
       {/* ── Mobile bottom tab bar ── */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-brand-border
                       flex items-center justify-around z-20 pb-safe">
-        {mobileNav.map((item) => {
+        {visibleMobileNav.map((item) => {
           const active = pathname.startsWith(item.href);
           return (
             <Link

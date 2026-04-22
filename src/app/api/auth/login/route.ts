@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pbkdf2Sync } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase";
-import { createSessionToken, COOKIE_NAME } from "@/lib/session";
+import { createSessionToken, COOKIE_NAME, Role } from "@/lib/session";
 
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60;
 
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
   const { data: user, error } = await supabaseAdmin
     .from("dashboard_users")
-    .select("password_hash")
+    .select("password_hash, role")
     .eq("username", username.toLowerCase().trim())
     .single();
 
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
-  const token = await createSessionToken(username.toLowerCase().trim());
+  const token = await createSessionToken(username.toLowerCase().trim(), user.role as Role);
   const res = NextResponse.json({ ok: true });
   res.cookies.set(COOKIE_NAME, token, {
     httpOnly: true,

@@ -7,9 +7,10 @@ import { formatDistanceToNow } from "date-fns";
 interface ApprovalCardProps {
   approval: PendingApproval;
   onAction: (id: string, status: "approved" | "rejected") => Promise<void>;
+  isAdmin?: boolean;
 }
 
-export function ApprovalCard({ approval, onAction }: ApprovalCardProps) {
+export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCardProps) {
   const [loading, setLoading] = useState<"approved" | "rejected" | null>(null);
 
   async function handle(status: "approved" | "rejected") {
@@ -30,24 +31,30 @@ export function ApprovalCard({ approval, onAction }: ApprovalCardProps) {
           {approval.agent} · {formatDistanceToNow(new Date(approval.created_at), { addSuffix: true })}
         </p>
       </div>
-      <div className="flex gap-2 flex-shrink-0">
-        <button
-          onClick={() => handle("approved")}
-          disabled={loading !== null}
-          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-50 text-green-700
-                     hover:bg-green-100 transition-colors disabled:opacity-50"
-        >
-          {loading === "approved" ? "..." : "Approve"}
-        </button>
-        <button
-          onClick={() => handle("rejected")}
-          disabled={loading !== null}
-          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-700
-                     hover:bg-red-100 transition-colors disabled:opacity-50"
-        >
-          {loading === "rejected" ? "..." : "Reject"}
-        </button>
-      </div>
+      {isAdmin ? (
+        <div className="flex gap-2 flex-shrink-0">
+          <button
+            onClick={() => handle("approved")}
+            disabled={loading !== null}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-50 text-green-700
+                       hover:bg-green-100 transition-colors disabled:opacity-50"
+          >
+            {loading === "approved" ? "..." : "Approve"}
+          </button>
+          <button
+            onClick={() => handle("rejected")}
+            disabled={loading !== null}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-700
+                       hover:bg-red-100 transition-colors disabled:opacity-50"
+          >
+            {loading === "rejected" ? "..." : "Reject"}
+          </button>
+        </div>
+      ) : (
+        <span className="text-xs text-brand-muted flex-shrink-0 px-2 py-1 bg-brand-offwhite rounded-lg">
+          Pending review
+        </span>
+      )}
     </div>
   );
 }
