@@ -1,170 +1,219 @@
 "use client";
 import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import clsx from "clsx";
-import { formatDistanceToNow, parseISO } from "date-fns";
 
 interface DocEntry {
-  name:     string;
-  path:     string;
-  ext:      string;
-  size:     number;
-  modified: string;
-  isDir:    boolean;
+  id:          string;
+  name:        string;
+  path:        string;
+  description?: string;
+  category?:   string;
+  updated_at?: string;
 }
 
-const EXT_COLORS: Record<string, string> = {
-  md:   "bg-blue-50 text-blue-700",
-  json: "bg-violet-50 text-violet-700",
-  txt:  "bg-gray-100 text-gray-600",
-  pdf:  "bg-red-50 text-red-700",
-  py:   "bg-green-50 text-green-700",
-  ts:   "bg-sky-50 text-sky-700",
-  js:   "bg-yellow-50 text-yellow-700",
-};
-
-function extColor(ext: string) {
-  return EXT_COLORS[ext] ?? "bg-gray-100 text-gray-500";
-}
-
-function formatSize(bytes: number) {
-  if (bytes < 1024)        return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+function FileIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.75" strokeLinecap="round" className="text-brand-muted flex-shrink-0">
+      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+      <polyline points="13 2 13 9 20 9"/>
+    </svg>
+  );
 }
 
 export default function DocumentsPage() {
-  const [entries,   setEntries]   = useState<DocEntry[]>([]);
-  const [root,      setRoot]      = useState("");
-  const [error,     setError]     = useState<string | null>(null);
-  const [loading,   setLoading]   = useState(true);
-  const [search,    setSearch]    = useState("");
-  const [extFilter, setExtFilter] = useState("all");
+  const [docs,         setDocs]         = useState<DocEntry[]>([]);
+  const [selected,     setSelected]     = useState<DocEntry | null>(null);
+  const [content,      setContent]      = useState<string | null>(null);
+  const [listError,    setListError]    = useState<string | null>(null);
+  const [contentError, setContentError] = useState<string | null>(null);
+  const [listLoading,  setListLoading]  = useState(true);
+  const [docLoading,   setDocLoading]   = useState(false);
+  const [search,       setSearch]       = useState("");
 
+  // Load doc list on mount
   useEffect(() => {
-    fetch("/api/documents")
+    fetch("/api/docs/list")
       .then(r => r.json())
-      .then(d => {
-        if (d.error === "docs_not_found") {
-          setError(d.root);
+      .then(data => {
+        if (data.error) {
+          setListError(data.error);
         } else {
-          setRoot(d.root);
-          setEntries(d.entries ?? []);
+          setDocs(Array.isArray(data) ? data : []);
         }
-        setLoading(false);
+        setListLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setListError("Could not reach Jordan agent");
+        setListLoading(false);
+      });
   }, []);
 
-  const files = entries.filter(e => !e.isDir);
-  const dirs  = entries.filter(e => e.isDir);
-  const exts  = Array.from(new Set(files.map(f => f.ext).filter(Boolean))).sort();
-
-  const filtered = entries.filter(e => {
-    if (search && !e.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (extFilter !== "all" && !e.isDir && e.ext !== extFilter) return false;
-    return true;
-  });
-
-  if (loading) {
-    return (
-      <div className="p-4 md:p-8 space-y-4">
-        <div className="card animate-pulse h-16" />
-        <div className="card animate-pulse h-64" />
-      </div>
-    );
+  // Fetch file content when a doc is selected
+  async function openDoc(doc: DocEntry) {
+    if (selected?.path === doc.path) return;
+    setSelected(doc);
+    setContent(null);
+    setContentError(null);
+    setDocLoading(true);
+    try {
+      const res = await fetch(`/api/docs?path=${encodeURIComponent(doc.path)}`);
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setContentError(data.error ?? "Failed to load file");
+      } else {
+        setContent(data.content);
+      }
+    } catch {
+      setContentError("Network error loading file");
+    }
+    setDocLoading(false);
   }
 
+  const filtered = docs.filter(d =>
+    !search || d.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const categories = Array.from(new Set(docs.map(d => d.category).filter(Boolean))).sort() as string[];
+
   return (
-    <div className="p-4 md:p-8 pb-24 md:pb-8 max-w-4xl space-y-5">
-      <div>
+    <div className="p-4 md:p-8 pb-24 md:pb-8 max-w-6xl">
+      <div className="mb-5">
         <h1 className="text-xl font-semibold text-brand-black">Documents</h1>
         <p className="text-sm text-brand-muted mt-0.5">
-          {error
-            ? "Configure DOCS_PATH to point to your docs folder"
-            : `${files.length} files · ${dirs.length} folders · ${root}`}
+          {listLoading ? "Loading…" : listError ? "Failed to load document registry" : `${docs.length} document${docs.length !== 1 ? "s" : ""} available`}
         </p>
       </div>
 
-      {error ? (
-        <div className="card text-center py-16">
-          <div className="w-12 h-12 bg-brand-offwhite rounded-xl flex items-center justify-center mx-auto mb-4">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" className="text-brand-muted">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-            </svg>
-          </div>
-          <p className="text-sm font-medium text-brand-black mb-2">Directory not found</p>
-          <p className="text-xs text-brand-muted max-w-sm mx-auto">
-            <code className="bg-brand-offwhite px-1 rounded">{error}</code> does not exist on this server.{" "}
-            Add <code className="bg-brand-offwhite px-1 rounded">DOCS_PATH=/your/path</code> to{" "}
-            <code className="bg-brand-offwhite px-1 rounded">.env.local</code> to configure it.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="flex gap-2 flex-wrap">
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search files…"
-              className="flex-1 min-w-[180px] text-sm border border-brand-border rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange"
-            />
-            <div className="flex gap-1 flex-wrap">
-              <button onClick={() => setExtFilter("all")}
-                className={clsx("px-2.5 py-1 rounded-full text-xs transition-colors",
-                  extFilter === "all" ? "bg-brand-orange text-white" : "bg-brand-offwhite text-brand-muted hover:bg-brand-border")}>
-                All
-              </button>
-              {exts.map(ext => (
-                <button key={ext} onClick={() => setExtFilter(ext)}
-                  className={clsx("px-2.5 py-1 rounded-full text-xs uppercase transition-colors",
-                    extFilter === ext ? "bg-brand-orange text-white" : "bg-brand-offwhite text-brand-muted hover:bg-brand-border")}>
-                  {ext}
-                </button>
-              ))}
-            </div>
-          </div>
+      <div className="flex gap-4 h-[calc(100vh-14rem)]">
+        {/* ── Left panel: file list ── */}
+        <div className="w-72 flex-shrink-0 flex flex-col gap-2">
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search docs…"
+            className="text-sm border border-brand-border rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange w-full"
+          />
 
-          {filtered.length === 0 ? (
-            <div className="card py-12 text-center">
-              <p className="text-sm text-brand-muted">No files match your search</p>
+          <div className="card p-0 overflow-y-auto flex-1">
+            {listLoading ? (
+              <div className="p-4 space-y-3">
+                {[1,2,3,4].map(i => (
+                  <div key={i} className="animate-pulse h-10 bg-brand-offwhite rounded" />
+                ))}
+              </div>
+            ) : listError ? (
+              <div className="p-6 text-center">
+                <p className="text-xs text-red-600 font-medium">{listError}</p>
+                <p className="text-xs text-brand-muted mt-1">Check that Jordan is reachable and JORDAN_API_URL is set.</p>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="p-6 text-center">
+                <p className="text-xs text-brand-muted">No documents found</p>
+              </div>
+            ) : (
+              <>
+                {categories.length > 0
+                  ? categories.map(cat => {
+                      const catDocs = filtered.filter(d => d.category === cat);
+                      if (catDocs.length === 0) return null;
+                      return (
+                        <div key={cat}>
+                          <div className="px-3 pt-3 pb-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-muted">{cat}</p>
+                          </div>
+                          {catDocs.map(doc => (
+                            <DocRow key={doc.id} doc={doc} selected={selected} onSelect={openDoc} />
+                          ))}
+                        </div>
+                      );
+                    })
+                  : filtered.map(doc => (
+                      <DocRow key={doc.id} doc={doc} selected={selected} onSelect={openDoc} />
+                    ))
+                }
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ── Right panel: content viewer ── */}
+        <div className="card flex-1 overflow-hidden flex flex-col min-w-0">
+          {!selected ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+              <div className="w-12 h-12 bg-brand-offwhite rounded-xl flex items-center justify-center mb-4">
+                <FileIcon />
+              </div>
+              <p className="text-sm font-medium text-brand-black mb-1">Select a document</p>
+              <p className="text-xs text-brand-muted">Choose a file from the list to view its contents</p>
             </div>
           ) : (
-            <div className="card p-0 overflow-hidden">
-              {filtered.map((entry, i) => (
-                <div key={entry.path}
-                  className={clsx(
-                    "flex items-center gap-3 px-4 py-3",
-                    i !== 0 && "border-t border-brand-border",
-                    entry.isDir && "bg-brand-offwhite/50"
-                  )}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" className="text-brand-muted flex-shrink-0">
-                    {entry.isDir
-                      ? <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                      : <><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></>}
-                  </svg>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-brand-black font-medium truncate">{entry.name}</p>
-                    <p className="text-xs text-brand-muted">{entry.path}</p>
-                  </div>
-                  {!entry.isDir && entry.ext && (
-                    <span className={clsx("text-[10px] px-1.5 py-0.5 rounded font-medium uppercase flex-shrink-0", extColor(entry.ext))}>
-                      {entry.ext}
-                    </span>
-                  )}
-                  {!entry.isDir && (
-                    <span className="text-xs text-brand-muted flex-shrink-0 hidden sm:inline">
-                      {formatSize(entry.size)}
-                    </span>
-                  )}
-                  <span className="text-xs text-brand-muted flex-shrink-0">
-                    {formatDistanceToNow(parseISO(entry.modified), { addSuffix: true })}
-                  </span>
+            <>
+              <div className="px-5 py-3 border-b border-brand-border flex items-center gap-2 flex-shrink-0">
+                <FileIcon />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-brand-black truncate">{selected.name}</p>
+                  <p className="text-[11px] text-brand-muted truncate">{selected.path}</p>
                 </div>
-              ))}
-            </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-5">
+                {docLoading ? (
+                  <div className="space-y-3">
+                    {[1,2,3,5,4].map(i => (
+                      <div key={i} className="animate-pulse h-4 bg-brand-offwhite rounded" style={{width: `${60 + i * 8}%`}} />
+                    ))}
+                  </div>
+                ) : contentError ? (
+                  <div className="text-sm text-red-600 bg-red-50 rounded-lg p-4">{contentError}</div>
+                ) : content !== null ? (
+                  selected.path.endsWith(".md") ? (
+                    <div className="prose prose-sm max-w-none text-brand-black
+                      prose-headings:font-semibold prose-headings:text-brand-black
+                      prose-a:text-brand-orange prose-a:no-underline hover:prose-a:underline
+                      prose-code:bg-brand-offwhite prose-code:px-1 prose-code:rounded prose-code:text-sm
+                      prose-pre:bg-brand-offwhite prose-pre:rounded-lg">
+                      <ReactMarkdown>{content}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <pre className="text-xs text-brand-black font-mono whitespace-pre-wrap break-words bg-brand-offwhite rounded-lg p-4">
+                      {content}
+                    </pre>
+                  )
+                ) : null}
+              </div>
+            </>
           )}
-        </>
-      )}
+        </div>
+      </div>
     </div>
+  );
+}
+
+function DocRow({ doc, selected, onSelect }: {
+  doc: DocEntry;
+  selected: DocEntry | null;
+  onSelect: (doc: DocEntry) => void;
+}) {
+  const isActive = selected?.path === doc.path;
+  return (
+    <button
+      onClick={() => onSelect(doc)}
+      className={clsx(
+        "w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors",
+        isActive
+          ? "bg-brand-orange/10 border-l-2 border-brand-orange"
+          : "border-l-2 border-transparent hover:bg-brand-offwhite"
+      )}>
+      <FileIcon />
+      <div className="min-w-0 flex-1">
+        <p className={clsx("text-sm truncate", isActive ? "font-medium text-brand-black" : "text-brand-black")}>
+          {doc.name}
+        </p>
+        {doc.description && (
+          <p className="text-[11px] text-brand-muted truncate">{doc.description}</p>
+        )}
+      </div>
+    </button>
   );
 }
