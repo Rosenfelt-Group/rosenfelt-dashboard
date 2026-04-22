@@ -17,7 +17,8 @@ export async function GET() {
     try { data = JSON.parse(text); } catch { data = { raw: text }; }
     return NextResponse.json({ status: res.status, url: `${JORDAN_API_URL}/docs/list`, data }, { status: 200 });
   } catch (e) {
+    const cause = e instanceof Error && e.cause ? String(e.cause) : undefined;
     const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-    return NextResponse.json({ error: msg, url: `${JORDAN_API_URL}/docs/list` }, { status: 502 });
+    return NextResponse.json({ error: msg, cause, url: `${JORDAN_API_URL}/docs/list` }, { status: 502 });
   }
 }
