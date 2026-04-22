@@ -168,11 +168,17 @@ export default function DocumentsPage() {
                   <div className="text-sm text-red-600 bg-red-50 rounded-lg p-4">{contentError}</div>
                 ) : content !== null ? (
                   selected.path.endsWith(".md") ? (
-                    <div className="prose prose-sm max-w-none text-brand-black
-                      prose-headings:font-semibold prose-headings:text-brand-black
+                    <div className="prose prose-sm max-w-none
+                      prose-headings:font-semibold prose-headings:text-brand-black prose-headings:mt-6 prose-headings:mb-2
+                      prose-p:text-brand-black prose-p:leading-relaxed
                       prose-a:text-brand-orange prose-a:no-underline hover:prose-a:underline
-                      prose-code:bg-brand-offwhite prose-code:px-1 prose-code:rounded prose-code:text-sm
-                      prose-pre:bg-brand-offwhite prose-pre:rounded-lg">
+                      prose-strong:text-brand-black
+                      prose-code:bg-brand-offwhite prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
+                      prose-pre:bg-brand-offwhite prose-pre:rounded-lg prose-pre:text-xs
+                      prose-blockquote:border-brand-orange prose-blockquote:text-brand-muted
+                      prose-table:text-sm prose-th:text-brand-black prose-td:text-brand-black
+                      prose-hr:border-brand-border
+                      prose-li:text-brand-black">
                       <ReactMarkdown>{content}</ReactMarkdown>
                     </div>
                   ) : (
