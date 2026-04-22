@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { Task, TaskStatus, Agent } from "@/types";
 import { AgentBadge } from "@/components/AgentBadge";
-import { formatDistanceToNow, isPast, parseISO } from "date-fns";
+import { isPast, parseISO } from "date-fns";
 import clsx from "clsx";
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
@@ -116,9 +116,12 @@ function NewTaskForm({ onSave, onCancel }: { onSave: (t: Partial<Task>) => void;
 }
 
 export default function TasksPage() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
+  const [tasks,       setTasks]       = useState<Task[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [adding,      setAdding]      = useState(false);
+  const [visibleCols, setVisibleCols] = useState<Set<TaskStatus>>(
+    new Set(["open", "in_progress", "done"] as TaskStatus[])
+  );
 
   useEffect(() => {
     fetch("/api/tasks")
@@ -159,9 +162,20 @@ export default function TasksPage() {
     );
   }
 
+  const visibleColumns = COLUMNS.filter(c => visibleCols.has(c.status));
+
+  function toggleCol(status: TaskStatus) {
+    setVisibleCols(prev => {
+      const next = new Set(prev);
+      if (next.has(status) && next.size > 1) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  }
+
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-8 pb-24 md:pb-8">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-semibold text-brand-black">Tasks</h1>
           <p className="text-sm text-brand-muted mt-0.5">
@@ -169,13 +183,35 @@ export default function TasksPage() {
             {tasks.filter(t => t.status === "done").length} done
           </p>
         </div>
-        <button onClick={() => setAdding(true)} className="btn-primary">
-          + Add task
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Column toggles */}
+          <div className="flex gap-1 border border-brand-border rounded-lg p-1">
+            {COLUMNS.map(col => (
+              <button
+                key={col.status}
+                onClick={() => toggleCol(col.status)}
+                className={clsx(
+                  "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                  visibleCols.has(col.status)
+                    ? "bg-brand-orange text-white"
+                    : "text-brand-muted hover:bg-brand-offwhite"
+                )}>
+                {col.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setAdding(true)} className="btn-primary">
+            + Add task
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        {COLUMNS.map(col => (
+      <div className={clsx(
+        "grid gap-4",
+        visibleColumns.length === 3 ? "grid-cols-1 md:grid-cols-3" :
+        visibleColumns.length === 2 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 md:max-w-sm"
+      )}>
+        {visibleColumns.map(col => (
           <div key={col.status}>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-medium text-brand-black">{col.label}</h2>
@@ -185,12 +221,11 @@ export default function TasksPage() {
             </div>
 
             <div className="space-y-2">
-              {/* New task form — only shows in Open column */}
               {col.status === "open" && adding && (
                 <NewTaskForm onSave={handleCreate} onCancel={() => setAdding(false)} />
               )}
 
-              {byStatus(col.status).length === 0 && !adding && (
+              {byStatus(col.status).length === 0 && !(col.status === "open" && adding) && (
                 <div className="border-2 border-dashed border-brand-border rounded-lg p-4 text-center">
                   <p className="text-xs text-brand-muted">No {col.label.toLowerCase()} tasks</p>
                 </div>
