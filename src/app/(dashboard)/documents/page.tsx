@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import clsx from "clsx";
 
 interface DocEntry {
@@ -173,13 +174,13 @@ export default function DocumentsPage() {
                       prose-p:text-brand-black prose-p:leading-relaxed
                       prose-a:text-brand-orange prose-a:no-underline hover:prose-a:underline
                       prose-strong:text-brand-black
-                      prose-code:bg-brand-offwhite prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
-                      prose-pre:bg-brand-offwhite prose-pre:rounded-lg prose-pre:text-xs
+                      prose-code:bg-gray-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
+                      prose-pre:bg-gray-100 prose-pre:rounded-lg prose-pre:text-xs prose-pre:border prose-pre:border-gray-200
                       prose-blockquote:border-brand-orange prose-blockquote:text-brand-muted
                       prose-table:text-sm prose-th:text-brand-black prose-td:text-brand-black
                       prose-hr:border-brand-border
                       prose-li:text-brand-black">
-                      <ReactMarkdown>{content}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
                     </div>
                   ) : (
                     <pre className="text-xs text-brand-black font-mono whitespace-pre-wrap break-words bg-brand-offwhite rounded-lg p-4">
