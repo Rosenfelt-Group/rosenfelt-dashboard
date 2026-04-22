@@ -12,13 +12,9 @@ export async function GET() {
       headers: { "X-Webhook-Secret": JORDAN_WEBHOOK_SECRET },
       cache: "no-store",
     });
-    const text = await res.text();
-    let data: unknown;
-    try { data = JSON.parse(text); } catch { data = { raw: text }; }
-    return NextResponse.json({ status: res.status, url: `${JORDAN_API_URL}/docs/list`, data }, { status: 200 });
-  } catch (e) {
-    const cause = e instanceof Error && e.cause ? String(e.cause) : undefined;
-    const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-    return NextResponse.json({ error: msg, cause, url: `${JORDAN_API_URL}/docs/list` }, { status: 502 });
+    const data = await res.json();
+    return NextResponse.json(data, { status: res.status });
+  } catch {
+    return NextResponse.json({ error: "Failed to reach Jordan" }, { status: 502 });
   }
 }
