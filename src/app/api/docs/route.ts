@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "path query parameter required" }, { status: 400 });
   }
   try {
-    const url = new URL(`${JORDAN_API_URL}/docs`);
+    const url = new URL(`${JORDAN_API_URL}/doc`);
     url.searchParams.set("path", path);
     const res = await fetch(url.toString(), {
       headers: { "X-Webhook-Secret": JORDAN_WEBHOOK_SECRET },
