@@ -17,6 +17,7 @@ const nav = [
   { label: "Intelligence", href: "/agents/intelligence", icon: "brain"    },
   { label: "Cost",         href: "/cost",                icon: "dollar"   },
   { label: "Backup",       href: "/backup",              icon: "archive"  },
+  { label: "Users",        href: "/users",               icon: "shield"   },
 ];
 
 function Icon({ name }: { name: string }) {
@@ -32,6 +33,7 @@ function Icon({ name }: { name: string }) {
     brain:    <><path d="M9.5 2a2.5 2.5 0 0 1 5 0"/><path d="M9.5 2C6 2 4 5 4 7.5c0 1.5.5 2.5 1.5 3.5L4 14c0 3 2 5 5 5h6c3 0 5-2 5-5l-1.5-3c1-.9 1.5-2 1.5-3.5C20 5 18 2 14.5 2"/><path d="M12 6v6"/><path d="M9 9h6"/></>,
     dollar:   <><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></>,
     archive:  <><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></>,
+    shield:   <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>,
   };
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -41,7 +43,7 @@ function Icon({ name }: { name: string }) {
   );
 }
 
-const ADMIN_ONLY_HREFS = new Set(["/chat"]);
+const ADMIN_ONLY_HREFS = new Set(["/chat", "/users"]);
 const mobileNavHrefs = new Set(["overview", "chat", "tasks", "crm", "agents"]);
 
 export function Sidebar() {
