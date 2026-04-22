@@ -14,11 +14,7 @@ export async function GET() {
     });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    const cause = e instanceof Error && (e as any).cause instanceof Error
-      ? (e as any).cause.message
-      : String((e as any)?.cause ?? "");
-    return NextResponse.json({ error: `${msg}: ${cause}` }, { status: 502 });
+  } catch {
+    return NextResponse.json({ error: "Failed to reach Jordan" }, { status: 502 });
   }
 }
