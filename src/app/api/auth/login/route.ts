@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pbkdf2Sync } from "crypto";
-import { supabaseAdmin } from "@/lib/supabase";
-import { createSessionToken, COOKIE_NAME } from "@/lib/session";
+import { createSessionToken, COOKIE_NAME, Role } from "@/lib/session";
 
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60;
 
-function verifyPassword(password: string, stored: string): boolean {
-  const [salt, hash] = stored.split(":");
-  const derived = pbkdf2Sync(password, salt, 100_000, 64, "sha512").toString("hex");
-  return derived === hash;
+interface DashboardUser {
+  username: string;
+  password: string;
+  role: Role;
+}
+
+function getUsers(): DashboardUser[] {
+  const raw = process.env.DASHBOARD_USERS;
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as DashboardUser[];
+  } catch {
+    return [];
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -18,17 +26,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing credentials" }, { status: 400 });
   }
 
-  const { data: user, error } = await supabaseAdmin
-    .from("dashboard_users")
-    .select("password_hash")
-    .eq("username", username.toLowerCase().trim())
-    .single();
+  const users = getUsers();
+  const user = users.find(
+    (u) => u.username.toLowerCase() === username.toLowerCase().trim()
+  );
 
-  if (error || !user || !verifyPassword(password, user.password_hash)) {
+  if (!user || user.password !== password) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
-  const token = await createSessionToken(username.toLowerCase().trim());
+  const token = await createSessionToken(user.username.toLowerCase(), user.role);
   const res = NextResponse.json({ ok: true });
   res.cookies.set(COOKIE_NAME, token, {
     httpOnly: true,

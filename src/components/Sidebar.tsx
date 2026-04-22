@@ -1,8 +1,9 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import clsx from "clsx";
+import type { Role } from "@/lib/session";
 
 const nav = [
   { label: "Overview",     href: "/overview",            icon: "grid"     },
@@ -40,12 +41,23 @@ function Icon({ name }: { name: string }) {
   );
 }
 
-// Bottom 5 nav items shown on mobile
-const mobileNav = nav.filter(n => ["overview","chat","tasks","crm","agents"].includes(n.href.replace("/","")));
+const ADMIN_ONLY_HREFS = new Set(["/chat"]);
+const mobileNavHrefs = new Set(["overview", "chat", "tasks", "crm", "agents"]);
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [role, setRole] = useState<Role>("viewer");
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.role) setRole(data.role); })
+      .catch(() => {});
+  }, []);
+
+  const visibleNav = nav.filter(item => role === "admin" || !ADMIN_ONLY_HREFS.has(item.href));
+  const visibleMobileNav = visibleNav.filter(n => mobileNavHrefs.has(n.href.replace("/", "")));
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -76,7 +88,7 @@ export function Sidebar() {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-          {nav.map((item) => {
+          {visibleNav.map((item) => {
             const active = pathname.startsWith(item.href);
             return (
               <Link
@@ -128,7 +140,7 @@ export function Sidebar() {
       {/* ── Mobile bottom tab bar ── */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-brand-border
                       flex items-center justify-around z-20 pb-safe">
-        {mobileNav.map((item) => {
+        {visibleMobileNav.map((item) => {
           const active = pathname.startsWith(item.href);
           return (
             <Link

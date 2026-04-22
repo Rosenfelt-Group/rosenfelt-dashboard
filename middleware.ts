@@ -1,0 +1,26 @@
+import { NextRequest, NextResponse } from "next/server";
+import { verifySessionToken, COOKIE_NAME } from "@/lib/session";
+
+export async function middleware(request: NextRequest) {
+  const token = request.cookies.get(COOKIE_NAME)?.value;
+
+  if (!token) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  const session = await verifySessionToken(token);
+  if (!session) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  const response = NextResponse.next();
+  response.headers.set("x-user-role", session.role);
+  response.headers.set("x-user-name", session.username);
+  return response;
+}
+
+export const config = {
+  matcher: [
+    "/((?!login|api/auth/login|api/auth/logout|_next/static|_next/image|favicon\\.ico).*)",
+  ],
+};
