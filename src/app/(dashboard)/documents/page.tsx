@@ -174,8 +174,8 @@ export default function DocumentsPage() {
                       prose-p:text-brand-black prose-p:leading-relaxed
                       prose-a:text-brand-orange prose-a:no-underline hover:prose-a:underline
                       prose-strong:text-brand-black
-                      prose-code:bg-gray-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
-                      prose-pre:bg-gray-100 prose-pre:rounded-lg prose-pre:text-xs prose-pre:border prose-pre:border-gray-200
+                      prose-code:bg-gray-200 prose-code:text-gray-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
+                      prose-pre:bg-gray-200 prose-pre:text-gray-800 prose-pre:rounded-lg prose-pre:text-xs prose-pre:border prose-pre:border-gray-300
                       prose-blockquote:border-brand-orange prose-blockquote:text-brand-muted
                       prose-table:text-sm prose-th:text-brand-black prose-td:text-brand-black
                       prose-hr:border-brand-border
