@@ -228,6 +228,7 @@ function ApprovedCard({
 }) {
   const [busy, setBusy] = useState<"unbundle" | "inbox" | "jordan" | null>(null);
   const [jordanError, setJordanError] = useState<string | null>(null);
+  const [jordanRequestedAt, setJordanRequestedAt] = useState<number | null>(null);
 
   async function run(action: "unbundle" | "inbox") {
     setBusy(action);
@@ -244,11 +245,21 @@ function ApprovedCard({
     setJordanError(null);
     try {
       const err = await onAskJordan();
-      if (err) setJordanError(err);
+      if (err) {
+        setJordanError(err);
+      } else {
+        setJordanRequestedAt(Date.now());
+      }
     } finally {
       setBusy(null);
     }
   }
+
+  // Jordan is fire-and-forget — the API returns in ~200ms, but the actual
+  // write lands 30–60s later. Hold the "writing" state persistently until
+  // the card moves to the Prompt Ready column (at which point this
+  // component unmounts) or is manually dismissed.
+  const jordanPending = jordanRequestedAt !== null && !jordanError;
 
   return (
     <div className={clsx(
@@ -280,8 +291,8 @@ function ApprovedCard({
         </div>
       </div>
       <p className="mt-2 text-[11px] text-brand-muted italic">
-        {busy === "jordan"
-          ? "Jordan is writing the prompt…"
+        {jordanPending || busy === "jordan"
+          ? "Jordan is writing the prompt… (this usually takes 30–60 s)"
           : "Waiting for Jordan to write prompt"}
       </p>
       {jordanError && (
@@ -327,8 +338,10 @@ function ApprovedCard({
         <div className="flex-1" />
         <button
           onClick={askJordan}
-          disabled={busy !== null}
-          title="Ask Jordan to write a Claude Code prompt for this item"
+          disabled={busy !== null || jordanPending}
+          title={jordanPending
+            ? "Jordan is already writing a prompt for this item"
+            : "Ask Jordan to write a Claude Code prompt for this item"}
           className="px-3 py-1 rounded-md text-[11px] font-medium bg-brand-orange text-white
                      hover:bg-brand-orange-dark transition-colors disabled:opacity-50
                      inline-flex items-center gap-1"
@@ -337,7 +350,7 @@ function ApprovedCard({
                strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
-          {busy === "jordan" ? "Asking Jordan…" : "Ask Jordan"}
+          {busy === "jordan" ? "Sending…" : jordanPending ? "Jordan working" : "Ask Jordan"}
         </button>
       </div>
     </div>

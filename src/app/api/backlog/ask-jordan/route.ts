@@ -2,15 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
 // Dashboard triggers Jordan to write a Claude Code prompt for an approved
-// backlog item. Reuses Jordan's synchronous /chat endpoint — the LangGraph
-// loop calls write_backlog_prompt, which updates the row to prompt_ready.
-// The 30s poll on /backlog surfaces the result without a manual refresh.
-//
-// Latency budget: Jordan's /chat with Sonnet + a few tool rounds tends to
-// land inside 60s. If it overruns this function's timeout, the backend
-// completes regardless — Jordan's write still lands in Supabase.
+// backlog item. Uses Jordan's fire-and-forget /backlog/ask-jordan endpoint
+// so the serverless function returns in ~200ms regardless of how long
+// Jordan's LangGraph loop takes. Jordan's write_backlog_prompt tool flips
+// the row to prompt_ready; the 30s poll on /backlog picks it up.
 
-export const maxDuration = 60;
+export const maxDuration = 10;
 
 const JORDAN_AGENT_URL = process.env.JORDAN_AGENT_URL ?? "";
 const JORDAN_WEBHOOK_SECRET = process.env.JORDAN_WEBHOOK_SECRET ?? "";
@@ -65,7 +62,7 @@ export async function POST(req: NextRequest) {
       `arch_notes should capture tradeoffs, risks, and adjacent systems. ` +
       `After saving, reply with a one-line confirmation.`;
 
-    const res = await fetch(`${JORDAN_AGENT_URL}/chat`, {
+    const res = await fetch(`${JORDAN_AGENT_URL}/backlog/ask-jordan`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -82,11 +79,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const data = await res.json();
-    return NextResponse.json({
-      ok: true,
-      response: data.response ?? "(Jordan finished without a text reply)",
-    });
+    // Jordan returns {status: "accepted"} immediately; the actual prompt
+    // write lands in Supabase when the LangGraph loop calls
+    // write_backlog_prompt 30–60s later.
+    return NextResponse.json({ ok: true, accepted: true });
   } catch (err) {
     console.error("ask-jordan error:", err);
     return NextResponse.json(
