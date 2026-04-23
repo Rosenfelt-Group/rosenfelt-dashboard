@@ -54,6 +54,10 @@ export async function PATCH(req: NextRequest) {
       update.status = body.status;
       if (body.status === "approved") {
         update.approved_at = new Date().toISOString();
+      } else {
+        // Moving out of approved clears the approved_at stamp so the item
+        // reads as cleanly back-in-triage.
+        update.approved_at = null;
       }
     }
 

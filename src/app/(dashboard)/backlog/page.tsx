@@ -213,7 +213,29 @@ function InboxCard({
   );
 }
 
-function ApprovedCard({ item, bundleParent }: { item: BacklogItem; bundleParent?: boolean }) {
+function ApprovedCard({
+  item,
+  bundleParent,
+  onUnbundle,
+  onBackToInbox,
+}: {
+  item: BacklogItem;
+  bundleParent?: boolean;
+  onUnbundle: () => void;
+  onBackToInbox: () => void;
+}) {
+  const [busy, setBusy] = useState<"unbundle" | "inbox" | null>(null);
+
+  async function run(action: "unbundle" | "inbox") {
+    setBusy(action);
+    try {
+      if (action === "unbundle") await onUnbundle();
+      else await onBackToInbox();
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className={clsx(
       "card p-3",
@@ -244,6 +266,45 @@ function ApprovedCard({ item, bundleParent }: { item: BacklogItem; bundleParent?
         </div>
       </div>
       <p className="mt-2 text-[11px] text-brand-muted italic">Waiting for Jordan to write prompt</p>
+
+      <div className="mt-3 pt-3 border-t border-brand-border flex items-center gap-2 flex-wrap">
+        {item.bundle_id && (
+          <button
+            onClick={() => run("unbundle")}
+            disabled={busy !== null}
+            title="Remove this item from its bundle"
+            className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white text-brand-muted
+                       border border-brand-border hover:text-brand-black
+                       transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+              <path d="M5.17 11.75l-1.72 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              <line x1="8" y1="2" x2="8" y2="5"/>
+              <line x1="2" y1="8" x2="5" y2="8"/>
+              <line x1="16" y1="19" x2="16" y2="22"/>
+              <line x1="19" y1="16" x2="22" y2="16"/>
+            </svg>
+            {busy === "unbundle" ? "…" : "Unbundle"}
+          </button>
+        )}
+        <div className="flex-1" />
+        <button
+          onClick={() => run("inbox")}
+          disabled={busy !== null}
+          title="Send back to Inbox for re-triage"
+          className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white text-brand-muted
+                     border border-brand-border hover:text-brand-black
+                     transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          {busy === "inbox" ? "…" : "Inbox"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -514,6 +575,31 @@ export default function BacklogPage() {
     await patch({ id, status: "done" });
   }
 
+  // Unbundle a single item. If only one other item shares the bundle,
+  // dissolve it entirely (a bundle of one is nonsensical).
+  async function unbundle(id: number) {
+    const target = items.find(i => i.id === id);
+    const bundleId = target?.bundle_id;
+    if (!bundleId) {
+      await patch({ id, bundle_id: null });
+      return;
+    }
+    const siblings = items.filter(i => i.bundle_id === bundleId && i.id !== id);
+    if (siblings.length === 1) {
+      // Auto-dissolve: also unlink the one remaining sibling.
+      await patch({ ids: [id, siblings[0].id], bundle_id: null });
+    } else {
+      await patch({ id, bundle_id: null });
+    }
+  }
+
+  // Send an approved item back to Inbox for re-triage.
+  // Drops the bundle link too — an inbox item shouldn't belong to an
+  // approved bundle. Server-side also nulls approved_at.
+  async function sendToInbox(id: number) {
+    await patch({ id, status: "inbox", bundle_id: null });
+  }
+
   if (loading) {
     return (
       <div className="p-4 md:p-8 pt-16 md:pt-8">
@@ -589,12 +675,23 @@ export default function BacklogPage() {
                   Bundle #{bid} · {rows.length} items
                 </p>
                 {rows.map((r, i) => (
-                  <ApprovedCard key={r.id} item={r} bundleParent={i === 0} />
+                  <ApprovedCard
+                    key={r.id}
+                    item={r}
+                    bundleParent={i === 0}
+                    onUnbundle={() => unbundle(r.id)}
+                    onBackToInbox={() => sendToInbox(r.id)}
+                  />
                 ))}
               </div>
             ))}
           {approvedGroups.solo.map(item => (
-            <ApprovedCard key={item.id} item={item} />
+            <ApprovedCard
+              key={item.id}
+              item={item}
+              onUnbundle={() => unbundle(item.id)}
+              onBackToInbox={() => sendToInbox(item.id)}
+            />
           ))}
         </Column>
 
