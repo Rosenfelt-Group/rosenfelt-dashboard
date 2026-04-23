@@ -124,7 +124,7 @@ export function Sidebar() {
 
       {/* ── Mobile top bar ── */}
       <header className="md:hidden fixed top-0 inset-x-0 h-12 bg-white border-b border-brand-border
-                         flex items-center px-4 z-20">
+                         flex items-center justify-between px-4 z-20">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 bg-brand-orange rounded-md flex items-center justify-center flex-shrink-0">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
@@ -135,6 +135,15 @@ export function Sidebar() {
           </div>
           <p className="text-sm font-semibold text-brand-black">Rosenfelt Group</p>
         </div>
+        <button
+          onClick={handleLogout}
+          aria-label="Sign out"
+          className="p-1.5 -mr-1.5 rounded-md text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
       </header>
 
       {/* ── Mobile bottom tab bar ── */}
