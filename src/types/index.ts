@@ -87,6 +87,42 @@ export interface ContentIdea {
   post_id?: number;
 }
 
+// Tool enhancement backlog
+export type BacklogStatus =
+  | "inbox"
+  | "approved"
+  | "bundled"
+  | "prompt_ready"
+  | "in_progress"
+  | "done"
+  | "rejected";
+
+export type BacklogArea =
+  | "workflow"
+  | "dashboard"
+  | "content"
+  | "infrastructure"
+  | "agent";
+
+export type BacklogSuggester = "riley" | "avery" | "jordan" | "brian";
+
+export interface BacklogItem {
+  id: number;
+  created_at: string;
+  suggested_by: BacklogSuggester;
+  title: string;
+  summary: string;
+  problem_detail?: string | null;
+  affected_area: BacklogArea;
+  status: BacklogStatus;
+  bundle_id?: number | null;
+  priority?: TaskPriority | null;
+  claude_code_prompt?: string | null;
+  arch_notes?: string | null;
+  approved_at?: string | null;
+  prompt_ready_at?: string | null;
+}
+
 // Dashboard summary types
 export interface AgentStatus {
   agent: Agent;

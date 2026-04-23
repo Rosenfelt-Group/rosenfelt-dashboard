@@ -5,19 +5,48 @@ import { usePathname, useRouter } from "next/navigation";
 import clsx from "clsx";
 import type { Role } from "@/lib/session";
 
-const nav = [
-  { label: "Overview",     href: "/overview",            icon: "grid"     },
-  { label: "Chat",         href: "/chat",                icon: "chat"     },
-  { label: "Tasks",        href: "/tasks",               icon: "check"    },
-  { label: "Approvals",    href: "/approvals",           icon: "approval" },
-  { label: "CRM",          href: "/crm",                 icon: "users"    },
-  { label: "Content",      href: "/content",             icon: "edit"     },
-  { label: "Documents",    href: "/documents",           icon: "folder"   },
-  { label: "Agents",       href: "/agents",              icon: "cpu"      },
-  { label: "Intelligence", href: "/agents/intelligence", icon: "brain"    },
-  { label: "Cost",         href: "/cost",                icon: "dollar"   },
-  { label: "Backup",       href: "/backup",              icon: "archive"  },
-  { label: "Users",        href: "/users",               icon: "shield"   },
+type NavItem = {
+  label: string;
+  href: string;
+  icon: string;
+  module: string;
+  adminOnly?: boolean;
+};
+
+const MODULES: { key: string; label: string }[] = [
+  { key: "overview",       label: "Overview" },
+  { key: "content",        label: "Content" },
+  { key: "salesMarketing", label: "Sales & Marketing" },
+  { key: "engineering",    label: "Engineering" },
+  { key: "security",       label: "Security" },
+  { key: "settings",       label: "Settings" },
+];
+
+const nav: NavItem[] = [
+  // Overview
+  { label: "Overview",     href: "/overview",            icon: "grid",       module: "overview" },
+  { label: "Approvals",    href: "/approvals",           icon: "approval",   module: "overview" },
+
+  // Content
+  { label: "Content",      href: "/content",             icon: "edit",       module: "content" },
+  { label: "Documents",    href: "/documents",           icon: "folder",     module: "content" },
+
+  // Sales & Marketing
+  { label: "CRM",          href: "/crm",                 icon: "users",      module: "salesMarketing" },
+
+  // Engineering
+  { label: "Backlog",      href: "/backlog",             icon: "wrench",     module: "engineering" },
+  { label: "Agents",       href: "/agents",              icon: "cpu",        module: "engineering" },
+  { label: "Intelligence", href: "/agents/intelligence", icon: "brain",      module: "engineering" },
+  { label: "Tasks",        href: "/tasks",               icon: "check",      module: "engineering" },
+  { label: "Chat",         href: "/chat",                icon: "chat",       module: "engineering", adminOnly: true },
+
+  // Security
+  { label: "Users",        href: "/users",               icon: "shield",     module: "security", adminOnly: true },
+
+  // Settings
+  { label: "Cost",         href: "/cost",                icon: "dollar",     module: "settings" },
+  { label: "Backup",       href: "/backup",              icon: "archive",    module: "settings" },
 ];
 
 function Icon({ name }: { name: string }) {
@@ -34,6 +63,7 @@ function Icon({ name }: { name: string }) {
     dollar:   <><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></>,
     archive:  <><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></>,
     shield:   <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>,
+    wrench:   <><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.4-2.4z"/></>,
   };
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -42,8 +72,6 @@ function Icon({ name }: { name: string }) {
     </svg>
   );
 }
-
-const ADMIN_ONLY_HREFS = new Set(["/chat", "/users"]);
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -57,12 +85,16 @@ export function Sidebar() {
       .catch(() => {});
   }, []);
 
-  const visibleNav = nav.filter(item => role === "admin" || !ADMIN_ONLY_HREFS.has(item.href));
+  const visibleNav = nav.filter(item => role === "admin" || !item.adminOnly);
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
   };
+
+  const modulesWithItems = MODULES
+    .map(m => ({ ...m, items: visibleNav.filter(n => n.module === m.key) }))
+    .filter(m => m.items.length > 0);
 
   return (
     <>
@@ -86,26 +118,35 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-          {visibleNav.map((item) => {
-            const active = pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={clsx(
-                  "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors",
-                  active
-                    ? "bg-orange-50 text-brand-orange font-medium"
-                    : "text-brand-muted hover:bg-brand-offwhite hover:text-brand-black"
-                )}
-              >
-                <Icon name={item.icon} />
-                {item.label}
-              </Link>
-            );
-          })}
+        {/* Nav — grouped by module */}
+        <nav className="flex-1 px-3 py-3 overflow-y-auto">
+          {modulesWithItems.map((mod, modIdx) => (
+            <div key={mod.key} className={clsx(modIdx > 0 && "mt-5")}>
+              <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-brand-muted">
+                {mod.label}
+              </p>
+              <div className="space-y-0.5">
+                {mod.items.map(item => {
+                  const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={clsx(
+                        "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors",
+                        active
+                          ? "bg-orange-50 text-brand-orange font-medium"
+                          : "text-brand-muted hover:bg-brand-offwhite hover:text-brand-black"
+                      )}
+                    >
+                      <Icon name={item.icon} />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {/* Footer */}
@@ -146,11 +187,11 @@ export function Sidebar() {
         </button>
       </header>
 
-      {/* ── Mobile bottom tab bar ── */}
+      {/* ── Mobile bottom tab bar (flat, every page) ── */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-brand-border
                       flex items-center z-20 pb-safe overflow-x-auto">
         {visibleNav.map((item) => {
-          const active = pathname.startsWith(item.href);
+          const active = pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link
               key={item.href}
