@@ -218,19 +218,33 @@ function ApprovedCard({
   bundleParent,
   onUnbundle,
   onBackToInbox,
+  onAskJordan,
 }: {
   item: BacklogItem;
   bundleParent?: boolean;
   onUnbundle: () => void;
   onBackToInbox: () => void;
+  onAskJordan: () => Promise<string | null>;
 }) {
-  const [busy, setBusy] = useState<"unbundle" | "inbox" | null>(null);
+  const [busy, setBusy] = useState<"unbundle" | "inbox" | "jordan" | null>(null);
+  const [jordanError, setJordanError] = useState<string | null>(null);
 
   async function run(action: "unbundle" | "inbox") {
     setBusy(action);
     try {
       if (action === "unbundle") await onUnbundle();
       else await onBackToInbox();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function askJordan() {
+    setBusy("jordan");
+    setJordanError(null);
+    try {
+      const err = await onAskJordan();
+      if (err) setJordanError(err);
     } finally {
       setBusy(null);
     }
@@ -265,7 +279,14 @@ function ApprovedCard({
           <DocLink path={item.doc_path} />
         </div>
       </div>
-      <p className="mt-2 text-[11px] text-brand-muted italic">Waiting for Jordan to write prompt</p>
+      <p className="mt-2 text-[11px] text-brand-muted italic">
+        {busy === "jordan"
+          ? "Jordan is writing the prompt…"
+          : "Waiting for Jordan to write prompt"}
+      </p>
+      {jordanError && (
+        <p className="mt-1 text-[11px] text-red-600">{jordanError}</p>
+      )}
 
       <div className="mt-3 pt-3 border-t border-brand-border flex items-center gap-2 flex-wrap">
         {item.bundle_id && (
@@ -289,7 +310,6 @@ function ApprovedCard({
             {busy === "unbundle" ? "…" : "Unbundle"}
           </button>
         )}
-        <div className="flex-1" />
         <button
           onClick={() => run("inbox")}
           disabled={busy !== null}
@@ -303,6 +323,21 @@ function ApprovedCard({
             <polyline points="15 18 9 12 15 6"/>
           </svg>
           {busy === "inbox" ? "…" : "Inbox"}
+        </button>
+        <div className="flex-1" />
+        <button
+          onClick={askJordan}
+          disabled={busy !== null}
+          title="Ask Jordan to write a Claude Code prompt for this item"
+          className="px-3 py-1 rounded-md text-[11px] font-medium bg-brand-orange text-white
+                     hover:bg-brand-orange-dark transition-colors disabled:opacity-50
+                     inline-flex items-center gap-1"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          {busy === "jordan" ? "Asking Jordan…" : "Ask Jordan"}
         </button>
       </div>
     </div>
@@ -504,7 +539,7 @@ function Column({
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function BacklogPage() {
-  const { items, loading, patch } = useBacklog();
+  const { items, loading, patch, reload } = useBacklog();
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const grouped = useMemo(() => {
@@ -600,6 +635,28 @@ export default function BacklogPage() {
     await patch({ id, status: "inbox", bundle_id: null });
   }
 
+  // Fire the dashboard → Jordan /chat bridge. Returns null on success, an
+  // error string otherwise. The card shows "Jordan is writing the prompt…"
+  // while this is pending; on completion the 30s poll (or the reload below)
+  // surfaces the prompt_ready state.
+  async function askJordan(id: number): Promise<string | null> {
+    try {
+      const res = await fetch("/api/backlog/ask-jordan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return data.error || `Jordan request failed (HTTP ${res.status})`;
+      }
+      await reload();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Network error";
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-4 md:p-8 pt-16 md:pt-8">
@@ -681,6 +738,7 @@ export default function BacklogPage() {
                     bundleParent={i === 0}
                     onUnbundle={() => unbundle(r.id)}
                     onBackToInbox={() => sendToInbox(r.id)}
+                    onAskJordan={() => askJordan(r.id)}
                   />
                 ))}
               </div>
@@ -691,6 +749,7 @@ export default function BacklogPage() {
               item={item}
               onUnbundle={() => unbundle(item.id)}
               onBackToInbox={() => sendToInbox(item.id)}
+              onAskJordan={() => askJordan(item.id)}
             />
           ))}
         </Column>
