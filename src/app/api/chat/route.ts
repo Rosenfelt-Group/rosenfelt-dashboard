@@ -3,8 +3,29 @@ import { supabaseAdmin } from "@/lib/supabase";
 
 export const maxDuration = 60;
 
-const JORDAN_API_URL = process.env.JORDAN_API_URL ?? "";
-const JORDAN_WEBHOOK_SECRET = process.env.JORDAN_WEBHOOK_SECRET ?? "";
+type AgentConfig = {
+  urlEnv: string;
+  secretEnv: string;
+  path: string;
+};
+
+const AGENT_CONFIG: Record<string, AgentConfig> = {
+  jordan: {
+    urlEnv: "JORDAN_API_URL",
+    secretEnv: "JORDAN_WEBHOOK_SECRET",
+    path: "/chat",
+  },
+  avery: {
+    urlEnv: "AVERY_AGENT_URL",
+    secretEnv: "AVERY_WEBHOOK_SECRET",
+    path: "/chat",
+  },
+  riley: {
+    urlEnv: "RILEY_AGENT_URL",
+    secretEnv: "RILEY_WEBHOOK_SECRET",
+    path: "/chat",
+  },
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,38 +35,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing message or agent" }, { status: 400 });
     }
 
-    if (agent !== "jordan") {
-      return NextResponse.json({
-        response: `${agent} is not yet migrated to the new stack. Use Telegram to reach ${agent} for now.`,
-        agent,
-      });
+    const config = AGENT_CONFIG[agent];
+    if (!config) {
+      return NextResponse.json({ error: `Unknown agent: ${agent}` }, { status: 400 });
     }
 
-    if (!JORDAN_API_URL) {
-      return NextResponse.json({ error: "Jordan agent URL not configured" }, { status: 500 });
+    const agentUrl = process.env[config.urlEnv] ?? "";
+    const secret = process.env[config.secretEnv] ?? "";
+
+    if (!agentUrl) {
+      return NextResponse.json(
+        { error: `${agent} agent URL not configured (${config.urlEnv})` },
+        { status: 500 }
+      );
     }
 
     const sessionChatId = chatId || "dashboard_brian";
 
-    const res = await fetch(`${JORDAN_API_URL}/chat`, {
+    const res = await fetch(`${agentUrl}${config.path}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Webhook-Secret": JORDAN_WEBHOOK_SECRET,
+        "X-Webhook-Secret": secret,
       },
-      body: JSON.stringify({
-        text: message,
-        chatId: sessionChatId,
-      }),
+      body: JSON.stringify({ text: message, chatId: sessionChatId }),
     });
 
     if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`Jordan returned ${res.status}: ${body}`);
+      const body = await res.text().catch(() => "");
+      throw new Error(`${agent} returned ${res.status}: ${body.slice(0, 200)}`);
     }
 
     const data = await res.json();
-    return NextResponse.json({ response: data.response, agent });
+    return NextResponse.json({ response: data.response ?? "(no response)", agent });
   } catch (err) {
     console.error("Chat API error:", err);
     return NextResponse.json({ error: "Failed to reach agent" }, { status: 500 });

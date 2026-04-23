@@ -12,17 +12,22 @@ type Message = {
 };
 
 const AGENTS: { id: Agent; label: string; available: boolean; note?: string }[] = [
-  { id: "jordan", label: "Jordan",  available: true },
-  { id: "riley",  label: "Riley",   available: false, note: "Coming soon" },
-  { id: "avery",  label: "Avery",   available: false, note: "Coming soon" },
+  { id: "jordan", label: "Jordan", available: true },
+  { id: "riley",  label: "Riley",  available: true },
+  { id: "avery",  label: "Avery",  available: true },
 ];
+
+const AGENT_PROMPTS: Partial<Record<Agent, string>> = {
+  jordan: "Ask about workflows, containers, VPS status, or tasks.",
+  avery: "Ask Avery to draft blog posts, research topics, or manage content.",
+  riley: "Ask Riley about CRM data, leads, or client activity.",
+};
 
 const CHAT_ID = "dashboard_brian";
 
-function MessageBubble({ msg }: { msg: Message }) {
+function MessageBubble({ msg, agent }: { msg: Message; agent: Agent }) {
   const isUser = msg.role === "user";
 
-  // Convert HTML-ish tags from Jordan to readable format
   const formatted = msg.content
     .replace(/<b>(.*?)<\/b>/g, "$1")
     .replace(/<i>(.*?)<\/i>/g, "$1")
@@ -32,7 +37,7 @@ function MessageBubble({ msg }: { msg: Message }) {
     <div className={clsx("flex gap-3 max-w-3xl", isUser ? "ml-auto flex-row-reverse" : "")}>
       {!isUser && (
         <div className="flex-shrink-0 mt-1">
-          <AgentBadge agent="jordan" />
+          <AgentBadge agent={agent} />
         </div>
       )}
       <div className={clsx(
@@ -195,14 +200,12 @@ export default function ChatPage() {
             </div>
             <p className="text-sm font-medium text-brand-black capitalize">{agent} is ready</p>
             <p className="text-xs text-brand-muted mt-1">
-              {agent === "jordan"
-                ? "Ask about workflows, containers, VPS status, or tasks."
-                : "This agent is not yet available in the dashboard."}
+              {AGENT_PROMPTS[agent] ?? `Send ${agent} a message to get started.`}
             </p>
           </div>
         ) : (
           messages.map((msg, i) => (
-            <MessageBubble key={i} msg={msg} />
+            <MessageBubble key={i} msg={msg} agent={agent} />
           ))
         )}
 
@@ -249,7 +252,9 @@ export default function ChatPage() {
           </button>
         </div>
         <p className="text-xs text-brand-muted mt-2">
-          Jordan responses take ~8 seconds — the agent reasons and uses tools before replying.
+          {agent === "jordan"
+            ? "Jordan responses take ~8 seconds — the agent reasons and uses tools before replying."
+            : "Responses may take 10–30 seconds while the agent reasons and uses tools."}
         </p>
       </div>
     </div>
