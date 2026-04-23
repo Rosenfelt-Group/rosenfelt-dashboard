@@ -44,7 +44,6 @@ function Icon({ name }: { name: string }) {
 }
 
 const ADMIN_ONLY_HREFS = new Set(["/chat", "/users"]);
-const mobileNavHrefs = new Set(["overview", "chat", "tasks", "crm", "agents"]);
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -59,7 +58,6 @@ export function Sidebar() {
   }, []);
 
   const visibleNav = nav.filter(item => role === "admin" || !ADMIN_ONLY_HREFS.has(item.href));
-  const visibleMobileNav = visibleNav.filter(n => mobileNavHrefs.has(n.href.replace("/", "")));
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -141,15 +139,15 @@ export function Sidebar() {
 
       {/* ── Mobile bottom tab bar ── */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-brand-border
-                      flex items-center justify-around z-20 pb-safe">
-        {visibleMobileNav.map((item) => {
+                      flex items-center z-20 pb-safe overflow-x-auto">
+        {visibleNav.map((item) => {
           const active = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
               className={clsx(
-                "flex flex-col items-center gap-0.5 px-3 py-2 min-w-[56px] transition-colors",
+                "flex flex-col items-center gap-0.5 px-3 py-2 min-w-[56px] flex-shrink-0 transition-colors",
                 active ? "text-brand-orange" : "text-brand-muted"
               )}
             >
