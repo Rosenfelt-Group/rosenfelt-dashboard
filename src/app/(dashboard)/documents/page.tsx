@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import clsx from "clsx";
@@ -24,6 +25,17 @@ function FileIcon() {
 }
 
 export default function DocumentsPage() {
+  return (
+    <Suspense fallback={<div className="p-4 md:p-8" />}>
+      <DocumentsPageInner />
+    </Suspense>
+  );
+}
+
+function DocumentsPageInner() {
+  const searchParams = useSearchParams();
+  const initialPath = searchParams.get("path");
+
   const [docs,         setDocs]         = useState<DocEntry[]>([]);
   const [selected,     setSelected]     = useState<DocEntry | null>(null);
   const [content,      setContent]      = useState<string | null>(null);
@@ -32,24 +44,6 @@ export default function DocumentsPage() {
   const [listLoading,  setListLoading]  = useState(true);
   const [docLoading,   setDocLoading]   = useState(false);
   const [search,       setSearch]       = useState("");
-
-  // Load doc list on mount
-  useEffect(() => {
-    fetch("/api/docs/list")
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) {
-          setListError(data.error);
-        } else {
-          setDocs(Array.isArray(data) ? data : []);
-        }
-        setListLoading(false);
-      })
-      .catch(() => {
-        setListError("Could not reach Jordan agent");
-        setListLoading(false);
-      });
-  }, []);
 
   // Fetch file content when a doc is selected
   async function openDoc(doc: DocEntry) {
@@ -71,6 +65,30 @@ export default function DocumentsPage() {
     }
     setDocLoading(false);
   }
+
+  // Load doc list on mount
+  useEffect(() => {
+    fetch("/api/docs/list")
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          setListError(data.error);
+        } else {
+          const list: DocEntry[] = Array.isArray(data) ? data : [];
+          setDocs(list);
+          if (initialPath) {
+            const match = list.find(d => d.path === initialPath);
+            if (match) openDoc(match);
+          }
+        }
+        setListLoading(false);
+      })
+      .catch(() => {
+        setListError("Could not reach Jordan agent");
+        setListLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPath]);
 
   const filtered = docs.filter(d =>
     !search || d.name.toLowerCase().includes(search.toLowerCase())

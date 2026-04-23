@@ -121,6 +121,7 @@ export interface BacklogItem {
   arch_notes?: string | null;
   approved_at?: string | null;
   prompt_ready_at?: string | null;
+  doc_path?: string | null;
 }
 
 // Dashboard summary types

@@ -86,6 +86,30 @@ function CardMeta({ item }: { item: BacklogItem }) {
   );
 }
 
+function DocLink({ path }: { path?: string | null }) {
+  if (!path) return null;
+  return (
+    <a
+      href={`/documents?path=${encodeURIComponent(path)}`}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="inline-flex items-center gap-1 mt-2 text-[11px] font-medium text-brand-orange hover:underline"
+    >
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+        <polyline points="13 2 13 9 20 9"/>
+      </svg>
+      View full spec
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="7 7 17 7 17 17"/><line x1="7" y1="17" x2="17" y2="7"/>
+      </svg>
+    </a>
+  );
+}
+
 function InboxCard({
   item,
   selected,
@@ -128,18 +152,21 @@ function InboxCard({
           aria-label={`Select ${item.title}`}
         />
         <AgentBadge agent={item.suggested_by} size="sm" />
-        <button
-          className="flex-1 min-w-0 text-left"
-          onClick={() => setExpanded(e => !e)}
-        >
-          <p className="text-sm font-medium text-brand-black leading-snug">{item.title}</p>
-          <p className="text-xs text-brand-muted mt-0.5 line-clamp-2">{item.summary}</p>
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-            <AreaBadge area={item.affected_area} />
-            <PriorityBadge priority={item.priority} />
-          </div>
-          <CardMeta item={item} />
-        </button>
+        <div className="flex-1 min-w-0">
+          <button
+            className="w-full text-left"
+            onClick={() => setExpanded(e => !e)}
+          >
+            <p className="text-sm font-medium text-brand-black leading-snug">{item.title}</p>
+            <p className="text-xs text-brand-muted mt-0.5 line-clamp-2">{item.summary}</p>
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              <AreaBadge area={item.affected_area} />
+              <PriorityBadge priority={item.priority} />
+            </div>
+            <CardMeta item={item} />
+          </button>
+          <DocLink path={item.doc_path} />
+        </div>
       </div>
 
       {expanded && item.problem_detail && (
@@ -213,6 +240,7 @@ function ApprovedCard({ item, bundleParent }: { item: BacklogItem; bundleParent?
             )}
           </div>
           <CardMeta item={item} />
+          <DocLink path={item.doc_path} />
         </div>
       </div>
       <p className="mt-2 text-[11px] text-brand-muted italic">Waiting for Jordan to write prompt</p>
@@ -264,6 +292,7 @@ function PromptReadyCard({
               ready {formatDistanceToNow(parseISO(item.prompt_ready_at), { addSuffix: true })}
             </p>
           )}
+          <DocLink path={item.doc_path} />
         </div>
       </div>
 
@@ -361,6 +390,7 @@ function DoneCard({
             <AreaBadge area={item.affected_area} />
           </div>
           <CardMeta item={item} />
+          <DocLink path={item.doc_path} />
         </div>
         {isActive && onComplete && (
           <button
