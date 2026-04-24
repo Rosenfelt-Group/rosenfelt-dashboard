@@ -559,14 +559,9 @@ export default function BacklogPage() {
     const inbox       = items.filter(i => i.status === "inbox");
     const approved    = items.filter(i => i.status === "approved" || i.status === "bundled");
     const promptReady = items.filter(i => i.status === "prompt_ready");
-    const done        = items
-      .filter(i => ["done", "rejected", "in_progress"].includes(i.status))
-      .sort((a, b) => {
-        // in_progress always first
-        const rank = (s: BacklogStatus) => (s === "in_progress" ? 0 : 1);
-        return rank(a.status) - rank(b.status);
-      });
-    return { inbox, approved, promptReady, done };
+    const inProgress  = items.filter(i => i.status === "in_progress");
+    const done        = items.filter(i => i.status === "done" || i.status === "rejected");
+    return { inbox, approved, promptReady, inProgress, done };
   }, [items]);
 
   // Group approved items by bundle
@@ -674,8 +669,8 @@ export default function BacklogPage() {
     return (
       <div className="p-4 md:p-8 pt-16 md:pt-8">
         <div className="h-8 w-40 bg-brand-border rounded animate-pulse mb-6" />
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+          {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="card animate-pulse h-64" />
           ))}
         </div>
@@ -710,7 +705,7 @@ export default function BacklogPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
         <Column
           title="Inbox"
           count={grouped.inbox.length}
@@ -783,17 +778,28 @@ export default function BacklogPage() {
         </Column>
 
         <Column
+          title="In Progress"
+          count={grouped.inProgress.length}
+          empty={grouped.inProgress.length === 0}
+          emptyText="Nothing in flight."
+        >
+          {grouped.inProgress.map(item => (
+            <DoneCard
+              key={item.id}
+              item={item}
+              onComplete={() => markDone(item.id)}
+            />
+          ))}
+        </Column>
+
+        <Column
           title="Done"
           count={grouped.done.length}
           empty={grouped.done.length === 0}
           emptyText="No completed or rejected items."
         >
           {grouped.done.map(item => (
-            <DoneCard
-              key={item.id}
-              item={item}
-              onComplete={item.status === "in_progress" ? () => markDone(item.id) : undefined}
-            />
+            <DoneCard key={item.id} item={item} />
           ))}
         </Column>
       </div>
