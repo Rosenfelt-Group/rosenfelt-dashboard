@@ -181,14 +181,11 @@ function PermissionMatrix({
                     const state = saveStates[key] ?? "idle";
                     return (
                       <td key={role.name} className="px-4 py-2.5 text-center">
-                        <label className={clsx(
-                          "inline-flex items-center justify-center cursor-pointer",
-                          role.is_system && "cursor-not-allowed opacity-60",
-                        )}>
+                        <label className="inline-flex items-center justify-center cursor-pointer">
                           <input
                             type="checkbox"
                             checked={checked}
-                            disabled={role.is_system || state === "saving"}
+                            disabled={state === "saving"}
                             onChange={() => toggle(role.name, permission, checked)}
                             className="w-4 h-4 accent-brand-orange"
                           />
