@@ -161,6 +161,7 @@ function InboxCard({
   onApprove,
   onReject,
   onPriority,
+  onEdit,
 }: {
   item: BacklogItem;
   selected: boolean;
@@ -168,6 +169,7 @@ function InboxCard({
   onApprove: () => void;
   onReject: () => void;
   onPriority: (p: TaskPriority) => void;
+  onEdit: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
@@ -234,6 +236,20 @@ function InboxCard({
           <option value="" disabled>priority…</option>
           {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
+        <button
+          onClick={onEdit}
+          disabled={busy !== null}
+          className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white text-brand-muted
+                     border border-brand-border hover:text-brand-black transition-colors
+                     disabled:opacity-50 inline-flex items-center gap-1"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          Edit
+        </button>
         <div className="flex-1" />
         <button
           onClick={() => run("approve")}
@@ -508,14 +524,23 @@ function DoneCard({
   );
 }
 
-// ─── Add item modal ──────────────────────────────────────────────────────────
+// ─── Add / edit item modal ────────────────────────────────────────────────────
 
-function AddItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [title, setTitle] = useState("");
-  const [summary, setSummary] = useState("");
-  const [detail, setDetail] = useState("");
-  const [area, setArea] = useState<BacklogItem["affected_area"] | "">("");
-  const [priority, setPriority] = useState<TaskPriority | "">("");
+function ItemFormModal({
+  item,
+  onClose,
+  onSaved,
+}: {
+  item?: BacklogItem;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = !!item;
+  const [title, setTitle] = useState(item?.title ?? "");
+  const [summary, setSummary] = useState(item?.summary ?? "");
+  const [detail, setDetail] = useState(item?.problem_detail ?? "");
+  const [area, setArea] = useState<BacklogItem["affected_area"] | "">(item?.affected_area ?? "");
+  const [priority, setPriority] = useState<TaskPriority | "">(item?.priority ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -525,17 +550,29 @@ function AddItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch("/api/backlog", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title, summary,
-          problem_detail: detail || undefined,
-          affected_area: area,
-          priority: priority || null,
-          suggested_by: "brian",
-        }),
-      });
+      const res = isEdit
+        ? await fetch("/api/backlog", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: item!.id,
+              title, summary,
+              problem_detail: detail || null,
+              affected_area: area,
+              priority: priority || null,
+            }),
+          })
+        : await fetch("/api/backlog", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title, summary,
+              problem_detail: detail || undefined,
+              affected_area: area,
+              priority: priority || null,
+              suggested_by: "brian",
+            }),
+          });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || `HTTP ${res.status}`);
@@ -555,7 +592,7 @@ function AddItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
     >
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-brand-black">Add backlog item</h2>
+          <h2 className="text-base font-semibold text-brand-black">{isEdit ? "Edit backlog item" : "Add backlog item"}</h2>
           <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg leading-none">×</button>
         </div>
 
@@ -643,7 +680,7 @@ function AddItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
               className="px-4 py-2 text-sm font-medium bg-brand-orange text-white rounded-lg
                          hover:bg-brand-orange-dark transition-colors disabled:opacity-50"
             >
-              {saving ? "Saving…" : "Add to Inbox"}
+              {saving ? "Saving…" : isEdit ? "Save changes" : "Add to Inbox"}
             </button>
           </div>
         </form>
@@ -690,6 +727,7 @@ export default function BacklogPage() {
   const { items, loading, patch, reload } = useBacklog();
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [showAdd, setShowAdd] = useState(false);
+  const [editItem, setEditItem] = useState<BacklogItem | null>(null);
 
   const grouped = useMemo(() => {
     const inbox       = items.filter(i => i.status === "inbox");
@@ -808,7 +846,10 @@ export default function BacklogPage() {
   return (
     <div className="p-4 md:p-8 pt-16 md:pt-8 pb-24 md:pb-8">
       {showAdd && (
-        <AddItemModal onClose={() => setShowAdd(false)} onSaved={reload} />
+        <ItemFormModal onClose={() => setShowAdd(false)} onSaved={reload} />
+      )}
+      {editItem && (
+        <ItemFormModal item={editItem} onClose={() => setEditItem(null)} onSaved={reload} />
       )}
       <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
         <div>
@@ -863,6 +904,7 @@ export default function BacklogPage() {
               onApprove={() => approve(item.id)}
               onReject={() => reject(item.id)}
               onPriority={(p) => setPriority(item.id, p)}
+              onEdit={() => setEditItem(item)}
             />
           ))}
         </Column>

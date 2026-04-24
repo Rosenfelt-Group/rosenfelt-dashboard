@@ -80,6 +80,11 @@ type PatchBody = {
   status?: BacklogStatus;
   priority?: (typeof PRIORITIES)[number] | null;
   bundle_id?: number | null;
+  // Field edits (inbox items only)
+  title?: string;
+  summary?: string;
+  problem_detail?: string | null;
+  affected_area?: (typeof AREAS)[number];
 };
 
 export async function PATCH(req: NextRequest) {
@@ -115,6 +120,22 @@ export async function PATCH(req: NextRequest) {
 
     if (body.bundle_id !== undefined) {
       update.bundle_id = body.bundle_id;
+    }
+
+    if (body.title !== undefined) {
+      if (!body.title.trim()) return NextResponse.json({ error: "title cannot be empty" }, { status: 400 });
+      update.title = body.title.trim();
+    }
+    if (body.summary !== undefined) {
+      if (!body.summary.trim()) return NextResponse.json({ error: "summary cannot be empty" }, { status: 400 });
+      update.summary = body.summary.trim();
+    }
+    if (body.problem_detail !== undefined) {
+      update.problem_detail = body.problem_detail?.trim() || null;
+    }
+    if (body.affected_area !== undefined) {
+      if (!AREAS.includes(body.affected_area)) return NextResponse.json({ error: "Invalid affected_area" }, { status: 400 });
+      update.affected_area = body.affected_area;
     }
 
     if (Object.keys(update).length === 0) {
