@@ -21,6 +21,15 @@ const PRIORITY_STYLES: Record<TaskPriority, string> = {
 
 const PRIORITIES: TaskPriority[] = ["high", "medium", "low"];
 
+const STATUS_OPTIONS: { value: BacklogStatus; label: string }[] = [
+  { value: "inbox",        label: "Inbox" },
+  { value: "approved",     label: "Approved" },
+  { value: "prompt_ready", label: "Prompt Ready" },
+  { value: "in_progress",  label: "In Progress" },
+  { value: "done",         label: "Done" },
+  { value: "rejected",     label: "Rejected" },
+];
+
 // ─── Data hook ────────────────────────────────────────────────────────────────
 
 function useBacklog() {
@@ -81,8 +90,39 @@ function PriorityBadge({ priority }: { priority?: TaskPriority | null }) {
 function CardMeta({ item }: { item: BacklogItem }) {
   return (
     <p className="text-[11px] text-brand-muted mt-1.5 capitalize">
-      {item.suggested_by} · {formatDistanceToNow(parseISO(item.created_at), { addSuffix: true })}
+      <span className="font-mono text-brand-muted/70">#{item.id}</span>
+      {" · "}{item.suggested_by} · {formatDistanceToNow(parseISO(item.created_at), { addSuffix: true })}
     </p>
+  );
+}
+
+function StatusSelect({
+  current,
+  onChange,
+}: {
+  current: BacklogStatus;
+  onChange: (s: BacklogStatus) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const options = STATUS_OPTIONS.filter(o => o.value !== current);
+
+  return (
+    <select
+      value=""
+      disabled={busy}
+      onChange={async e => {
+        const val = e.target.value as BacklogStatus;
+        if (!val) return;
+        setBusy(true);
+        await onChange(val);
+        setBusy(false);
+      }}
+      className="text-[11px] px-2 py-1 border border-brand-border rounded-md bg-white
+                 text-brand-black focus:outline-none focus:border-brand-orange disabled:opacity-50"
+    >
+      <option value="" disabled>{busy ? "Moving…" : "Change status…"}</option>
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
   );
 }
 
@@ -217,55 +257,42 @@ function ApprovedCard({
   item,
   bundleParent,
   onUnbundle,
-  onBackToInbox,
+  onStatusChange,
   onAskJordan,
 }: {
   item: BacklogItem;
   bundleParent?: boolean;
   onUnbundle: () => void;
-  onBackToInbox: () => void;
+  onStatusChange: (s: BacklogStatus) => Promise<void>;
   onAskJordan: () => Promise<string | null>;
 }) {
-  const [busy, setBusy] = useState<"unbundle" | "inbox" | "jordan" | null>(null);
+  const [unbundleBusy, setUnbundleBusy] = useState(false);
+  const [jordanBusy, setJordanBusy] = useState(false);
   const [jordanError, setJordanError] = useState<string | null>(null);
   const [jordanRequestedAt, setJordanRequestedAt] = useState<number | null>(null);
 
-  async function run(action: "unbundle" | "inbox") {
-    setBusy(action);
-    try {
-      if (action === "unbundle") await onUnbundle();
-      else await onBackToInbox();
-    } finally {
-      setBusy(null);
-    }
+  async function handleUnbundle() {
+    setUnbundleBusy(true);
+    try { await onUnbundle(); } finally { setUnbundleBusy(false); }
   }
 
   async function askJordan() {
-    setBusy("jordan");
+    setJordanBusy(true);
     setJordanError(null);
     try {
       const err = await onAskJordan();
-      if (err) {
-        setJordanError(err);
-      } else {
-        setJordanRequestedAt(Date.now());
-      }
+      if (err) setJordanError(err);
+      else setJordanRequestedAt(Date.now());
     } finally {
-      setBusy(null);
+      setJordanBusy(false);
     }
   }
 
-  // Jordan is fire-and-forget — the API returns in ~200ms, but the actual
-  // write lands 30–60s later. Hold the "writing" state persistently until
-  // the card moves to the Prompt Ready column (at which point this
-  // component unmounts) or is manually dismissed.
   const jordanPending = jordanRequestedAt !== null && !jordanError;
+  const anyBusy = unbundleBusy || jordanBusy;
 
   return (
-    <div className={clsx(
-      "card p-3",
-      bundleParent && "border-brand-orange/40"
-    )}>
+    <div className={clsx("card p-3", bundleParent && "border-brand-orange/40")}>
       <div className="flex items-start gap-2">
         <AgentBadge agent={item.suggested_by} size="sm" />
         <div className="flex-1 min-w-0">
@@ -291,19 +318,17 @@ function ApprovedCard({
         </div>
       </div>
       <p className="mt-2 text-[11px] text-brand-muted italic">
-        {jordanPending || busy === "jordan"
+        {jordanPending || jordanBusy
           ? "Jordan is writing the prompt… (this usually takes 30–60 s)"
           : "Waiting for Jordan to write prompt"}
       </p>
-      {jordanError && (
-        <p className="mt-1 text-[11px] text-red-600">{jordanError}</p>
-      )}
+      {jordanError && <p className="mt-1 text-[11px] text-red-600">{jordanError}</p>}
 
       <div className="mt-3 pt-3 border-t border-brand-border flex items-center gap-2 flex-wrap">
         {item.bundle_id && (
           <button
-            onClick={() => run("unbundle")}
-            disabled={busy !== null}
+            onClick={handleUnbundle}
+            disabled={anyBusy}
             title="Remove this item from its bundle"
             className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white text-brand-muted
                        border border-brand-border hover:text-brand-black
@@ -318,27 +343,14 @@ function ApprovedCard({
               <line x1="16" y1="19" x2="16" y2="22"/>
               <line x1="19" y1="16" x2="22" y2="16"/>
             </svg>
-            {busy === "unbundle" ? "…" : "Unbundle"}
+            {unbundleBusy ? "…" : "Unbundle"}
           </button>
         )}
-        <button
-          onClick={() => run("inbox")}
-          disabled={busy !== null}
-          title="Send back to Inbox for re-triage"
-          className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white text-brand-muted
-                     border border-brand-border hover:text-brand-black
-                     transition-colors disabled:opacity-50 inline-flex items-center gap-1"
-        >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-          {busy === "inbox" ? "…" : "Inbox"}
-        </button>
+        <StatusSelect current={item.status} onChange={onStatusChange} />
         <div className="flex-1" />
         <button
           onClick={askJordan}
-          disabled={busy !== null || jordanPending}
+          disabled={anyBusy || jordanPending}
           title={jordanPending
             ? "Jordan is already writing a prompt for this item"
             : "Ask Jordan to write a Claude Code prompt for this item"}
@@ -350,7 +362,7 @@ function ApprovedCard({
                strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
-          {busy === "jordan" ? "Sending…" : jordanPending ? "Jordan working" : "Ask Jordan"}
+          {jordanBusy ? "Sending…" : jordanPending ? "Jordan working" : "Ask Jordan"}
         </button>
       </div>
     </div>
@@ -359,25 +371,19 @@ function ApprovedCard({
 
 function PromptReadyCard({
   item,
-  onStart,
+  onStatusChange,
 }: {
   item: BacklogItem;
-  onStart: () => void;
+  onStatusChange: (s: BacklogStatus) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [busy, setBusy] = useState(false);
 
   async function copy() {
     if (!item.claude_code_prompt) return;
     await navigator.clipboard.writeText(item.claude_code_prompt);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }
-
-  async function start() {
-    setBusy(true);
-    try { await onStart(); } finally { setBusy(false); }
   }
 
   return (
@@ -396,11 +402,12 @@ function PromptReadyCard({
               </span>
             )}
           </div>
-          {item.prompt_ready_at && (
-            <p className="text-[11px] text-brand-muted mt-1.5">
-              ready {formatDistanceToNow(parseISO(item.prompt_ready_at), { addSuffix: true })}
-            </p>
-          )}
+          <p className="text-[11px] text-brand-muted mt-1.5">
+            <span className="font-mono text-brand-muted/70">#{item.id}</span>
+            {item.prompt_ready_at && (
+              <> · ready {formatDistanceToNow(parseISO(item.prompt_ready_at), { addSuffix: true })}</>
+            )}
+          </p>
           <DocLink path={item.doc_path} />
         </div>
       </div>
@@ -428,7 +435,9 @@ function PromptReadyCard({
         </pre>
       )}
 
-      <div className="mt-3 pt-3 border-t border-brand-border flex items-center gap-2">
+      <div className="mt-3 pt-3 border-t border-brand-border flex items-center gap-2 flex-wrap">
+        <StatusSelect current={item.status} onChange={onStatusChange} />
+        <div className="flex-1" />
         <button
           onClick={copy}
           disabled={!item.claude_code_prompt}
@@ -441,15 +450,6 @@ function PromptReadyCard({
         >
           {copied ? "✓ Copied" : "Copy Prompt"}
         </button>
-        <button
-          onClick={start}
-          disabled={busy}
-          className="px-3 py-1 rounded-md text-xs font-medium bg-white text-brand-muted
-                     border border-brand-border hover:text-brand-black
-                     transition-colors disabled:opacity-50"
-        >
-          {busy ? "…" : "Mark In Progress"}
-        </button>
       </div>
     </div>
   );
@@ -457,28 +457,21 @@ function PromptReadyCard({
 
 function DoneCard({
   item,
-  onComplete,
+  onStatusChange,
 }: {
   item: BacklogItem;
-  onComplete?: () => void;
+  onStatusChange?: (s: BacklogStatus) => Promise<void>;
 }) {
   const isActive = item.status === "in_progress";
-  const [busy, setBusy] = useState(false);
-
-  async function complete() {
-    if (!onComplete) return;
-    setBusy(true);
-    try { await onComplete(); } finally { setBusy(false); }
-  }
 
   const statusStyles: Record<BacklogStatus, string> = {
-    done:        "bg-green-50 text-green-700",
-    rejected:    "bg-gray-100 text-gray-500",
-    in_progress: "bg-amber-50 text-amber-700",
-    inbox:       "",
-    approved:    "",
-    bundled:     "",
-    prompt_ready:"",
+    done:         "bg-green-50 text-green-700",
+    rejected:     "bg-gray-100 text-gray-500",
+    in_progress:  "bg-amber-50 text-amber-700",
+    inbox:        "",
+    approved:     "",
+    bundled:      "",
+    prompt_ready: "",
   };
 
   return (
@@ -501,18 +494,12 @@ function DoneCard({
           <CardMeta item={item} />
           <DocLink path={item.doc_path} />
         </div>
-        {isActive && onComplete && (
-          <button
-            onClick={complete}
-            disabled={busy}
-            className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white text-brand-muted
-                       border border-brand-border hover:text-green-700 hover:border-green-200
-                       transition-colors disabled:opacity-50 flex-shrink-0"
-          >
-            {busy ? "…" : "Done"}
-          </button>
-        )}
       </div>
+      {onStatusChange && (
+        <div className="mt-3 pt-3 border-t border-brand-border">
+          <StatusSelect current={item.status} onChange={onStatusChange} />
+        </div>
+      )}
     </div>
   );
 }
@@ -610,12 +597,8 @@ export default function BacklogPage() {
     setSelected(new Set());
   }
 
-  async function markInProgress(id: number) {
-    await patch({ id, status: "in_progress" });
-  }
-
-  async function markDone(id: number) {
-    await patch({ id, status: "done" });
+  async function changeStatus(id: number, status: BacklogStatus) {
+    await patch({ id, status });
   }
 
   // Unbundle a single item. If only one other item shares the bundle,
@@ -634,13 +617,6 @@ export default function BacklogPage() {
     } else {
       await patch({ id, bundle_id: null });
     }
-  }
-
-  // Send an approved item back to Inbox for re-triage.
-  // Drops the bundle link too — an inbox item shouldn't belong to an
-  // approved bundle. Server-side also nulls approved_at.
-  async function sendToInbox(id: number) {
-    await patch({ id, status: "inbox", bundle_id: null });
   }
 
   // Fire the dashboard → Jordan /chat bridge. Returns null on success, an
@@ -745,7 +721,7 @@ export default function BacklogPage() {
                     item={r}
                     bundleParent={i === 0}
                     onUnbundle={() => unbundle(r.id)}
-                    onBackToInbox={() => sendToInbox(r.id)}
+                    onStatusChange={(s) => changeStatus(r.id, s)}
                     onAskJordan={() => askJordan(r.id)}
                   />
                 ))}
@@ -756,7 +732,7 @@ export default function BacklogPage() {
               key={item.id}
               item={item}
               onUnbundle={() => unbundle(item.id)}
-              onBackToInbox={() => sendToInbox(item.id)}
+              onStatusChange={(s) => changeStatus(item.id, s)}
               onAskJordan={() => askJordan(item.id)}
             />
           ))}
@@ -772,7 +748,7 @@ export default function BacklogPage() {
             <PromptReadyCard
               key={item.id}
               item={item}
-              onStart={() => markInProgress(item.id)}
+              onStatusChange={(s) => changeStatus(item.id, s)}
             />
           ))}
         </Column>
@@ -787,7 +763,7 @@ export default function BacklogPage() {
             <DoneCard
               key={item.id}
               item={item}
-              onComplete={() => markDone(item.id)}
+              onStatusChange={(s) => changeStatus(item.id, s)}
             />
           ))}
         </Column>
@@ -799,7 +775,11 @@ export default function BacklogPage() {
           emptyText="No completed or rejected items."
         >
           {grouped.done.map(item => (
-            <DoneCard key={item.id} item={item} />
+            <DoneCard
+              key={item.id}
+              item={item}
+              onStatusChange={(s) => changeStatus(item.id, s)}
+            />
           ))}
         </Column>
       </div>
