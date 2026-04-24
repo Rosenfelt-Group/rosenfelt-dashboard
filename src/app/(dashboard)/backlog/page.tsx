@@ -5,6 +5,10 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
 
+const AREAS: BacklogItem["affected_area"][] = [
+  "workflow", "dashboard", "content", "infrastructure", "agent",
+];
+
 const AREA_LABELS: Record<BacklogItem["affected_area"], string> = {
   workflow:       "Workflow",
   dashboard:      "Dashboard",
@@ -504,6 +508,150 @@ function DoneCard({
   );
 }
 
+// ─── Add item modal ──────────────────────────────────────────────────────────
+
+function AddItemModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [title, setTitle] = useState("");
+  const [summary, setSummary] = useState("");
+  const [detail, setDetail] = useState("");
+  const [area, setArea] = useState<BacklogItem["affected_area"] | "">("");
+  const [priority, setPriority] = useState<TaskPriority | "">("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!area) { setError("Select an area"); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/backlog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title, summary,
+          problem_detail: detail || undefined,
+          affected_area: area,
+          priority: priority || null,
+          suggested_by: "brian",
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-brand-black">Add backlog item</h2>
+          <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg leading-none">×</button>
+        </div>
+
+        <form onSubmit={submit} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-brand-black mb-1">Title <span className="text-red-500">*</span></label>
+            <input
+              required
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Short description of the idea"
+              className="w-full text-sm px-3 py-2 border border-brand-border rounded-lg
+                         focus:outline-none focus:border-brand-orange"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-brand-black mb-1">Summary <span className="text-red-500">*</span></label>
+            <textarea
+              required
+              rows={2}
+              value={summary}
+              onChange={e => setSummary(e.target.value)}
+              placeholder="1–2 sentences explaining what and why"
+              className="w-full text-sm px-3 py-2 border border-brand-border rounded-lg
+                         focus:outline-none focus:border-brand-orange resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-brand-black mb-1">Problem detail <span className="text-brand-muted font-normal">(optional)</span></label>
+            <textarea
+              rows={2}
+              value={detail}
+              onChange={e => setDetail(e.target.value)}
+              placeholder="Deeper context, steps to reproduce, etc."
+              className="w-full text-sm px-3 py-2 border border-brand-border rounded-lg
+                         focus:outline-none focus:border-brand-orange resize-none"
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-brand-black mb-1">Area <span className="text-red-500">*</span></label>
+              <select
+                required
+                value={area}
+                onChange={e => setArea(e.target.value as BacklogItem["affected_area"])}
+                className="w-full text-sm px-3 py-2 border border-brand-border rounded-lg
+                           focus:outline-none focus:border-brand-orange bg-white"
+              >
+                <option value="" disabled>Select…</option>
+                {AREAS.map(a => <option key={a} value={a}>{AREA_LABELS[a]}</option>)}
+              </select>
+            </div>
+
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-brand-black mb-1">Priority</label>
+              <select
+                value={priority}
+                onChange={e => setPriority(e.target.value as TaskPriority | "")}
+                className="w-full text-sm px-3 py-2 border border-brand-border rounded-lg
+                           focus:outline-none focus:border-brand-orange bg-white"
+              >
+                <option value="">None</option>
+                {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {error && <p className="text-xs text-red-600">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-brand-muted border border-brand-border
+                         rounded-lg hover:text-brand-black transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2 text-sm font-medium bg-brand-orange text-white rounded-lg
+                         hover:bg-brand-orange-dark transition-colors disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Add to Inbox"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Column scaffolding ──────────────────────────────────────────────────────
 
 function Column({
@@ -541,6 +689,7 @@ function Column({
 export default function BacklogPage() {
   const { items, loading, patch, reload } = useBacklog();
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [showAdd, setShowAdd] = useState(false);
 
   const grouped = useMemo(() => {
     const inbox       = items.filter(i => i.status === "inbox");
@@ -658,6 +807,9 @@ export default function BacklogPage() {
 
   return (
     <div className="p-4 md:p-8 pt-16 md:pt-8 pb-24 md:pb-8">
+      {showAdd && (
+        <AddItemModal onClose={() => setShowAdd(false)} onSaved={reload} />
+      )}
       <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-brand-black">Tool Backlog</h1>
@@ -665,6 +817,19 @@ export default function BacklogPage() {
             Agent-logged enhancement ideas. Triage inbox → approve → Jordan writes the prompt.
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAdd(true)}
+            className="px-3 py-1.5 rounded-md text-xs font-medium bg-white text-brand-black
+                       border border-brand-border hover:border-brand-orange hover:text-brand-orange
+                       transition-colors flex items-center gap-1.5"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add item
+          </button>
         {selectedCount >= 2 && (
           <button
             onClick={bundleSelected}
@@ -679,6 +844,7 @@ export default function BacklogPage() {
             Bundle {selectedCount} selected
           </button>
         )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">

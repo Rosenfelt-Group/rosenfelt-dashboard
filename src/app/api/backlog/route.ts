@@ -29,6 +29,51 @@ export async function GET() {
   }
 }
 
+const AREAS = ["workflow", "dashboard", "content", "infrastructure", "agent"] as const;
+const SUGGESTERS = ["brian", "jordan", "riley", "avery"] as const;
+
+type PostBody = {
+  title: string;
+  summary: string;
+  problem_detail?: string;
+  affected_area: (typeof AREAS)[number];
+  priority?: (typeof PRIORITIES)[number] | null;
+  suggested_by?: (typeof SUGGESTERS)[number];
+};
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = (await req.json()) as PostBody;
+
+    if (!body.title?.trim() || !body.summary?.trim()) {
+      return NextResponse.json({ error: "title and summary are required" }, { status: 400 });
+    }
+    if (!AREAS.includes(body.affected_area)) {
+      return NextResponse.json({ error: "Invalid affected_area" }, { status: 400 });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("tool_backlog")
+      .insert({
+        title: body.title.trim(),
+        summary: body.summary.trim(),
+        problem_detail: body.problem_detail?.trim() || null,
+        affected_area: body.affected_area,
+        priority: body.priority ?? null,
+        suggested_by: body.suggested_by ?? "brian",
+        status: "inbox",
+      })
+      .select("*")
+      .single();
+
+    if (error) throw error;
+    return NextResponse.json(data, { status: 201 });
+  } catch (err) {
+    console.error("Backlog POST error:", err);
+    return NextResponse.json({ error: "Failed to create item" }, { status: 500 });
+  }
+}
+
 type PatchBody = {
   id?: number;
   ids?: number[];
