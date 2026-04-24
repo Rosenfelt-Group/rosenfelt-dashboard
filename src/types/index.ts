@@ -124,6 +124,16 @@ export interface BacklogItem {
   doc_path?: string | null;
 }
 
+// RBAC
+export interface DashboardRole {
+  name: string;
+  description: string;
+  permissions: string[];
+  is_system: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // Dashboard summary types
 export interface AgentStatus {
   agent: Agent;

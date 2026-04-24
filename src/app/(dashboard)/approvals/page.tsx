@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { PendingApproval } from "@/types";
-import type { Role } from "@/lib/session";
+import { can } from "@/lib/permissions";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow, parseISO } from "date-fns";
@@ -61,12 +61,12 @@ export default function ApprovalsPage() {
   const [loading,      setLoading]      = useState(true);
   const [agentFilter,  setAgentFilter]  = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [role,         setRole]         = useState<Role>("viewer");
+  const [permissions, setPermissions] = useState<string[]>([]);
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.role) setRole(data.role); })
+      .then(data => { if (data?.permissions) setPermissions(data.permissions); })
       .catch(() => {});
   }, []);
 
@@ -146,7 +146,7 @@ export default function ApprovalsPage() {
           ) : (
             <div className="space-y-3">
               {pending.map(a => (
-                <ApprovalCard key={a.id} approval={a} onAction={handleApproval} isAdmin={role === "admin"} />
+                <ApprovalCard key={a.id} approval={a} onAction={handleApproval} isAdmin={can(permissions, "manage_approvals")} />
               ))}
             </div>
           )}

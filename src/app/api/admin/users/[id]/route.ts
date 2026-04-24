@@ -18,7 +18,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const updates: Record<string, string> = {};
 
   if (body.role) {
-    if (body.role !== "admin" && body.role !== "viewer") {
+    const { data: roleRow } = await supabaseAdmin
+      .from("dashboard_roles")
+      .select("name")
+      .eq("name", body.role)
+      .single();
+    if (!roleRow) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
     updates.role = body.role;

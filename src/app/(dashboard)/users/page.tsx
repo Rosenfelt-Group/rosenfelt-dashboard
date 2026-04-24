@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
 
-type Role = "admin" | "viewer";
+type Role = string;
 
 interface DashboardUser {
   id: string;
@@ -25,6 +25,7 @@ function RoleBadge({ role }: { role: Role }) {
 
 export default function UsersPage() {
   const [users, setUsers] = useState<DashboardUser[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<string[]>(["admin", "viewer"]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -44,9 +45,16 @@ export default function UsersPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   async function load() {
-    const res = await fetch("/api/admin/users");
-    if (!res.ok) { setError("Failed to load users"); setLoading(false); return; }
-    setUsers(await res.json());
+    const [usersRes, rolesRes] = await Promise.all([
+      fetch("/api/admin/users"),
+      fetch("/api/admin/rbac"),
+    ]);
+    if (!usersRes.ok) { setError("Failed to load users"); setLoading(false); return; }
+    setUsers(await usersRes.json());
+    if (rolesRes.ok) {
+      const roles = await rolesRes.json();
+      setAvailableRoles(roles.map((r: { name: string }) => r.name));
+    }
     setLoading(false);
   }
 
@@ -154,11 +162,10 @@ export default function UsersPage() {
             />
             <select
               value={newRole}
-              onChange={e => setNewRole(e.target.value as Role)}
+              onChange={e => setNewRole(e.target.value)}
               className="border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
             >
-              <option value="viewer">viewer</option>
-              <option value="admin">admin</option>
+              {availableRoles.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
           {addError && <p className="text-xs text-red-600">{addError}</p>}
@@ -194,11 +201,10 @@ export default function UsersPage() {
                   <td className="px-4 py-3">
                     <select
                       value={user.role}
-                      onChange={e => handleRoleChange(user.id, e.target.value as Role)}
+                      onChange={e => handleRoleChange(user.id, e.target.value)}
                       className="text-xs border border-brand-border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
                     >
-                      <option value="viewer">viewer</option>
-                      <option value="admin">admin</option>
+                      {availableRoles.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </td>
                   <td className="px-4 py-3 text-brand-muted hidden sm:table-cell">

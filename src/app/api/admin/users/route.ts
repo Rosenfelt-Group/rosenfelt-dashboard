@@ -31,7 +31,12 @@ export async function POST(req: NextRequest) {
   if (!username || !password || !role) {
     return NextResponse.json({ error: "Missing username, password, or role" }, { status: 400 });
   }
-  if (role !== "admin" && role !== "viewer") {
+  const { data: roleRow } = await supabaseAdmin
+    .from("dashboard_roles")
+    .select("name")
+    .eq("name", role)
+    .single();
+  if (!roleRow) {
     return NextResponse.json({ error: "Invalid role" }, { status: 400 });
   }
 

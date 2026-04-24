@@ -10,5 +10,9 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Invalid session" }, { status: 401 });
   }
-  return NextResponse.json({ username: session.username, role: session.role });
+  return NextResponse.json({
+    username: session.username,
+    role: session.role,
+    permissions: session.permissions,
+  });
 }

@@ -3,14 +3,14 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import clsx from "clsx";
-import type { Role } from "@/lib/session";
+import { can } from "@/lib/permissions";
 
 type NavItem = {
   label: string;
   href: string;
   icon: string;
   module: string;
-  adminOnly?: boolean;
+  requiredPermission?: string;
 };
 
 const MODULES: { key: string; label: string }[] = [
@@ -39,10 +39,11 @@ const nav: NavItem[] = [
   { label: "Agents",       href: "/agents",              icon: "cpu",        module: "engineering" },
   { label: "Intelligence", href: "/agents/intelligence", icon: "brain",      module: "engineering" },
   { label: "Tasks",        href: "/tasks",               icon: "check",      module: "engineering" },
-  { label: "Chat",         href: "/chat",                icon: "chat",       module: "engineering", adminOnly: true },
+  { label: "Chat",         href: "/chat",                icon: "chat",       module: "engineering", requiredPermission: "use_chat" },
 
   // Security
-  { label: "Users",        href: "/users",               icon: "shield",     module: "security", adminOnly: true },
+  { label: "Users",        href: "/users",               icon: "shield",     module: "security", requiredPermission: "manage_users" },
+  { label: "Roles",        href: "/rbac",                icon: "lock",       module: "security", requiredPermission: "manage_rbac" },
 
   // Settings
   { label: "Cost",         href: "/cost",                icon: "dollar",     module: "settings" },
@@ -64,6 +65,7 @@ function Icon({ name }: { name: string }) {
     archive:  <><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></>,
     shield:   <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>,
     wrench:   <><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.4-2.4z"/></>,
+    lock:     <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
   };
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -76,16 +78,18 @@ function Icon({ name }: { name: string }) {
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [role, setRole] = useState<Role>("viewer");
+  const [permissions, setPermissions] = useState<string[]>([]);
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.role) setRole(data.role); })
+      .then(data => { if (data?.permissions) setPermissions(data.permissions); })
       .catch(() => {});
   }, []);
 
-  const visibleNav = nav.filter(item => role === "admin" || !item.adminOnly);
+  const visibleNav = nav.filter(
+    item => !item.requiredPermission || can(permissions, item.requiredPermission),
+  );
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -187,7 +191,7 @@ export function Sidebar() {
         </button>
       </header>
 
-      {/* ── Mobile bottom tab bar (flat, every page) ── */}
+      {/* ── Mobile bottom tab bar ── */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-brand-border
                       flex items-center z-20 pb-safe overflow-x-auto">
         {visibleNav.map((item) => {

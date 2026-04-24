@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { pbkdf2Sync } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createSessionToken, COOKIE_NAME, Role } from "@/lib/session";
+import { DEFAULT_PERMISSIONS } from "@/lib/permissions";
 
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60;
 
@@ -28,7 +29,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
-  const token = await createSessionToken(username.toLowerCase().trim(), user.role as Role);
+  const role = user.role as Role;
+
+  // Fetch permissions for this role from dashboard_roles.
+  // Fall back to defaults if the role row doesn't exist yet.
+  let permissions: string[] = DEFAULT_PERMISSIONS[role] ?? [];
+  const { data: roleRow } = await supabaseAdmin
+    .from("dashboard_roles")
+    .select("permissions")
+    .eq("name", role)
+    .single();
+  if (roleRow?.permissions) {
+    permissions = roleRow.permissions as string[];
+  }
+
+  const token = await createSessionToken(username.toLowerCase().trim(), role, permissions);
   const res = NextResponse.json({ ok: true });
   res.cookies.set(COOKIE_NAME, token, {
     httpOnly: true,
