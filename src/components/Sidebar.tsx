@@ -50,6 +50,20 @@ const nav: NavItem[] = [
   { label: "Backup",       href: "/backup",              icon: "archive",    module: "settings" },
 ];
 
+function RosablyIcon({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 56 62" fill="none">
+      <path d="M28 2C42 2 52 13 52 27C52 44 42 58 28 61C14 58 4 44 4 27C4 13 14 2 28 2Z" fill="#C16A34"/>
+      <path d="M10 25C12 13 19 7 28 7C37 7 45 13 46 25" stroke="#F5EFE7" strokeWidth="2.2" fill="none" strokeLinecap="round" opacity="0.72"/>
+      <path d="M15 31C16 21 22 16 28 16C35 16 41 21 41 30" stroke="#F5EFE7" strokeWidth="2.2" fill="none" strokeLinecap="round" opacity="0.85"/>
+      <path d="M21 34C21 27 24 23 28 23C32 23 36 27 35 33" stroke="#F5EFE7" strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.93"/>
+      <path d="M25 37C27 34 31 34 33 37" stroke="#F5EFE7" strokeWidth="1.8" fill="none" strokeLinecap="round" opacity="0.9"/>
+      <path d="M22 51C20 55 18 59 20 62" stroke="#F5EFE7" strokeWidth="1.4" fill="none" strokeLinecap="round" opacity="0.65"/>
+      <path d="M34 51C36 55 38 59 36 62" stroke="#F5EFE7" strokeWidth="1.4" fill="none" strokeLinecap="round" opacity="0.65"/>
+    </svg>
+  );
+}
+
 function Icon({ name }: { name: string }) {
   const icons: Record<string, React.ReactElement> = {
     grid:     <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
@@ -108,15 +122,11 @@ export function Sidebar() {
         {/* Brand */}
         <div className="px-5 py-5 border-b border-brand-border">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 bg-brand-orange rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                   stroke="white" strokeWidth="2" strokeLinecap="round">
-                <circle cx="12" cy="12" r="9"/>
-                <path d="M12 7v5l3 1.5"/>
-              </svg>
+            <div className="flex-shrink-0">
+              <RosablyIcon size={28} />
             </div>
             <div>
-              <p className="text-xs font-semibold text-brand-black leading-tight">Rosenfelt Group</p>
+              <p className="text-sm font-semibold text-brand-black leading-tight">Rosably</p>
               <p className="text-xs text-brand-muted leading-tight">Control Center</p>
             </div>
           </div>
@@ -171,14 +181,10 @@ export function Sidebar() {
       <header className="md:hidden fixed top-0 inset-x-0 h-12 bg-white border-b border-brand-border
                          flex items-center justify-between px-4 z-20">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-brand-orange rounded-md flex items-center justify-center flex-shrink-0">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                 stroke="white" strokeWidth="2" strokeLinecap="round">
-              <circle cx="12" cy="12" r="9"/>
-              <path d="M12 7v5l3 1.5"/>
-            </svg>
+          <div className="flex-shrink-0">
+            <RosablyIcon size={24} />
           </div>
-          <p className="text-sm font-semibold text-brand-black">Rosenfelt Group</p>
+          <p className="text-sm font-semibold text-brand-black">Rosably</p>
         </div>
         <button
           onClick={handleLogout}

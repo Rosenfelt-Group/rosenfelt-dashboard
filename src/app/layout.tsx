@@ -3,13 +3,13 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Rosenfelt Group — Control Center",
+  title: "Rosably — Control Center",
   description: "Agent operations dashboard",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Rosenfelt",
+    title: "Rosably",
   },
 };
 

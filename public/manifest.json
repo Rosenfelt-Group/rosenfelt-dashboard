@@ -1,6 +1,6 @@
 {
-  "name": "Rosenfelt Group — Control Center",
-  "short_name": "Rosenfelt",
+  "name": "Rosably — Control Center",
+  "short_name": "Rosably",
   "description": "Agent operations dashboard",
   "start_url": "/",
   "display": "standalone",
