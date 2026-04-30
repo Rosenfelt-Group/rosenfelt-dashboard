@@ -279,13 +279,16 @@ function ApprovedCard({
   onUnbundle,
   onStatusChange,
   onAskJordan,
+  onEdit,
 }: {
   item: BacklogItem;
   bundleParent?: boolean;
   onUnbundle: () => void;
   onStatusChange: (s: BacklogStatus) => Promise<void>;
   onAskJordan: () => Promise<string | null>;
+  onEdit: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const [unbundleBusy, setUnbundleBusy] = useState(false);
   const [jordanBusy, setJordanBusy] = useState(false);
   const [jordanError, setJordanError] = useState<string | null>(null);
@@ -316,27 +319,37 @@ function ApprovedCard({
       <div className="flex items-start gap-2">
         <AgentBadge agent={item.suggested_by} size="sm" />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-brand-black leading-snug">{item.title}</p>
-          <p className="text-xs text-brand-muted mt-0.5 line-clamp-2">{item.summary}</p>
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-            <AreaBadge area={item.affected_area} />
-            <PriorityBadge priority={item.priority} />
-            {item.bundle_id && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px]
-                               font-medium bg-brand-orange/10 text-brand-orange">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                </svg>
-                bundle #{item.bundle_id}
-              </span>
-            )}
-          </div>
-          <CardMeta item={item} />
+          <button className="w-full text-left" onClick={() => setExpanded(e => !e)}>
+            <p className="text-sm font-medium text-brand-black leading-snug">{item.title}</p>
+            <p className="text-xs text-brand-muted mt-0.5 line-clamp-2">{item.summary}</p>
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              <AreaBadge area={item.affected_area} />
+              <PriorityBadge priority={item.priority} />
+              {item.bundle_id && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px]
+                                 font-medium bg-brand-orange/10 text-brand-orange">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                  </svg>
+                  bundle #{item.bundle_id}
+                </span>
+              )}
+            </div>
+            <CardMeta item={item} />
+          </button>
           <DocLink path={item.doc_path} />
         </div>
       </div>
+
+      {expanded && item.problem_detail && (
+        <div className="mt-3 pt-3 border-t border-brand-border">
+          <p className="text-[11px] uppercase tracking-wide text-brand-muted mb-1">Problem detail</p>
+          <p className="text-xs text-brand-black whitespace-pre-wrap">{item.problem_detail}</p>
+        </div>
+      )}
+
       <p className="mt-2 text-[11px] text-brand-muted italic">
         {jordanPending || jordanBusy
           ? "Jordan is writing the prompt… (this usually takes 30–60 s)"
@@ -366,6 +379,20 @@ function ApprovedCard({
             {unbundleBusy ? "…" : "Unbundle"}
           </button>
         )}
+        <button
+          onClick={onEdit}
+          disabled={anyBusy}
+          className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white text-brand-muted
+                     border border-brand-border hover:text-brand-black transition-colors
+                     disabled:opacity-50 inline-flex items-center gap-1"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          Edit
+        </button>
         <StatusSelect current={item.status} onChange={onStatusChange} />
         <div className="flex-1" />
         <button
@@ -392,9 +419,11 @@ function ApprovedCard({
 function PromptReadyCard({
   item,
   onStatusChange,
+  onEdit,
 }: {
   item: BacklogItem;
   onStatusChange: (s: BacklogStatus) => Promise<void>;
+  onEdit: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -411,26 +440,35 @@ function PromptReadyCard({
       <div className="flex items-start gap-2">
         <AgentBadge agent={item.suggested_by} size="sm" />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-brand-black leading-snug">{item.title}</p>
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-            <AreaBadge area={item.affected_area} />
-            <PriorityBadge priority={item.priority} />
-            {item.bundle_id && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px]
-                               font-medium bg-brand-orange/10 text-brand-orange">
-                bundle #{item.bundle_id}
-              </span>
-            )}
-          </div>
-          <p className="text-[11px] text-brand-muted mt-1.5">
-            <span className="font-mono text-brand-muted/70">#{item.id}</span>
-            {item.prompt_ready_at && (
-              <> · ready {formatDistanceToNow(parseISO(item.prompt_ready_at), { addSuffix: true })}</>
-            )}
-          </p>
+          <button className="w-full text-left" onClick={() => setExpanded(e => !e)}>
+            <p className="text-sm font-medium text-brand-black leading-snug">{item.title}</p>
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              <AreaBadge area={item.affected_area} />
+              <PriorityBadge priority={item.priority} />
+              {item.bundle_id && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px]
+                                 font-medium bg-brand-orange/10 text-brand-orange">
+                  bundle #{item.bundle_id}
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-brand-muted mt-1.5">
+              <span className="font-mono text-brand-muted/70">#{item.id}</span>
+              {item.prompt_ready_at && (
+                <> · ready {formatDistanceToNow(parseISO(item.prompt_ready_at), { addSuffix: true })}</>
+              )}
+            </p>
+          </button>
           <DocLink path={item.doc_path} />
         </div>
       </div>
+
+      {expanded && item.problem_detail && (
+        <div className="mt-3 pt-3 border-t border-brand-border">
+          <p className="text-[11px] uppercase tracking-wide text-brand-muted mb-1">Problem detail</p>
+          <p className="text-xs text-brand-black whitespace-pre-wrap">{item.problem_detail}</p>
+        </div>
+      )}
 
       {item.arch_notes && (
         <div className="mt-3">
@@ -456,6 +494,19 @@ function PromptReadyCard({
       )}
 
       <div className="mt-3 pt-3 border-t border-brand-border flex items-center gap-2 flex-wrap">
+        <button
+          onClick={onEdit}
+          className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white text-brand-muted
+                     border border-brand-border hover:text-brand-black transition-colors
+                     inline-flex items-center gap-1"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          Edit
+        </button>
         <StatusSelect current={item.status} onChange={onStatusChange} />
         <div className="flex-1" />
         <button
@@ -478,10 +529,13 @@ function PromptReadyCard({
 function DoneCard({
   item,
   onStatusChange,
+  onEdit,
 }: {
   item: BacklogItem;
   onStatusChange?: (s: BacklogStatus) => Promise<void>;
+  onEdit?: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const isActive = item.status === "in_progress";
 
   const statusStyles: Record<BacklogStatus, string> = {
@@ -499,25 +553,50 @@ function DoneCard({
       <div className="flex items-start gap-2">
         <AgentBadge agent={item.suggested_by} size="sm" />
         <div className="flex-1 min-w-0">
-          <p className={clsx("text-sm leading-snug", isActive ? "font-medium text-brand-black" : "text-brand-black")}>
-            {item.title}
-          </p>
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-            <span className={clsx(
-              "text-[10px] px-2 py-0.5 rounded font-medium capitalize",
-              statusStyles[item.status]
-            )}>
-              {item.status.replace("_", " ")}
-            </span>
-            <AreaBadge area={item.affected_area} />
-          </div>
-          <CardMeta item={item} />
+          <button className="w-full text-left" onClick={() => setExpanded(e => !e)}>
+            <p className={clsx("text-sm leading-snug", isActive ? "font-medium text-brand-black" : "text-brand-black")}>
+              {item.title}
+            </p>
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              <span className={clsx(
+                "text-[10px] px-2 py-0.5 rounded font-medium capitalize",
+                statusStyles[item.status]
+              )}>
+                {item.status.replace("_", " ")}
+              </span>
+              <AreaBadge area={item.affected_area} />
+            </div>
+            <CardMeta item={item} />
+          </button>
           <DocLink path={item.doc_path} />
         </div>
       </div>
-      {onStatusChange && (
+
+      {expanded && item.problem_detail && (
         <div className="mt-3 pt-3 border-t border-brand-border">
-          <StatusSelect current={item.status} onChange={onStatusChange} />
+          <p className="text-[11px] uppercase tracking-wide text-brand-muted mb-1">Problem detail</p>
+          <p className="text-xs text-brand-black whitespace-pre-wrap">{item.problem_detail}</p>
+        </div>
+      )}
+
+      {(onStatusChange || onEdit) && (
+        <div className="mt-3 pt-3 border-t border-brand-border flex items-center gap-2 flex-wrap">
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white text-brand-muted
+                         border border-brand-border hover:text-brand-black transition-colors
+                         inline-flex items-center gap-1"
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+              Edit
+            </button>
+          )}
+          {onStatusChange && <StatusSelect current={item.status} onChange={onStatusChange} />}
         </div>
       )}
     </div>
@@ -931,6 +1010,7 @@ export default function BacklogPage() {
                     onUnbundle={() => unbundle(r.id)}
                     onStatusChange={(s) => changeStatus(r.id, s)}
                     onAskJordan={() => askJordan(r.id)}
+                    onEdit={() => setEditItem(r)}
                   />
                 ))}
               </div>
@@ -942,6 +1022,7 @@ export default function BacklogPage() {
               onUnbundle={() => unbundle(item.id)}
               onStatusChange={(s) => changeStatus(item.id, s)}
               onAskJordan={() => askJordan(item.id)}
+              onEdit={() => setEditItem(item)}
             />
           ))}
         </Column>
@@ -957,6 +1038,7 @@ export default function BacklogPage() {
               key={item.id}
               item={item}
               onStatusChange={(s) => changeStatus(item.id, s)}
+              onEdit={() => setEditItem(item)}
             />
           ))}
         </Column>
@@ -972,6 +1054,7 @@ export default function BacklogPage() {
               key={item.id}
               item={item}
               onStatusChange={(s) => changeStatus(item.id, s)}
+              onEdit={() => setEditItem(item)}
             />
           ))}
         </Column>
@@ -987,6 +1070,7 @@ export default function BacklogPage() {
               key={item.id}
               item={item}
               onStatusChange={(s) => changeStatus(item.id, s)}
+              onEdit={() => setEditItem(item)}
             />
           ))}
         </Column>
