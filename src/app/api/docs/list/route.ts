@@ -1,20 +1,15 @@
 import { NextResponse } from "next/server";
-
-const JORDAN_API_URL = process.env.JORDAN_API_URL ?? "";
-const JORDAN_WEBHOOK_SECRET = process.env.JORDAN_WEBHOOK_SECRET ?? "";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export async function GET() {
-  if (!JORDAN_API_URL) {
-    return NextResponse.json({ error: "JORDAN_API_URL not configured" }, { status: 503 });
+  const { data, error } = await supabaseAdmin
+    .from("doc_registry")
+    .select("id, name, path, description, category, updated_at, headings, last_indexed_at, chunk_count")
+    .order("category", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  try {
-    const res = await fetch(`${JORDAN_API_URL}/docs/list`, {
-      headers: { "X-Webhook-Secret": JORDAN_WEBHOOK_SECRET },
-      cache: "no-store",
-    });
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
-  } catch {
-    return NextResponse.json({ error: "Failed to reach Jordan" }, { status: 502 });
-  }
+  return NextResponse.json(data);
 }
