@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { CRMLead, CRMStage, CRMSource } from "@/types";
+import { CRMLead, CRMStage } from "@/types";
 import { differenceInDays } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
 import { CRMNav } from "@/components/CRMNav";
+import { CreateLeadModal } from "@/components/crm/CreateLeadModal";
 
 const STAGES: { stage: CRMStage; label: string; color: string }[] = [
   { stage: "new",           label: "New",           color: "bg-blue-50 text-blue-700" },
@@ -22,18 +23,11 @@ const SOURCE_LABELS: Record<string, string> = {
   referral: "Referral",
 };
 
-const BLANK_FORM = {
-  businessName: "", firstName: "", lastName: "",
-  email: "", source: "manual" as CRMSource, estimatedValue: "",
-};
-
 export default function CRMPage() {
   const [leads, setLeads] = useState<CRMLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
-  const [form, setForm] = useState(BLANK_FORM);
 
   useEffect(() => {
     fetch("/api/crm/leads")
@@ -48,45 +42,6 @@ export default function CRMPage() {
       body: JSON.stringify({ stage }),
     });
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, stage } : l));
-  }
-
-  async function createLead() {
-    if (!form.businessName || !form.firstName) return;
-    setSaving(true);
-    const bizRes = await fetch("/api/crm/businesses", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: form.businessName, source: form.source }),
-    });
-    const biz = await bizRes.json();
-    const conRes = await fetch("/api/crm/contacts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        business_id: biz.id,
-        first_name: form.firstName,
-        last_name: form.lastName || undefined,
-        email: form.email || undefined,
-        is_primary: true,
-      }),
-    });
-    const con = await conRes.json();
-    const leadRes = await fetch("/api/crm/leads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        business_id: biz.id,
-        contact_id: con.id,
-        stage: "new",
-        source: form.source,
-        estimated_value: form.estimatedValue ? parseFloat(form.estimatedValue) : undefined,
-      }),
-    });
-    const lead = await leadRes.json();
-    setLeads(prev => [lead, ...prev]);
-    setShowCreate(false);
-    setForm(BLANK_FORM);
-    setSaving(false);
   }
 
   const byStage = (s: CRMStage) => leads.filter(l => l.stage === s);
@@ -171,90 +126,13 @@ export default function CRMPage() {
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-semibold text-brand-black">New lead</h2>
-              <button onClick={() => setShowCreate(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Business name *</label>
-                <input
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={form.businessName}
-                  onChange={e => setForm(p => ({ ...p, businessName: e.target.value }))}
-                  placeholder="Acme Corp"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-brand-muted mb-1 block">First name *</label>
-                  <input
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                    value={form.firstName}
-                    onChange={e => setForm(p => ({ ...p, firstName: e.target.value }))}
-                    placeholder="Jane"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-brand-muted mb-1 block">Last name</label>
-                  <input
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                    value={form.lastName}
-                    onChange={e => setForm(p => ({ ...p, lastName: e.target.value }))}
-                    placeholder="Smith"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Email</label>
-                <input
-                  type="email"
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={form.email}
-                  onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                  placeholder="jane@acme.com"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-brand-muted mb-1 block">Source</label>
-                  <select
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                    value={form.source}
-                    onChange={e => setForm(p => ({ ...p, source: e.target.value as CRMSource }))}
-                  >
-                    <option value="manual">Manual</option>
-                    <option value="referral">Referral</option>
-                    <option value="website_contact">Contact form</option>
-                    <option value="website_assessment">Assessment</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-brand-muted mb-1 block">Est. value ($/mo)</label>
-                  <input
-                    type="number"
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                    value={form.estimatedValue}
-                    onChange={e => setForm(p => ({ ...p, estimatedValue: e.target.value }))}
-                    placeholder="2500"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowCreate(false)} className="btn-ghost flex-1">Cancel</button>
-              <button
-                onClick={createLead}
-                disabled={saving || !form.businessName || !form.firstName}
-                className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? "Creating…" : "Create lead"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <CreateLeadModal
+          onClose={() => setShowCreate(false)}
+          onCreate={lead => {
+            setLeads(prev => [lead, ...prev]);
+            setShowCreate(false);
+          }}
+        />
       )}
     </div>
   );

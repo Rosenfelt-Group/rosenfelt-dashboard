@@ -7,6 +7,7 @@ import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
 import { AgentBadge } from "@/components/AgentBadge";
 import { Agent } from "@/types";
+import { CreateLeadModal } from "@/components/crm/CreateLeadModal";
 
 const STAGES: { stage: CRMStage; label: string; color: string }[] = [
   { stage: "new",           label: "New",           color: "bg-blue-50 text-blue-700" },
@@ -36,6 +37,7 @@ export default function LeadsPage() {
   const [selected, setSelected] = useState<CRMLead | null>(null);
   const [edit, setEdit] = useState(BLANK_EDIT);
   const [saving, setSaving] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
     fetch("/api/crm/leads")
@@ -94,7 +96,12 @@ export default function LeadsPage() {
       <CRMNav />
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-semibold text-brand-black">Leads</h1>
-        <span className="text-sm text-brand-muted">{filtered.length} of {leads.length}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-brand-muted">{filtered.length} of {leads.length}</span>
+          <button onClick={() => setShowCreate(true)} className="btn-primary text-xs px-3 py-1.5">
+            + New lead
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
@@ -258,6 +265,16 @@ export default function LeadsPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {showCreate && (
+        <CreateLeadModal
+          onClose={() => setShowCreate(false)}
+          onCreate={lead => {
+            setLeads(prev => [lead, ...prev]);
+            setShowCreate(false);
+          }}
+        />
       )}
     </div>
   );
