@@ -134,6 +134,102 @@ export interface DashboardRole {
   updated_at: string;
 }
 
+// ─── CRM Types ────────────────────────────────────────────────────────────────
+
+export type CRMStage = "new" | "qualification" | "engaged" | "proposal" | "won" | "lost";
+export type CRMSource = "website_contact" | "website_assessment" | "manual" | "referral";
+export type CRMActivityType = "note" | "email_sent" | "email_received" | "stage_change" | "assessment" | "system";
+export type CRMBillingStatus = "active" | "paused" | "cancelled";
+export type CRMServiceTier = "newsroom" | "operations" | "finance_ops" | "growth_stack" | "full_stack";
+export type CRMAssessmentTier = "foundation_first" | "getting_there" | "ready_light_prep" | "ready_to_move";
+
+export interface CRMBusiness {
+  id: string;
+  name: string;
+  industry?: string;
+  size?: "1-10" | "11-50" | "51-200" | "200+";
+  website?: string;
+  source?: CRMSource;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CRMContact {
+  id: string;
+  business_id?: string;
+  first_name: string;
+  last_name?: string;
+  email?: string;
+  phone?: string;
+  title?: string;
+  is_primary: boolean;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  business?: CRMBusiness;
+}
+
+export interface CRMLead {
+  id: string;
+  business_id: string;
+  contact_id?: string;
+  stage: CRMStage;
+  source?: CRMSource;
+  assigned_agent?: Agent;
+  estimated_value?: number;
+  close_date?: string;
+  lost_reason?: string;
+  converted_at?: string;
+  created_at: string;
+  updated_at: string;
+  business?: CRMBusiness;
+  contact?: CRMContact;
+}
+
+export interface CRMActivity {
+  id: string;
+  lead_id: string;
+  activity_type: CRMActivityType;
+  content?: string;
+  logged_by?: string;
+  email_subject?: string;
+  email_direction?: "sent" | "received";
+  metadata?: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface CRMClient {
+  id: string;
+  lead_id?: string;
+  business_id: string;
+  contact_id?: string;
+  service_tier?: CRMServiceTier;
+  contract_start?: string;
+  contract_end?: string;
+  billing_status: CRMBillingStatus;
+  monthly_value?: number;
+  assigned_agents?: string[];
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  business?: CRMBusiness;
+  contact?: CRMContact;
+}
+
+export interface CRMAssessmentResult {
+  id: string;
+  lead_id?: string;
+  contact_id?: string;
+  score: number;
+  tier: CRMAssessmentTier;
+  section_breakdown?: Record<string, number>;
+  submitted_at?: string;
+  created_at: string;
+}
+
+// ─── Dashboard summary types ───────────────────────────────────────────────────
+
 // Dashboard summary types
 export interface AgentStatus {
   agent: Agent;
