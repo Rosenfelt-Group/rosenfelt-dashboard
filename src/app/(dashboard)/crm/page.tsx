@@ -4,6 +4,7 @@ import { CRMLead, CRMStage, CRMSource } from "@/types";
 import { differenceInDays } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
+import { CRMNav } from "@/components/CRMNav";
 
 const STAGES: { stage: CRMStage; label: string; color: string }[] = [
   { stage: "new",           label: "New",           color: "bg-blue-50 text-blue-700" },
@@ -97,6 +98,7 @@ export default function CRMPage() {
 
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8">
+      <CRMNav />
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-brand-black">Pipeline</h1>
@@ -104,14 +106,9 @@ export default function CRMPage() {
             {activeCount} active · {byStage("won").length} won
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          <Link href="/crm/contacts" className="btn-ghost text-xs px-3 py-1.5">Contacts</Link>
-          <Link href="/crm/businesses" className="btn-ghost text-xs px-3 py-1.5">Businesses</Link>
-          <Link href="/crm/clients" className="btn-ghost text-xs px-3 py-1.5">Clients</Link>
-          <button onClick={() => setShowCreate(true)} className="btn-primary text-xs px-3 py-1.5">
-            + New lead
-          </button>
-        </div>
+        <button onClick={() => setShowCreate(true)} className="btn-primary text-xs px-3 py-1.5">
+          + New lead
+        </button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">

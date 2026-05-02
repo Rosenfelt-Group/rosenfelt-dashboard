@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { CRMContact } from "@/types";
 import Link from "next/link";
+import { CRMNav } from "@/components/CRMNav";
 
 export default function ContactsPage() {
   const [contacts, setContacts] = useState<CRMContact[]>([]);
@@ -23,9 +24,7 @@ export default function ContactsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
-      <div className="flex items-center gap-3 mb-2">
-        <Link href="/crm" className="text-xs text-brand-muted hover:text-brand-black">← Pipeline</Link>
-      </div>
+      <CRMNav />
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-brand-black">Contacts</h1>

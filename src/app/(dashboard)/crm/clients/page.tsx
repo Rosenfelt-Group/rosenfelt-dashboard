@@ -5,6 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { AgentBadge } from "@/components/AgentBadge";
 import { Agent } from "@/types";
+import { CRMNav } from "@/components/CRMNav";
 
 const TIER_LABELS: Record<string, string> = {
   newsroom: "Newsroom",
@@ -32,9 +33,7 @@ export default function ClientsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
-      <div className="mb-2">
-        <Link href="/crm" className="text-xs text-brand-muted hover:text-brand-black">← Pipeline</Link>
-      </div>
+      <CRMNav />
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-brand-black">Clients</h1>
         <p className="text-sm text-brand-muted mt-0.5">{clients.length} active retainers</p>

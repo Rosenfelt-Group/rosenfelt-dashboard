@@ -6,6 +6,8 @@ import { formatDistanceToNow, format } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
 import { AgentBadge } from "@/components/AgentBadge";
+import { CRMNav } from "@/components/CRMNav";
+import { Agent } from "@/types";
 
 const STAGES: { stage: CRMStage; label: string; color: string }[] = [
   { stage: "new",           label: "New",           color: "bg-blue-50 text-blue-700" },
@@ -49,6 +51,41 @@ export default function LeadDetailPage() {
   const [activities, setActivities] = useState<CRMActivity[]>([]);
   const [assessment, setAssessment] = useState<CRMAssessmentResult | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Edit form state
+  const [showEdit, setShowEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    estimated_value: "", close_date: "", lost_reason: "", assigned_agent: "" as Agent | "",
+  });
+
+  function openEditForm(l: CRMLead) {
+    setEditForm({
+      estimated_value: l.estimated_value?.toString() ?? "",
+      close_date: l.close_date ?? "",
+      lost_reason: l.lost_reason ?? "",
+      assigned_agent: (l.assigned_agent ?? "") as Agent | "",
+    });
+    setShowEdit(true);
+  }
+
+  async function saveEditForm() {
+    if (!lead) return;
+    setSaving(true);
+    const res = await fetch(`/api/crm/leads/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        estimated_value: editForm.estimated_value ? parseFloat(editForm.estimated_value) : null,
+        close_date: editForm.close_date || null,
+        lost_reason: editForm.lost_reason || null,
+        assigned_agent: editForm.assigned_agent || null,
+      }),
+    });
+    const updated = await res.json();
+    setLead(updated);
+    setShowEdit(false);
+    setSaving(false);
+  }
 
   // Modal state
   const [showNote, setShowNote] = useState(false);
@@ -156,10 +193,7 @@ export default function LeadDetailPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
-      {/* Back */}
-      <Link href="/crm" className="text-xs text-brand-muted hover:text-brand-black mb-4 block">
-        ← Pipeline
-      </Link>
+      <CRMNav />
 
       {/* Header */}
       <div className="card mb-4">
@@ -181,6 +215,12 @@ export default function LeadDetailPage() {
             {lead.assigned_agent && (
               <AgentBadge agent={lead.assigned_agent} size="sm" />
             )}
+            <button
+              onClick={() => openEditForm(lead)}
+              className="btn-ghost text-xs px-2 py-1"
+            >
+              Edit
+            </button>
           </div>
         </div>
         {(lead.estimated_value || lead.close_date) && (
@@ -466,6 +506,69 @@ export default function LeadDetailPage() {
               <button onClick={() => setShowConvert(false)} className="btn-ghost flex-1">Cancel</button>
               <button onClick={convertToClient} disabled={saving} className="btn-primary flex-1 disabled:opacity-50">
                 {saving ? "Converting…" : "Convert"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit lead modal */}
+      {showEdit && (
+        <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-brand-black">Edit lead</h2>
+              <button onClick={() => setShowEdit(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-brand-muted mb-1 block">Assigned agent</label>
+                <select
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                  value={editForm.assigned_agent}
+                  onChange={e => setEditForm(p => ({ ...p, assigned_agent: e.target.value as Agent | "" }))}
+                >
+                  <option value="">— unassigned —</option>
+                  {(["jordan", "riley", "avery", "brian"] as Agent[]).map(a => (
+                    <option key={a} value={a} className="capitalize">{a}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-brand-muted mb-1 block">Est. value ($/mo)</label>
+                <input
+                  type="number"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                  value={editForm.estimated_value}
+                  onChange={e => setEditForm(p => ({ ...p, estimated_value: e.target.value }))}
+                  placeholder="2500"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-brand-muted mb-1 block">Target close date</label>
+                <input
+                  type="date"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                  value={editForm.close_date}
+                  onChange={e => setEditForm(p => ({ ...p, close_date: e.target.value }))}
+                />
+              </div>
+              {lead?.stage === "lost" && (
+                <div>
+                  <label className="text-xs text-brand-muted mb-1 block">Lost reason</label>
+                  <textarea
+                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange h-20 resize-none"
+                    value={editForm.lost_reason}
+                    onChange={e => setEditForm(p => ({ ...p, lost_reason: e.target.value }))}
+                    placeholder="Why was this lead lost?"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowEdit(false)} className="btn-ghost flex-1">Cancel</button>
+              <button onClick={saveEditForm} disabled={saving} className="btn-primary flex-1 disabled:opacity-50">
+                {saving ? "Saving…" : "Save"}
               </button>
             </div>
           </div>
