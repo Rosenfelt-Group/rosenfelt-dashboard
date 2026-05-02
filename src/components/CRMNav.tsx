@@ -14,7 +14,7 @@ const TABS = [
 export function CRMNav() {
   const pathname = usePathname();
   return (
-    <div className="flex items-center gap-0 border-b border-brand-border mb-6 overflow-x-auto">
+    <div className="flex items-center gap-0 border-b border-brand-border mb-6">
       {TABS.map(tab => {
         const active = tab.href === "/crm"
           ? pathname === "/crm"
