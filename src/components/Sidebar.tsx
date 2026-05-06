@@ -51,16 +51,14 @@ const nav: NavItem[] = [
 ];
 
 function RosablyIcon({ size }: { size: number }) {
+  // The rose mark occupies the leftmost ~229px of the 1280×229 full logo PNG.
+  // Scale by height and clip width to isolate just the icon.
+  const scaledWidth = Math.round(1280 * (size / 229));
   return (
-    <svg width={size} height={size} viewBox="0 0 56 62" fill="none">
-      <path d="M28 2C42 2 52 13 52 27C52 44 42 58 28 61C14 58 4 44 4 27C4 13 14 2 28 2Z" fill="#C16A34"/>
-      <path d="M10 25C12 13 19 7 28 7C37 7 45 13 46 25" stroke="#F5EFE7" strokeWidth="2.2" fill="none" strokeLinecap="round" opacity="0.72"/>
-      <path d="M15 31C16 21 22 16 28 16C35 16 41 21 41 30" stroke="#F5EFE7" strokeWidth="2.2" fill="none" strokeLinecap="round" opacity="0.85"/>
-      <path d="M21 34C21 27 24 23 28 23C32 23 36 27 35 33" stroke="#F5EFE7" strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.93"/>
-      <path d="M25 37C27 34 31 34 33 37" stroke="#F5EFE7" strokeWidth="1.8" fill="none" strokeLinecap="round" opacity="0.9"/>
-      <path d="M22 51C20 55 18 59 20 62" stroke="#F5EFE7" strokeWidth="1.4" fill="none" strokeLinecap="round" opacity="0.65"/>
-      <path d="M34 51C36 55 38 59 36 62" stroke="#F5EFE7" strokeWidth="1.4" fill="none" strokeLinecap="round" opacity="0.65"/>
-    </svg>
+    <div style={{ width: size, height: size, overflow: "hidden", flexShrink: 0 }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/rosably-logo.png" alt="" width={scaledWidth} height={size} style={{ display: "block" }} />
+    </div>
   );
 }
 
