@@ -6,6 +6,54 @@ import { formatDistanceToNow } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
 
+function ReindexButton() {
+  const [state, setState] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [output, setOutput] = useState<string>("");
+
+  async function run() {
+    setState("running");
+    setOutput("");
+    try {
+      const res = await fetch("/api/tools/reindex-docs", { method: "POST" });
+      const data = await res.json();
+      setOutput(data.output ?? data.error ?? "No output");
+      setState(data.ok === false || !res.ok ? "error" : "done");
+    } catch (e) {
+      setOutput(String(e));
+      setState("error");
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-sm font-medium text-brand-black">Reindex Docs</p>
+          <p className="text-xs text-brand-muted">Sync doc_chunks with current markdown files</p>
+        </div>
+        <button
+          onClick={run}
+          disabled={state === "running"}
+          className={clsx(
+            "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+            state === "running" ? "bg-brand-offwhite text-brand-muted cursor-not-allowed" :
+            state === "done"    ? "bg-green-100 text-green-700 hover:bg-green-200" :
+            state === "error"   ? "bg-red-100 text-red-700 hover:bg-red-200" :
+            "bg-brand-orange text-white hover:opacity-90"
+          )}
+        >
+          {state === "running" ? "Indexing…" : state === "done" ? "Done ✓" : state === "error" ? "Failed ✗" : "Run"}
+        </button>
+      </div>
+      {output && (
+        <pre className="mt-2 text-xs bg-brand-offwhite rounded-lg p-3 overflow-auto max-h-48 whitespace-pre-wrap text-brand-muted">
+          {output}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 export default function AgentsPage() {
   const [status, setStatus] = useState<AgentStatus[]>([]);
   const [logs, setLogs] = useState<WorkflowLog[]>([]);
@@ -68,6 +116,14 @@ export default function AgentsPage() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* System Tools */}
+      <div className="mb-8">
+        <h2 className="text-sm font-medium text-brand-black mb-3">System Tools</h2>
+        <div className="grid grid-cols-3 gap-4">
+          <ReindexButton />
+        </div>
       </div>
 
       {/* Execution log */}
