@@ -7,7 +7,7 @@ function RosablyIcon({ size }: { size: number }) {
   return (
     <div style={{ width: size, height: size, overflow: "hidden", flexShrink: 0 }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/rosably-logo.png" alt="" width={scaledWidth} height={size} style={{ display: "block" }} />
+      <img src="/rosably-logo.png" alt="" style={{ display: "block", width: scaledWidth, height: size, maxWidth: "none" }} />
     </div>
   );
 }
