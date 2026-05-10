@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 // Dashboard triggers Jordan to write a Claude Code prompt for an approved
 // backlog item. Uses Jordan's fire-and-forget /backlog/ask-jordan endpoint

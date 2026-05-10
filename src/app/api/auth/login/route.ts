@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pbkdf2Sync } from "crypto";
-import { supabaseAdmin } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createSessionToken, COOKIE_NAME, Role } from "@/lib/session";
 import { DEFAULT_PERMISSIONS } from "@/lib/permissions";
 
