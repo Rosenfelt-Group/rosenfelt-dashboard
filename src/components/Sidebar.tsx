@@ -35,6 +35,7 @@ const nav: NavItem[] = [
   { label: "CRM",          href: "/crm",                 icon: "users",      module: "salesMarketing" },
 
   // Engineering
+  { label: "Status",       href: "/status",              icon: "activity",   module: "engineering" },
   { label: "Backlog",      href: "/backlog",             icon: "wrench",     module: "engineering" },
   { label: "Agents",       href: "/agents",              icon: "cpu",        module: "engineering" },
   { label: "Intelligence", href: "/agents/intelligence", icon: "brain",      module: "engineering" },
@@ -76,6 +77,7 @@ function Icon({ name }: { name: string }) {
     dollar:   <><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></>,
     archive:  <><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></>,
     shield:   <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>,
+    activity: <><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></>,
     wrench:   <><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.4-2.4z"/></>,
     lock:     <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
   };
