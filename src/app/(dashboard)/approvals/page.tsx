@@ -6,6 +6,7 @@ import { ApprovalCard } from "@/components/ApprovalCard";
 import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
+import { supabase } from "@/lib/supabase";
 
 const STATUS_STYLES = {
   approved: "bg-green-50 text-green-700",
@@ -79,6 +80,36 @@ export default function ApprovalsPage() {
       setHistory(Array.isArray(h) ? h.filter((x: PendingApproval) => x.status !== "pending") : []);
       setLoading(false);
     });
+
+    const channel = supabase
+      .channel("approvals-page")
+      // New approval from an agent → add to pending list
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "pending_approvals" },
+        (payload) => {
+          const row = payload.new as PendingApproval;
+          if (row.status !== "pending") return;
+          setPending(prev => [row, ...prev]);
+        }
+      )
+      // Approval resolved externally (e.g., another tab or Telegram) → move to history
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "pending_approvals" },
+        (payload) => {
+          const row = payload.new as PendingApproval;
+          if (row.status === "pending") return;
+          setPending(prev => prev.filter(a => a.id !== row.id));
+          setHistory(prev => {
+            if (prev.some(a => a.id === row.id)) return prev;
+            return [row, ...prev];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   async function handleApproval(id: string, status: "approved" | "rejected") {
