@@ -113,11 +113,16 @@ export default function ApprovalsPage() {
   }, []);
 
   async function handleApproval(id: string, status: "approved" | "rejected") {
-    await fetch("/api/approvals", {
+    const res = await fetch("/api/approvals", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, status }),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(`Failed to ${status} approval: ${body?.error ?? `HTTP ${res.status}`}`);
+      return;
+    }
     const updated = pending.find(a => a.id === id);
     setPending(prev => prev.filter(a => a.id !== id));
     if (updated) setHistory(prev => [{ ...updated, status }, ...prev]);

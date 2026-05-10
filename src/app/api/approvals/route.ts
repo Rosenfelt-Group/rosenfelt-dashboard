@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
+export const maxDuration = 60;
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
