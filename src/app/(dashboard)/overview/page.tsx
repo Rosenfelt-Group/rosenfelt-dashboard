@@ -7,6 +7,7 @@ import { DashboardStats, WorkflowLog, PendingApproval, AgentStatus } from "@/typ
 import { formatDistanceToNow } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
 export default function OverviewPage() {
   const [stats,       setStats]       = useState<DashboardStats | null>(null);
@@ -31,8 +32,84 @@ export default function OverviewPage() {
 
   useEffect(() => {
     load();
+    // Stats are multi-table aggregates — keep polling for those.
+    // Approvals and activity are handled by Realtime below.
     const interval = setInterval(load, 120_000);
-    return () => clearInterval(interval);
+
+    const channel = supabase
+      .channel("overview-changes")
+      // New approval from an agent → add to list and bump count
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "pending_approvals" },
+        (payload) => {
+          const row = payload.new as PendingApproval;
+          if (row.status !== "pending") return;
+          setApprovals(prev => [row, ...prev]);
+          setStats(prev => prev
+            ? { ...prev, pending_approvals: prev.pending_approvals + 1 }
+            : prev
+          );
+        }
+      )
+      // Approval resolved (approved/rejected/expired) → remove from list and decrement count
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "pending_approvals" },
+        (payload) => {
+          const row = payload.new as PendingApproval;
+          if (row.status === "pending") return;
+          setApprovals(prev => {
+            const wasPresent = prev.some(a => a.id === row.id);
+            if (!wasPresent) return prev;
+            setStats(s => s
+              ? { ...s, pending_approvals: Math.max(0, s.pending_approvals - 1) }
+              : s
+            );
+            return prev.filter(a => a.id !== row.id);
+          });
+        }
+      )
+      // New workflow execution → prepend to activity feed and update agent stats + counters
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "workflow_logs" },
+        (payload) => {
+          const row = payload.new as WorkflowLog;
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
+          const isToday = new Date(row.created_at) >= todayStart;
+
+          setActivity(prev => [row, ...prev].slice(0, 20));
+
+          if (isToday) {
+            setStats(prev => prev ? {
+              ...prev,
+              executions_today: prev.executions_today + 1,
+              errors_today: prev.errors_today + (row.status === "error" ? 1 : 0),
+            } : prev);
+          }
+
+          setAgentStatus(prev => prev.map(a => {
+            if (a.agent !== row.agent) return a;
+            const isRecent = new Date(row.created_at) >= new Date(Date.now() - 24 * 60 * 60 * 1000);
+            if (!isRecent) return a;
+            return {
+              ...a,
+              executions_24h: a.executions_24h + 1,
+              errors_24h:     a.errors_24h + (row.status === "error" ? 1 : 0),
+              last_execution: row.created_at,
+              last_status:    row.status,
+            };
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [load]);
 
   async function handleApproval(id: string, status: "approved" | "rejected") {

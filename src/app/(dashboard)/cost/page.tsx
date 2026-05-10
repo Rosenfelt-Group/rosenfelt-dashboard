@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AgentBadge } from "@/components/AgentBadge";
 import clsx from "clsx";
+import { supabase } from "@/lib/supabase";
 
 type Agent = "jordan" | "riley" | "avery";
 
@@ -124,8 +125,73 @@ export default function CostPage() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 300_000);
-    return () => clearInterval(interval);
+    const interval = setInterval(load, 600_000); // 10-min fallback in case WS drops
+
+    const channel = supabase
+      .channel("token-usage-inserts")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "token_usage" },
+        (payload) => {
+          const row = payload.new as {
+            agent: string; prompt_tokens: number; completion_tokens: number;
+            total_tokens: number; cost_usd: string; created_at: string;
+          };
+          const todayDate = new Date().toISOString().slice(0, 10);
+          const rowDate   = row.created_at.slice(0, 10);
+          const isToday   = rowDate === todayDate;
+          const cost      = Number(row.cost_usd ?? 0);
+
+          setAgents(prev => prev.map(a => {
+            if (a.agent !== row.agent) return a;
+            return {
+              ...a,
+              weekCost:    a.weekCost    + cost,
+              weekTokens:  a.weekTokens  + (row.total_tokens ?? 0),
+              ...(isToday ? {
+                todayCost:   a.todayCost   + cost,
+                todayTokens: a.todayTokens + (row.total_tokens ?? 0),
+                callsToday:  a.callsToday  + 1,
+              } : {}),
+            };
+          }));
+
+          setDaily(prev => {
+            const hit = prev.find(r => r.date === rowDate && r.agent === row.agent);
+            if (hit) {
+              return prev.map(r =>
+                r.date === rowDate && r.agent === row.agent
+                  ? {
+                      ...r,
+                      calls:             r.calls + 1,
+                      prompt_tokens:     r.prompt_tokens     + (row.prompt_tokens     ?? 0),
+                      completion_tokens: r.completion_tokens + (row.completion_tokens ?? 0),
+                      total_tokens:      r.total_tokens      + (row.total_tokens      ?? 0),
+                      cost_usd:          r.cost_usd          + cost,
+                    }
+                  : r
+              );
+            }
+            // First call of this date/agent combo — add a new row to the breakdown
+            const entry: DailyRow = {
+              date: rowDate, agent: row.agent as Agent, calls: 1,
+              prompt_tokens: row.prompt_tokens ?? 0,
+              completion_tokens: row.completion_tokens ?? 0,
+              total_tokens: row.total_tokens ?? 0,
+              cost_usd: cost,
+            };
+            return [entry, ...prev].sort((a, b) =>
+              b.date.localeCompare(a.date) || a.agent.localeCompare(b.agent)
+            );
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [load]);
 
   async function updateBudget(agent: Agent, value: number) {
