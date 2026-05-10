@@ -14,19 +14,25 @@ export default function OverviewPage() {
   const [activity,    setActivity]    = useState<WorkflowLog[]>([]);
   const [approvals,   setApprovals]   = useState<PendingApproval[]>([]);
   const [agentStatus, setAgentStatus] = useState<AgentStatus[]>([]);
+  const [costToday,   setCostToday]   = useState<number | null>(null);
   const [loading,     setLoading]     = useState(true);
 
   const load = useCallback(async () => {
-    const [s, a, ap, ag] = await Promise.all([
+    const [s, a, ap, ag, usage] = await Promise.all([
       fetch("/api/stats").then(r => r.json()),
       fetch("/api/activity").then(r => r.json()),
       fetch("/api/approvals").then(r => r.json()),
       fetch("/api/agent-status").then(r => r.json()),
+      fetch("/api/usage?days=1").then(r => r.json()).catch(() => null),
     ]);
     setStats(s);
     setActivity(Array.isArray(a) ? a : []);
     setApprovals(Array.isArray(ap) ? ap : []);
     setAgentStatus(Array.isArray(ag) ? ag : []);
+    if (usage?.agents) {
+      const total = (usage.agents as { todayCost: number }[]).reduce((sum, ag) => sum + ag.todayCost, 0);
+      setCostToday(total);
+    }
     setLoading(false);
   }, []);
 
@@ -68,6 +74,18 @@ export default function OverviewPage() {
             );
             return prev.filter(a => a.id !== row.id);
           });
+        }
+      )
+      // New token usage row → add cost to today's running total
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "token_usage" },
+        (payload) => {
+          const row = payload.new as { cost_usd: string; created_at: string };
+          const todayDate = new Date().toISOString().slice(0, 10);
+          if (row.created_at.slice(0, 10) === todayDate) {
+            setCostToday(prev => (prev ?? 0) + Number(row.cost_usd ?? 0));
+          }
         }
       )
       // New workflow execution → prepend to activity feed and update agent stats + counters
@@ -166,7 +184,7 @@ export default function OverviewPage() {
         <StatCard label="Open tasks"       value={stats?.open_tasks ?? 0}        sub={stats?.overdue_tasks ? `${stats.overdue_tasks} overdue` : "none overdue"} alert={(stats?.overdue_tasks ?? 0) > 0} />
         <StatCard label="Approvals"        value={stats?.pending_approvals ?? 0} sub="waiting"                                       alert={(stats?.pending_approvals ?? 0) > 0} />
         <StatCard label="Content queue"    value={stats?.content_queue ?? 0}     sub="ideas queued" />
-        <StatCard label="API cost today"   value="$0.00"                         sub="connect LiteLLM" />
+        <StatCard label="API cost today"   value={costToday !== null ? `$${costToday.toFixed(4)}` : "$0.00"} sub={costToday !== null ? "across 3 agents" : "no usage yet"} />
       </div>
 
       {/* Agent status row */}
