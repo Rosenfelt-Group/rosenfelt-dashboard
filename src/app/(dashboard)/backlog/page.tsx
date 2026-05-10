@@ -49,7 +49,7 @@ function useBacklog() {
 
   useEffect(() => {
     reload();
-    const t = setInterval(reload, 30_000);
+    const t = setInterval(reload, 300_000);
     return () => clearInterval(t);
   }, [reload]);
 
@@ -427,10 +427,30 @@ function PromptReadyCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [promptText, setPromptText] = useState<string | null>(null);
+  const [promptLoading, setPromptLoading] = useState(false);
+
+  async function fetchPrompt() {
+    if (promptText !== null) return promptText;
+    setPromptLoading(true);
+    const res = await fetch(`/api/backlog/${item.id}`);
+    const data = await res.json();
+    const text: string | null = data.claude_code_prompt ?? null;
+    setPromptText(text);
+    setPromptLoading(false);
+    return text;
+  }
+
+  function handleExpand() {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && promptText === null) fetchPrompt();
+  }
 
   async function copy() {
-    if (!item.claude_code_prompt) return;
-    await navigator.clipboard.writeText(item.claude_code_prompt);
+    const text = await fetchPrompt();
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -440,7 +460,7 @@ function PromptReadyCard({
       <div className="flex items-start gap-2">
         <AgentBadge agent={item.suggested_by} size="sm" />
         <div className="flex-1 min-w-0">
-          <button className="w-full text-left" onClick={() => setExpanded(e => !e)}>
+          <button className="w-full text-left" onClick={handleExpand}>
             <p className="text-sm font-medium text-brand-black leading-snug">{item.title}</p>
             <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
               <AreaBadge area={item.affected_area} />
@@ -473,7 +493,7 @@ function PromptReadyCard({
       {item.arch_notes && (
         <div className="mt-3">
           <button
-            onClick={() => setExpanded(e => !e)}
+            onClick={handleExpand}
             className="text-[11px] uppercase tracking-wide text-brand-muted hover:text-brand-black"
           >
             {expanded ? "▾" : "▸"} arch notes
@@ -486,11 +506,17 @@ function PromptReadyCard({
         </div>
       )}
 
-      {expanded && item.claude_code_prompt && (
-        <pre className="mt-2 text-[11px] bg-brand-black text-white p-3 rounded-md
-                        overflow-x-auto whitespace-pre-wrap max-h-64">
-{item.claude_code_prompt}
-        </pre>
+      {expanded && (
+        <div className="mt-2">
+          {promptLoading ? (
+            <p className="text-[11px] text-brand-muted">Loading prompt…</p>
+          ) : promptText ? (
+            <pre className="text-[11px] bg-brand-black text-white p-3 rounded-md
+                            overflow-x-auto whitespace-pre-wrap max-h-64">
+{promptText}
+            </pre>
+          ) : null}
+        </div>
       )}
 
       <div className="mt-3 pt-3 border-t border-brand-border flex items-center gap-2 flex-wrap">
@@ -511,7 +537,7 @@ function PromptReadyCard({
         <div className="flex-1" />
         <button
           onClick={copy}
-          disabled={!item.claude_code_prompt}
+          disabled={promptLoading}
           className={clsx(
             "px-3 py-1 rounded-md text-xs font-medium transition-colors disabled:opacity-50",
             copied
@@ -519,7 +545,7 @@ function PromptReadyCard({
               : "bg-brand-orange text-white hover:bg-brand-orange-dark"
           )}
         >
-          {copied ? "✓ Copied" : "Copy Prompt"}
+          {promptLoading ? "Loading…" : copied ? "✓ Copied" : "Copy Prompt"}
         </button>
       </div>
     </div>

@@ -124,7 +124,7 @@ export default function CostPage() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 60_000);
+    const interval = setInterval(load, 300_000);
     return () => clearInterval(interval);
   }, [load]);
 

@@ -31,7 +31,7 @@ export default function OverviewPage() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 60_000);
+    const interval = setInterval(load, 120_000);
     return () => clearInterval(interval);
   }, [load]);
 

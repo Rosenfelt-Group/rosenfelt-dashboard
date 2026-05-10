@@ -16,9 +16,11 @@ const PRIORITIES = ["low", "medium", "high"] as const;
 
 export async function GET() {
   try {
+    // Exclude claude_code_prompt from the list — it can be several KB per item.
+    // Fetch it on demand via GET /api/backlog/[id].
     const { data, error } = await supabaseAdmin
       .from("tool_backlog")
-      .select("*")
+      .select("id, created_at, suggested_by, title, summary, problem_detail, affected_area, status, bundle_id, priority, arch_notes, approved_at, prompt_ready_at, doc_path")
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) throw error;

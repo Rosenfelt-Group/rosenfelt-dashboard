@@ -12,18 +12,28 @@ export async function GET(req: NextRequest) {
   todayStart.setHours(0, 0, 0, 0);
 
   try {
-    const [{ data: rows }, { data: budgets }] = await Promise.all([
+    // Two queries: today (unbounded, always accurate) + prior history (capped to prevent runaway egress)
+    const [{ data: todayRows }, { data: historyRows }, { data: budgets }] = await Promise.all([
+      supabaseAdmin
+        .from("token_usage")
+        .select("agent, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, created_at")
+        .gte("created_at", todayStart.toISOString())
+        .order("created_at", { ascending: false }),
       supabaseAdmin
         .from("token_usage")
         .select("agent, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, created_at")
         .gte("created_at", since.toISOString())
-        .order("created_at", { ascending: false }),
+        .lt("created_at", todayStart.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(4500),
       supabaseAdmin
         .from("budget_config")
         .select("agent, daily_budget_usd"),
     ]);
 
-    const allRows = rows ?? [];
+    const allRows = [...(todayRows ?? []), ...(historyRows ?? [])];
+    const todayIso = todayStart.toISOString();
+
     const budgetMap: Record<string, number> = {};
     for (const b of budgets ?? []) {
       budgetMap[b.agent] = Number(b.daily_budget_usd);
@@ -33,14 +43,14 @@ export async function GET(req: NextRequest) {
 
     // Per-agent summary
     const agentSummary = agents.map(agent => {
-      const agentRows = allRows.filter(r => r.agent === agent);
-      const todayRows = agentRows.filter(r => r.created_at >= todayStart.toISOString());
+      const agentRows   = allRows.filter(r => r.agent === agent);
+      const agentToday  = agentRows.filter(r => r.created_at >= todayIso);
 
-      const todayCost   = todayRows.reduce((s, r) => s + Number(r.cost_usd ?? 0), 0);
-      const todayTokens = todayRows.reduce((s, r) => s + (r.total_tokens ?? 0), 0);
+      const todayCost   = agentToday.reduce((s, r) => s + Number(r.cost_usd ?? 0), 0);
+      const todayTokens = agentToday.reduce((s, r) => s + (r.total_tokens ?? 0), 0);
       const weekCost    = agentRows.reduce((s, r) => s + Number(r.cost_usd ?? 0), 0);
       const weekTokens  = agentRows.reduce((s, r) => s + (r.total_tokens ?? 0), 0);
-      const callsToday  = todayRows.length;
+      const callsToday  = agentToday.length;
       const dailyBudget = budgetMap[agent] ?? 1.0;
 
       return { agent, todayCost, todayTokens, weekCost, weekTokens, callsToday, dailyBudget };
