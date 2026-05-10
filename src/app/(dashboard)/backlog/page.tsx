@@ -4,6 +4,7 @@ import { BacklogItem, BacklogStatus, TaskPriority } from "@/types";
 import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
+import { supabase } from "@/lib/supabase";
 
 const AREAS: BacklogItem["affected_area"][] = [
   "workflow", "dashboard", "content", "infrastructure", "agent",
@@ -49,8 +50,38 @@ function useBacklog() {
 
   useEffect(() => {
     reload();
-    const t = setInterval(reload, 300_000);
-    return () => clearInterval(t);
+
+    // Realtime subscription — no polling needed.
+    // INSERT/UPDATE/DELETE events update local state instantly.
+    const channel = supabase
+      .channel("backlog-changes")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "tool_backlog" },
+        (payload) => {
+          const newItem = payload.new as BacklogItem;
+          setItems(prev => [newItem, ...prev]);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "tool_backlog" },
+        (payload) => {
+          const updated = payload.new as BacklogItem;
+          setItems(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated } : i));
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "tool_backlog" },
+        (payload) => {
+          const deleted = payload.old as { id: number };
+          setItems(prev => prev.filter(i => i.id !== deleted.id));
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [reload]);
 
   const patch = useCallback(
@@ -60,9 +91,9 @@ function useBacklog() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      await reload();
+      // No manual reload needed — Realtime UPDATE event will arrive and update state.
     },
-    [reload]
+    []
   );
 
   return { items, loading, reload, patch };
