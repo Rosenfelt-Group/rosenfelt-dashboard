@@ -123,9 +123,8 @@ export default function ApprovalsPage() {
       alert(`Failed to ${status} approval: ${body?.error ?? `HTTP ${res.status}`}`);
       return;
     }
-    const updated = pending.find(a => a.id === id);
+    // Remove from pending immediately; Realtime UPDATE will add it to history
     setPending(prev => prev.filter(a => a.id !== id));
-    if (updated) setHistory(prev => [{ ...updated, status }, ...prev]);
   }
 
   const agents = Array.from(new Set(history.map(h => h.agent)));
