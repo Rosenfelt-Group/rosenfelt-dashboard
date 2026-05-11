@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentBadge } from "@/components/AgentBadge";
 import clsx from "clsx";
 import { supabase } from "@/lib/supabase";
@@ -107,12 +107,14 @@ export default function CostPage() {
   const [daily,   setDaily]   = useState<DailyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
+  const seenIds = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     try {
       const res  = await fetch("/api/usage?days=7");
       const data = await res.json();
       if (data.error) throw new Error(data.error);
+      seenIds.current.clear();
       setAgents(data.agents ?? []);
       setDaily(data.daily ?? []);
       setError(null);
@@ -134,9 +136,11 @@ export default function CostPage() {
         { event: "INSERT", schema: "public", table: "token_usage" },
         (payload) => {
           const row = payload.new as {
-            agent: string; prompt_tokens: number; completion_tokens: number;
+            id: string; agent: string; prompt_tokens: number; completion_tokens: number;
             total_tokens: number; cost_usd: string; created_at: string;
           };
+          if (seenIds.current.has(row.id)) return;
+          seenIds.current.add(row.id);
           const todayDate = new Date().toISOString().slice(0, 10);
           const rowDate   = row.created_at.slice(0, 10);
           const isToday   = rowDate === todayDate;
