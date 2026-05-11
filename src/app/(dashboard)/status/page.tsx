@@ -7,7 +7,7 @@ import clsx from "clsx";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "agents" | "github" | "vercel" | "supabase";
+type Tab = "agents" | "github" | "vercel" | "supabase" | "vps";
 
 interface AgentHealth {
   agent: string;
@@ -448,6 +448,127 @@ function SupabaseTab() {
   );
 }
 
+// ─── VPS Tab ──────────────────────────────────────────────────────────────────
+
+interface VpsStats {
+  cpu_percent: number;
+  memory: { total_gb: number; used_gb: number; percent: number };
+  disk:   { total_gb: number; used_gb: number; percent: number };
+  uptime_seconds: number;
+  containers: { name: string; status: string; image: string }[];
+}
+
+function UsageBar({ percent, warn = 70, danger = 90 }: { percent: number; warn?: number; danger?: number }) {
+  const color = percent >= danger ? "bg-red-500" : percent >= warn ? "bg-amber-400" : "bg-green-500";
+  return (
+    <div className="w-full h-1.5 bg-brand-offwhite rounded-full overflow-hidden">
+      <div className={clsx("h-full rounded-full transition-all", color)} style={{ width: `${Math.min(percent, 100)}%` }} />
+    </div>
+  );
+}
+
+function formatUptime(seconds: number) {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function VpsTab() {
+  const [stats, setStats]     = useState<VpsStats | null>(null);
+  const [error, setError]     = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    const res = await fetch("/api/vps/stats");
+    if (!res.ok) { setError(`Failed to load (${res.status})`); setLoading(false); return; }
+    setStats(await res.json());
+    setLastRefresh(new Date());
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t); }, [load]);
+
+  if (loading) return <div className="card animate-pulse h-64" />;
+  if (error)   return <div className="card p-6 text-sm text-red-600">{error}</div>;
+  if (!stats)  return null;
+
+  const CORE_CONTAINERS = ["jordan-agent", "riley-agent", "avery-agent", "n8n", "traefik", "wordpress"];
+
+  return (
+    <div className="space-y-4">
+      {/* System metrics */}
+      <div className="grid grid-cols-3 gap-4">
+        {/* CPU */}
+        <div className="card space-y-2">
+          <p className="text-xs text-brand-muted uppercase tracking-wide">CPU</p>
+          <p className="text-2xl font-semibold text-brand-black">{stats.cpu_percent.toFixed(1)}%</p>
+          <UsageBar percent={stats.cpu_percent} />
+        </div>
+        {/* Memory */}
+        <div className="card space-y-2">
+          <p className="text-xs text-brand-muted uppercase tracking-wide">Memory</p>
+          <p className="text-2xl font-semibold text-brand-black">{stats.memory.percent.toFixed(1)}%</p>
+          <UsageBar percent={stats.memory.percent} />
+          <p className="text-xs text-brand-muted">{stats.memory.used_gb} / {stats.memory.total_gb} GB</p>
+        </div>
+        {/* Disk */}
+        <div className="card space-y-2">
+          <p className="text-xs text-brand-muted uppercase tracking-wide">Disk</p>
+          <p className="text-2xl font-semibold text-brand-black">{stats.disk.percent}%</p>
+          <UsageBar percent={stats.disk.percent} warn={75} danger={90} />
+          <p className="text-xs text-brand-muted">{stats.disk.used_gb} / {stats.disk.total_gb} GB</p>
+        </div>
+      </div>
+
+      {/* Uptime + refresh */}
+      <div className="flex items-center justify-between text-xs text-brand-muted px-0.5">
+        <span>Uptime: <span className="text-brand-black font-medium">{formatUptime(stats.uptime_seconds)}</span></span>
+        <div className="flex items-center gap-3">
+          {lastRefresh && <span>Updated {formatDistanceToNow(lastRefresh, { addSuffix: true })}</span>}
+          <button onClick={load} className="text-brand-orange hover:underline">Refresh</button>
+        </div>
+      </div>
+
+      {/* Containers */}
+      <div>
+        <h2 className="text-sm font-medium text-brand-black mb-3">Containers</h2>
+        <div className="card p-0 overflow-hidden">
+          {stats.containers.length === 0 ? (
+            <div className="p-6 text-sm text-brand-muted text-center">No running containers found</div>
+          ) : (
+            stats.containers
+              .slice()
+              .sort((a, b) => {
+                const ai = CORE_CONTAINERS.indexOf(a.name);
+                const bi = CORE_CONTAINERS.indexOf(b.name);
+                if (ai === -1 && bi === -1) return a.name.localeCompare(b.name);
+                if (ai === -1) return 1;
+                if (bi === -1) return -1;
+                return ai - bi;
+              })
+              .map((c, i) => {
+                const up = c.status.toLowerCase().startsWith("up");
+                return (
+                  <div key={c.name} className={clsx("flex items-center gap-3 px-4 py-3 text-sm", i !== 0 && "border-t border-brand-border")}>
+                    <div className={clsx("w-1.5 h-1.5 rounded-full flex-shrink-0", up ? "bg-green-500" : "bg-red-400")} />
+                    <span className="font-medium text-brand-black w-40 flex-shrink-0 truncate">{c.name}</span>
+                    <span className="text-brand-muted flex-1 truncate">{c.status}</span>
+                    <span className="text-xs text-brand-muted flex-shrink-0 truncate max-w-[200px]">{c.image}</span>
+                  </div>
+                );
+              })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string }[] = [
@@ -455,6 +576,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "github",   label: "GitHub"   },
   { id: "vercel",   label: "Vercel"   },
   { id: "supabase", label: "Supabase" },
+  { id: "vps",      label: "VPS"      },
 ];
 
 export default function StatusPage() {
@@ -505,6 +627,7 @@ export default function StatusPage() {
       <div className={tab === "github"   ? "block" : "hidden"}><GitHubTab live={live} /></div>
       <div className={tab === "vercel"   ? "block" : "hidden"}><VercelTab /></div>
       <div className={tab === "supabase" ? "block" : "hidden"}><SupabaseTab /></div>
+      <div className={tab === "vps"      ? "block" : "hidden"}><VpsTab /></div>
     </div>
   );
 }
