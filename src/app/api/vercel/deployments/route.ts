@@ -6,7 +6,7 @@ const PROJECT_ID = "prj_xoZ2LCzCKZaG85J9IN6Ubgis8Iiy";
 const TEAM_ID    = "team_2ry5u3AoKUukaBSe1YCG8VVB";
 
 export async function GET() {
-  const token = process.env.VERCEL_TOKEN;
+  const token = process.env.VERCEL_API_TOKEN;
   if (!token) return NextResponse.json({ error: "not configured" }, { status: 500 });
 
   const res = await fetch(
