@@ -439,7 +439,7 @@ function SupabaseTab() {
               {usage.plan && usage.plan !== "unknown" && (
                 <span className="badge text-[10px] px-1.5 py-0.5 bg-brand-offwhite text-brand-muted capitalize">{usage.plan} plan</span>
               )}
-              <a href="https://supabase.com/dashboard/project/ukfpmpxwdlpsjqbxreza/settings/billing" target="_blank" rel="noreferrer"
+              <a href="https://supabase.com/dashboard/org/znhxpkxsrelwlxufbbtr/billing" target="_blank" rel="noreferrer"
                 className="text-[10px] text-brand-orange hover:underline">Egress →</a>
             </div>
           </div>
