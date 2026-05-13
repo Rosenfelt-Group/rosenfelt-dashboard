@@ -279,6 +279,14 @@ function BlogsTab({ ideas, isAdmin, onEdit }: {
                       WP #{blog.post_id} ↗
                     </a>
                   )}
+                  {blog.post_id && blog.status === "published" && (
+                    <a
+                      href={`https://rosably.com/?p=${blog.post_id}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-brand-muted hover:underline">
+                      View article →
+                    </a>
+                  )}
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2 flex-shrink-0">
