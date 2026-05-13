@@ -37,7 +37,6 @@ const nav: NavItem[] = [
   // Engineering
   { label: "Status",       href: "/status",              icon: "activity",   module: "engineering" },
   { label: "Backlog",      href: "/backlog",             icon: "wrench",     module: "engineering" },
-  { label: "Agents",       href: "/agents",              icon: "cpu",        module: "engineering" },
   { label: "Intelligence", href: "/agents/intelligence", icon: "brain",      module: "engineering" },
   { label: "Tasks",        href: "/tasks",               icon: "check",      module: "engineering" },
   { label: "Chat",         href: "/chat",                icon: "chat",       module: "engineering", requiredPermission: "use_chat" },

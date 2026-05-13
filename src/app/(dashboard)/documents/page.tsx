@@ -6,6 +6,29 @@ import remarkGfm from "remark-gfm";
 import clsx from "clsx";
 import { formatDistanceToNow, parseISO } from "date-fns";
 
+// ── Reindex ───────────────────────────────────────────────────────────────────
+
+function useReindex() {
+  const [state, setState] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [output, setOutput] = useState<string>("");
+
+  async function run() {
+    setState("running");
+    setOutput("");
+    try {
+      const res = await fetch("/api/tools/reindex-docs", { method: "POST" });
+      const data = await res.json();
+      setOutput(data.output ?? data.error ?? "No output");
+      setState(data.ok === false || !res.ok ? "error" : "done");
+    } catch (e) {
+      setOutput(String(e));
+      setState("error");
+    }
+  }
+
+  return { state, output, run };
+}
+
 interface DocEntry {
   id:               string;
   name:             string;
@@ -245,6 +268,7 @@ function DocumentsPageInner() {
   const searchParams = useSearchParams();
   const initialPath  = searchParams.get("path");
   const initialCat   = searchParams.get("category") ?? "";
+  const reindex      = useReindex();
 
   const [docs,          setDocs]          = useState<DocEntry[]>([]);
   const [selected,      setSelected]      = useState<DocEntry | null>(null);
@@ -366,27 +390,53 @@ function DocumentsPageInner() {
   return (
     <div className="p-4 md:p-8 pt-16 md:pt-8 pb-24 md:pb-8">
       {/* Header */}
-      <div className="flex items-start justify-between mb-5 gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-semibold text-brand-black">Documents</h1>
-          <p className="text-sm text-brand-muted mt-0.5">
-            {listLoading
-              ? "Loading…"
-              : listError
-              ? "Failed to load document registry"
-              : `${docs.length} document${docs.length !== 1 ? "s" : ""} available`}
-          </p>
+      <div className="mb-5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-xl font-semibold text-brand-black">Documents</h1>
+            <p className="text-sm text-brand-muted mt-0.5">
+              {listLoading
+                ? "Loading…"
+                : listError
+                ? "Failed to load document registry"
+                : `${docs.length} document${docs.length !== 1 ? "s" : ""} available`}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {allCategories.length > 0 && (
+              <select
+                value={category}
+                onChange={e => handleCategoryChange(e.target.value)}
+                className="text-sm px-3 py-1.5 border border-brand-border rounded-lg bg-white
+                           text-brand-black focus:outline-none focus:border-brand-orange"
+              >
+                <option value="">All categories</option>
+                {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            )}
+            <button
+              onClick={reindex.run}
+              disabled={reindex.state === "running"}
+              title="Sync doc_chunks with current markdown files"
+              className={clsx(
+                "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+                reindex.state === "running" ? "bg-brand-offwhite text-brand-muted border-brand-border cursor-not-allowed" :
+                reindex.state === "done"    ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100" :
+                reindex.state === "error"   ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-100" :
+                "bg-white text-brand-muted border-brand-border hover:bg-brand-offwhite hover:text-brand-black"
+              )}
+            >
+              {reindex.state === "running" ? "Indexing…" :
+               reindex.state === "done"    ? "Indexed ✓" :
+               reindex.state === "error"   ? "Failed ✗"  : "Reindex docs"}
+            </button>
+          </div>
         </div>
-        {allCategories.length > 0 && (
-          <select
-            value={category}
-            onChange={e => handleCategoryChange(e.target.value)}
-            className="text-sm px-3 py-1.5 border border-brand-border rounded-lg bg-white
-                       text-brand-black focus:outline-none focus:border-brand-orange"
-          >
-            <option value="">All categories</option>
-            {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+        {reindex.output && (
+          <pre className="mt-3 text-xs bg-brand-offwhite rounded-lg px-3 py-2.5 overflow-auto
+                          max-h-32 whitespace-pre-wrap text-brand-muted border border-brand-border">
+            {reindex.output}
+          </pre>
         )}
       </div>
 
