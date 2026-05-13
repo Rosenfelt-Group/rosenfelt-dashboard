@@ -40,6 +40,8 @@ export interface PendingApproval {
   description?: string;
   payload?: Record<string, unknown>;
   status: "pending" | "approved" | "rejected" | "expired";
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
 }
 
 export interface Lead {

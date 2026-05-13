@@ -31,20 +31,43 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
 
+    // Reviewer identity is injected by auth middleware on every authenticated request
+    const reviewer = req.headers.get("x-user-name") ?? null;
+
     const { data: approval, error: fetchError } = await supabaseAdmin
       .from("pending_approvals")
-      .select("id, agent, action_type, payload")
+      .select("id, agent, action_type, title, payload")
       .eq("id", id)
       .single();
 
     if (fetchError) throw fetchError;
 
-    const { error } = await supabaseAdmin
+    // Guard: publish_post approvals require an identified human reviewer
+    if (
+      status === "approved" &&
+      approval?.agent === "avery" &&
+      approval?.action_type === "publish_post" &&
+      !reviewer
+    ) {
+      return NextResponse.json(
+        { error: "Publish blocked: no human approval on record" },
+        { status: 403 }
+      );
+    }
+
+    // Write status + reviewer audit fields atomically
+    const updatePayload: Record<string, unknown> = { status };
+    if (status === "approved") {
+      updatePayload.reviewed_by = reviewer;
+      updatePayload.reviewed_at = new Date().toISOString();
+    }
+
+    const { error: updateError } = await supabaseAdmin
       .from("pending_approvals")
-      .update({ status })
+      .update(updatePayload)
       .eq("id", id);
 
-    if (error) throw error;
+    if (updateError) throw updateError;
 
     // On approve for a blog-post publish, trigger Avery's /publish endpoint.
     // We await the publish so the UI reflects the actual outcome, but we isolate
@@ -55,9 +78,10 @@ export async function PATCH(req: NextRequest) {
       approval?.agent === "avery" &&
       approval?.action_type === "publish_post"
     ) {
-      const avUrl = process.env.AVERY_AGENT_URL;
+      const avUrl  = process.env.AVERY_AGENT_URL;
       const secret = process.env.AVERY_WEBHOOK_SECRET || process.env.JORDAN_WEBHOOK_SECRET;
       const postId = approval.payload?.post_id;
+      const ideaId = approval.payload?.idea_id;
 
       if (!avUrl || !secret || typeof postId !== "number") {
         publishResult = {
@@ -74,14 +98,24 @@ export async function PATCH(req: NextRequest) {
             },
             body: JSON.stringify({
               post_id: postId,
-              idea_id: approval.payload?.idea_id,
+              idea_id: ideaId,
               approval_id: approval.id,
             }),
           });
           publishResult = {
             ok: res.ok,
-            detail: res.ok ? `published post_id=${postId}` : `avery returned HTTP ${res.status}`,
+            detail: res.ok
+              ? `published post_id=${postId} by ${reviewer}`
+              : `avery returned HTTP ${res.status}`,
           };
+
+          // Mirror publish outcome to content_ideas so the Content page reflects reality
+          if (res.ok && typeof ideaId === "string") {
+            await supabaseAdmin
+              .from("content_ideas")
+              .update({ status: "published" })
+              .eq("id", ideaId);
+          }
         } catch (e) {
           publishResult = {
             ok: false,
@@ -89,6 +123,15 @@ export async function PATCH(req: NextRequest) {
           };
         }
       }
+
+      // Audit log — always write regardless of publish outcome
+      await supabaseAdmin.from("workflow_logs").insert({
+        workflow_name: "Dashboard Publish Gate",
+        agent:         "avery",
+        trigger_text:  approval.title ?? `approval ${id}`,
+        status:        publishResult.ok ? "success" : "error",
+        ...(publishResult.ok ? {} : { error_message: publishResult.detail }),
+      });
     }
 
     return NextResponse.json({ success: true, publish: publishResult });

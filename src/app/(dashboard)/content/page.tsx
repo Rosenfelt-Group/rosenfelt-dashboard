@@ -4,6 +4,7 @@ import { ContentIdea } from "@/types";
 import { can } from "@/lib/permissions";
 import clsx from "clsx";
 import { formatDistanceToNow, parseISO } from "date-fns";
+import { supabase } from "@/lib/supabase";
 
 const PRIORITY_COLORS = {
   high:   "bg-red-50 text-red-700",
@@ -23,6 +24,13 @@ const STATUS_STYLES: Record<string, string> = {
   in_progress: "bg-blue-50 text-blue-700",
   published:   "bg-green-50 text-green-700",
   discarded:   "bg-gray-100 text-gray-500",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  queued:      "Queued",
+  in_progress: "In Progress",
+  published:   "Published",
+  discarded:   "Discarded",
 };
 
 // ─── Edit modal ───────────────────────────────────────────────────────────────
@@ -286,7 +294,7 @@ function BlogsTab({ ideas, isAdmin, onEdit }: {
                     </button>
                   )}
                   <span className={clsx("badge", STATUS_STYLES[blog.status] ?? "badge-neutral")}>
-                    {blog.status === "in_progress" ? "In progress" : blog.status}
+                    {STATUS_LABELS[blog.status] ?? blog.status}
                   </span>
                 </div>
                 <span className="text-[10px] text-brand-muted">
@@ -470,6 +478,20 @@ export default function ContentPage() {
     fetch("/api/content-ideas")
       .then(r => r.json())
       .then(d => { setIdeas(Array.isArray(d) ? d : []); setLoading(false); });
+
+    const channel = supabase
+      .channel("content-ideas-changes")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "content_ideas" },
+        (payload) => {
+          const updated = payload.new as ContentIdea;
+          setIdeas(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated } : i));
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   async function updateStatus(id: string, status: ContentIdea["status"]) {
