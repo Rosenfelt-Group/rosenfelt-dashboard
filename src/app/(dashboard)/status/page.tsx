@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
+import Link from "next/link";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -199,11 +200,16 @@ function AgentsTab() {
           );
         })}
       </div>
-      {checkedAt && (
-        <p className="text-[11px] text-brand-muted text-right">
-          Checked {checkedAt.toLocaleTimeString()} · refreshes every 60s
-        </p>
-      )}
+      <div className="flex items-center justify-between mt-2">
+        <Link href="/agents/history" className="text-xs text-brand-orange hover:underline">
+          View full execution history →
+        </Link>
+        {checkedAt && (
+          <p className="text-[11px] text-brand-muted">
+            Checked {checkedAt.toLocaleTimeString()} · refreshes every 60s
+          </p>
+        )}
+      </div>
     </div>
   );
 }
