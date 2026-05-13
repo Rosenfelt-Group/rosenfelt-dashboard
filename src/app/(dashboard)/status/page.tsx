@@ -55,6 +55,20 @@ interface SupabaseStatus {
   scheduled_maintenances: SupabaseScheduled[];
 }
 
+interface SupabaseTableRow {
+  table_name: string; row_count: number | null;
+  size_bytes: number | null; size_pretty: string | null;
+}
+interface SupabaseMetrics {
+  configured: boolean; tables: SupabaseTableRow[];
+  db_size: { size_bytes: number; size_pretty: string } | null; error?: string;
+}
+interface SupabaseUsage {
+  configured: boolean; plan?: string;
+  egress_gb: number | null; egress_limit_gb: number | null; egress_pct: number | null;
+  requests_1h: number | null; errors_1h: number; error_rate: number | null; error?: string;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const REPO_ORDER = ["rosenfelt-docs","jordan-agent","riley-agent","avery-agent","rosenfelt-dashboard","vps-config"];
@@ -352,21 +366,44 @@ function VercelTab() {
   );
 }
 
+// ─── Shared UI ────────────────────────────────────────────────────────────────
+
+function UsageBar({ percent, warn = 70, danger = 90 }: { percent: number; warn?: number; danger?: number }) {
+  const color = percent >= danger ? "bg-red-500" : percent >= warn ? "bg-amber-400" : "bg-green-500";
+  return (
+    <div className="w-full h-1.5 bg-brand-offwhite rounded-full overflow-hidden">
+      <div className={clsx("h-full rounded-full transition-all", color)} style={{ width: `${Math.min(percent, 100)}%` }} />
+    </div>
+  );
+}
+
 // ─── Supabase Tab ─────────────────────────────────────────────────────────────
 
 const CORE_COMPONENTS = ["Database","API","Auth","Realtime","Storage","Edge Functions","Supabase Dashboard"];
 
-function SupabaseTab() {
-  const [data, setData]     = useState<SupabaseStatus | null>(null);
+function SupabaseTab({ onEgressWarning }: { onEgressWarning?: (warn: boolean) => void }) {
+  const [status, setStatus]   = useState<SupabaseStatus | null>(null);
+  const [metrics, setMetrics] = useState<SupabaseMetrics | null>(null);
+  const [usage, setUsage]     = useState<SupabaseUsage | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/supabase/status");
-    if (!res.ok) { setError("Could not reach Supabase status API"); setLoading(false); return; }
-    setData(await res.json());
+    const [statusRes, metricsRes, usageRes] = await Promise.all([
+      fetch("/api/supabase/status").catch(() => null),
+      fetch("/api/supabase/metrics").catch(() => null),
+      fetch("/api/supabase/usage").catch(() => null),
+    ]);
+    if (!statusRes?.ok) { setError("Could not reach Supabase status API"); setLoading(false); return; }
+    setStatus(await statusRes.json());
+    if (metricsRes?.ok) setMetrics(await metricsRes.json());
+    if (usageRes?.ok) {
+      const u: SupabaseUsage = await usageRes.json();
+      setUsage(u);
+      onEgressWarning?.((u.egress_pct ?? 0) >= 80);
+    }
     setLoading(false);
-  }, []);
+  }, [onEgressWarning]);
 
   useEffect(() => {
     load();
@@ -375,17 +412,86 @@ function SupabaseTab() {
   }, [load]);
 
   if (loading) return <div className="card animate-pulse h-64" />;
-  if (error || !data) return <div className="card text-sm text-red-600 py-8 text-center">{error ?? "No data"}</div>;
+  if (error || !status) return <div className="card text-sm text-red-600 py-8 text-center">{error ?? "No data"}</div>;
 
-  const indicator = supabaseIndicatorMeta(data.status.indicator);
-  const coreComponents = data.components.filter(c =>
+  const indicator     = supabaseIndicatorMeta(status.status.indicator);
+  const coreComponents = status.components.filter(c =>
     CORE_COMPONENTS.some(name => c.name.toLowerCase().includes(name.toLowerCase())) && c.name !== "Supabase"
   );
-  const activeIncidents = data.incidents.filter(i => i.status !== "resolved");
-  const upcomingMaint   = data.scheduled_maintenances.filter(m => m.status !== "completed");
+  const activeIncidents = status.incidents.filter(i => i.status !== "resolved");
+  const upcomingMaint   = status.scheduled_maintenances.filter(m => m.status !== "completed");
+  const egressPct       = usage?.egress_pct ?? null;
+  const egressWarn      = (egressPct ?? 0) >= 80;
 
   return (
     <div className="space-y-4">
+      {/* Egress + error rate panel */}
+      {usage?.configured === false ? (
+        <div className="card">
+          <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-1">Project Metrics</p>
+          <p className="text-sm text-brand-muted">
+            Add <code className="bg-brand-offwhite px-1 rounded text-xs">SUPABASE_ACCESS_TOKEN</code> to Vercel environment variables to see egress, error rate, and table sizes.
+          </p>
+        </div>
+      ) : usage && !usage.error ? (
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide">Egress This Month</p>
+            <div className="flex items-center gap-3">
+              {usage.plan && usage.plan !== "unknown" && (
+                <span className="badge text-[10px] px-1.5 py-0.5 bg-brand-offwhite text-brand-muted capitalize">{usage.plan}</span>
+              )}
+              {usage.error_rate !== null && (
+                <span className={clsx("text-xs font-medium", usage.error_rate > 5 ? "text-red-600" : "text-brand-muted")}>
+                  {usage.error_rate.toFixed(1)}% errors
+                  {usage.requests_1h !== null && <span className="font-normal"> · {usage.requests_1h} req/h</span>}
+                </span>
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="flex items-end justify-between mb-1.5">
+              <span className={clsx("text-xl font-semibold", egressWarn ? "text-red-600" : "text-brand-black")}>
+                {usage.egress_gb !== null ? `${usage.egress_gb.toFixed(2)} GB` : "—"}
+              </span>
+              <span className="text-xs text-brand-muted">
+                {usage.egress_limit_gb ? `of ${usage.egress_limit_gb} GB` : ""}
+                {egressPct !== null && ` · ${egressPct.toFixed(1)}%`}
+              </span>
+            </div>
+            {egressPct !== null && <UsageBar percent={egressPct} warn={80} danger={95} />}
+          </div>
+          {egressWarn && (
+            <p className="text-xs text-red-600 font-medium">
+              Egress above 80% — reduce polling intervals or add <code className="bg-red-50 px-0.5 rounded">Prefer: return=minimal</code> on writes.
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {/* Table health panel */}
+      {metrics?.configured && !metrics.error && metrics.tables.length > 0 && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide">Database Tables</p>
+            {metrics.db_size && (
+              <span className="text-xs text-brand-muted">Total: {metrics.db_size.size_pretty}</span>
+            )}
+          </div>
+          <div className="divide-y divide-brand-border">
+            {metrics.tables.map(t => (
+              <div key={t.table_name} className="flex items-center gap-3 py-1.5 text-xs">
+                <span className="font-mono text-brand-black flex-1 truncate">{t.table_name}</span>
+                <span className="text-brand-muted w-24 text-right flex-shrink-0">
+                  {t.row_count !== null ? t.row_count.toLocaleString() + " rows" : ""}
+                </span>
+                <span className="text-brand-muted w-16 text-right flex-shrink-0">{t.size_pretty ?? "—"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Overall status */}
       <div className={clsx("card flex items-center gap-3", indicator.cls)}>
         <div className={clsx("w-3 h-3 rounded-full flex-shrink-0", indicator.dot)} />
@@ -396,7 +502,7 @@ function SupabaseTab() {
       <div className="card">
         <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-3">Components</p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {(coreComponents.length > 0 ? coreComponents : data.components.slice(0, 12)).map(c => (
+          {(coreComponents.length > 0 ? coreComponents : status.components.slice(0, 12)).map(c => (
             <div key={c.id} className="flex items-center gap-2 py-1">
               <div className={clsx("w-2 h-2 rounded-full flex-shrink-0", componentStatusDot(c.status))} />
               <span className="text-xs text-brand-black truncate">{c.name}</span>
@@ -456,15 +562,6 @@ interface VpsStats {
   disk:   { total_gb: number; used_gb: number; percent: number };
   uptime_seconds: number;
   containers: { name: string; status: string; image: string }[];
-}
-
-function UsageBar({ percent, warn = 70, danger = 90 }: { percent: number; warn?: number; danger?: number }) {
-  const color = percent >= danger ? "bg-red-500" : percent >= warn ? "bg-amber-400" : "bg-green-500";
-  return (
-    <div className="w-full h-1.5 bg-brand-offwhite rounded-full overflow-hidden">
-      <div className={clsx("h-full rounded-full transition-all", color)} style={{ width: `${Math.min(percent, 100)}%` }} />
-    </div>
-  );
 }
 
 function formatUptime(seconds: number) {
@@ -580,8 +677,11 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export default function StatusPage() {
-  const [tab, setTab] = useState<Tab>("agents");
-  const [live, setLive] = useState(false);
+  const [tab, setTab]               = useState<Tab>("agents");
+  const [live, setLive]             = useState(false);
+  const [egressWarning, setEgressWarning] = useState(false);
+
+  const handleEgressWarning = useCallback((warn: boolean) => setEgressWarning(warn), []);
 
   // Single Realtime connection shared across the page lifetime
   useEffect(() => {
@@ -611,13 +711,16 @@ export default function StatusPage() {
             key={t.id}
             onClick={() => setTab(t.id)}
             className={clsx(
-              "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
+              "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px relative",
               tab === t.id
                 ? "border-brand-orange text-brand-orange"
                 : "border-transparent text-brand-muted hover:text-brand-black"
             )}
           >
             {t.label}
+            {t.id === "supabase" && egressWarning && (
+              <span className="absolute top-1.5 right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
+            )}
           </button>
         ))}
       </div>
@@ -626,7 +729,7 @@ export default function StatusPage() {
       <div className={tab === "agents"   ? "block" : "hidden"}><AgentsTab /></div>
       <div className={tab === "github"   ? "block" : "hidden"}><GitHubTab live={live} /></div>
       <div className={tab === "vercel"   ? "block" : "hidden"}><VercelTab /></div>
-      <div className={tab === "supabase" ? "block" : "hidden"}><SupabaseTab /></div>
+      <div className={tab === "supabase" ? "block" : "hidden"}><SupabaseTab onEgressWarning={handleEgressWarning} /></div>
       <div className={tab === "vps"      ? "block" : "hidden"}><VpsTab /></div>
     </div>
   );
