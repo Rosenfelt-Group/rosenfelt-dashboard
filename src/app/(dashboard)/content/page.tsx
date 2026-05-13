@@ -273,7 +273,7 @@ function BlogsTab({ ideas, isAdmin, onEdit }: {
                   {blog.source  && <span className="text-xs text-brand-muted">Source: {blog.source}</span>}
                   {blog.post_id && (
                     <a
-                      href={`https://rosenfeltgroup.com/wp-admin/post.php?post=${blog.post_id}&action=edit`}
+                      href={`https://rosably.com/wp-admin/post.php?post=${blog.post_id}&action=edit`}
                       target="_blank" rel="noopener noreferrer"
                       className="text-xs text-brand-orange hover:underline">
                       WP #{blog.post_id} ↗
