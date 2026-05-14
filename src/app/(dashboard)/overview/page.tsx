@@ -130,7 +130,7 @@ export default function OverviewPage() {
     };
   }, [load]);
 
-  async function handleApproval(id: string, status: "approved" | "rejected") {
+  async function handleApproval(id: string, status: "approved" | "rejected" | "revision_requested", revisionNotes?: string) {
     await fetch("/api/approvals", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

@@ -39,7 +39,7 @@ export interface PendingApproval {
   title: string;
   description?: string;
   payload?: Record<string, unknown>;
-  status: "pending" | "approved" | "rejected" | "expired";
+  status: "pending" | "approved" | "rejected" | "revision_requested" | "expired";
   reviewed_by?: string | null;
   reviewed_at?: string | null;
 }
@@ -85,8 +85,9 @@ export interface ContentIdea {
   source?: string;
   signal_type: "blog_topic" | "competitor_gap" | "service_improvement" | "competitive_intel";
   priority: TaskPriority;
-  status: "queued" | "in_progress" | "published" | "discarded";
+  status: "queued" | "in_progress" | "revision_needed" | "published" | "discarded";
   post_id?: number;
+  revision_notes?: string | null;
 }
 
 // Tool enhancement backlog

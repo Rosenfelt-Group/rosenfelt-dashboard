@@ -9,10 +9,19 @@ import clsx from "clsx";
 import { supabase } from "@/lib/supabase";
 
 const STATUS_STYLES = {
-  approved: "bg-green-50 text-green-700",
-  rejected: "bg-red-50 text-red-700",
-  expired:  "bg-gray-100 text-gray-500",
-  pending:  "bg-amber-50 text-amber-700",
+  approved:            "bg-green-50 text-green-700",
+  rejected:            "bg-red-50 text-red-700",
+  revision_requested:  "bg-amber-50 text-amber-700",
+  expired:             "bg-gray-100 text-gray-500",
+  pending:             "bg-amber-50 text-amber-700",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  approved:           "Approved",
+  rejected:           "Rejected",
+  revision_requested: "Revision",
+  expired:            "Expired",
+  pending:            "Pending",
 };
 
 function HistoryRow({ item }: { item: PendingApproval }) {
@@ -35,7 +44,7 @@ function HistoryRow({ item }: { item: PendingApproval }) {
             "text-xs px-2 py-0.5 rounded font-medium flex-shrink-0",
             STATUS_STYLES[item.status] ?? "bg-gray-100 text-gray-500"
           )}>
-            {item.status}
+            {STATUS_LABELS[item.status] ?? item.status}
           </span>
           <span className="text-xs text-brand-muted flex-shrink-0">
             {formatDistanceToNow(parseISO(item.created_at), { addSuffix: true })}
@@ -112,15 +121,19 @@ export default function ApprovalsPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  async function handleApproval(id: string, status: "approved" | "rejected") {
+  async function handleApproval(
+    id: string,
+    status: "approved" | "rejected" | "revision_requested",
+    revisionNotes?: string,
+  ) {
     const res = await fetch("/api/approvals", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify({ id, status, revision_notes: revisionNotes }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      alert(`Failed to ${status} approval: ${body?.error ?? `HTTP ${res.status}`}`);
+      alert(`Failed: ${body?.error ?? `HTTP ${res.status}`}`);
       return;
     }
     // Remove from pending immediately; Realtime UPDATE will add it to history
@@ -204,7 +217,7 @@ export default function ApprovalsPage() {
               ))}
             </div>
             <div className="flex gap-1 flex-wrap">
-              {(["all", "approved", "rejected", "expired"] as const).map(s => (
+              {(["all", "approved", "revision_requested", "rejected", "expired"] as const).map(s => (
                 <button key={s} onClick={() => setStatusFilter(s)}
                   className={clsx(
                     "px-2.5 py-1 rounded-full text-xs capitalize transition-colors",
