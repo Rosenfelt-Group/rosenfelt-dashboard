@@ -230,6 +230,25 @@ export interface CRMAssessmentResult {
   created_at: string;
 }
 
+// ─── SEO keyword tracker ──────────────────────────────────────────────────────
+
+export interface KeywordTracker {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  keyword: string | null;
+  monthly_volume_est: number | null;
+  difficulty: "low" | "medium" | "high";
+  tier: "1" | "2" | "3";
+  current_position: number | null;
+  target_position: number;
+  assigned_post_url: string | null;
+  status: "planned" | "in_progress" | "published" | "monitoring";
+  vertical: string | null;
+  notes: string | null;
+  last_checked: string | null;
+}
+
 // ─── Dashboard summary types ───────────────────────────────────────────────────
 
 // Dashboard summary types
