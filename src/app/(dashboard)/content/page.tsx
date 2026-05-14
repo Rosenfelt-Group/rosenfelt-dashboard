@@ -121,13 +121,14 @@ function EditIdeaModal({ idea, onSave, onClose }: {
 
 // ─── Idea card ────────────────────────────────────────────────────────────────
 
-function IdeaCard({ idea, isAdmin, writing, onWrite, onDiscard, onEdit }: {
+function IdeaCard({ idea, isAdmin, writing, onWrite, onDiscard, onEdit, onRequeue }: {
   idea: ContentIdea;
   isAdmin: boolean;
   writing: boolean;
   onWrite: (idea: ContentIdea) => void;
   onDiscard: (id: string) => void;
   onEdit: (idea: ContentIdea) => void;
+  onRequeue: (id: string) => void;
 }) {
   const hasDraft    = idea.status === "in_progress" && !!idea.post_id;
   const isDrafting  = idea.status === "in_progress" && !idea.post_id;
@@ -170,12 +171,22 @@ function IdeaCard({ idea, isAdmin, writing, onWrite, onDiscard, onEdit }: {
             </div>
           )}
 
-          {/* Drafting: pulsing indicator */}
+          {/* Drafting: pulsing indicator + reset button */}
           {isDrafting && (
-            <p className="text-xs text-blue-600 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse inline-block" />
-              Avery is drafting…
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-blue-600 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse inline-block" />
+                Avery is drafting…
+              </p>
+              {isAdmin && (
+                <button
+                  onClick={() => onRequeue(idea.id)}
+                  className="text-xs text-brand-muted hover:text-brand-black underline"
+                >
+                  Reset to queue
+                </button>
+              )}
+            </div>
           )}
 
           {/* Draft ready: WP link + approval link */}
@@ -440,6 +451,15 @@ export default function ContentPage() {
     setWriting(prev => { const s = new Set(prev); s.delete(idea.id); return s; });
   }
 
+  async function handleRequeue(id: string) {
+    setIdeas(prev => prev.map(i => i.id === id ? { ...i, status: "queued" as const, revision_notes: null } : i));
+    await fetch("/api/content-ideas", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status: "queued", revision_notes: null }),
+    });
+  }
+
   async function handleDiscard(id: string) {
     await fetch("/api/content-ideas", {
       method: "PATCH",
@@ -562,6 +582,7 @@ export default function ContentPage() {
                   onWrite={handleWrite}
                   onDiscard={handleDiscard}
                   onEdit={setEditing}
+                  onRequeue={handleRequeue}
                 />
               ))}
             </div>
