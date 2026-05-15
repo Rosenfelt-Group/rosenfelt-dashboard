@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { stripe, TIER_NAMES } from "@/lib/stripe";
+import { getStripe, TIER_NAMES } from "@/lib/stripe";
 
 const DASHBOARD_URL = "https://dashboard.rosably.com";
 
@@ -17,6 +17,8 @@ export async function POST(req: NextRequest) {
 
   if (error || !client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
   if (!client.monthly_value) return NextResponse.json({ error: "Client has no monthly_value set" }, { status: 422 });
+
+  const stripe = getStripe();
 
   // Create or reuse Stripe customer
   let customerId: string = client.stripe_customer_id;

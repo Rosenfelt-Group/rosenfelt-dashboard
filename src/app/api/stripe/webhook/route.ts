@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-
-// Stripe requires the raw body to verify the signature — no body parser
-export const config = { api: { bodyParser: false } };
 
 function stripeStatusToBillingStatus(status: string): string {
   if (status === "active" || status === "trialing") return "active";
@@ -36,6 +33,8 @@ export async function POST(req: NextRequest) {
   if (!sig || !process.env.STRIPE_WEBHOOK_SECRET) {
     return NextResponse.json({ error: "Missing signature or secret" }, { status: 400 });
   }
+
+  const stripe = getStripe();
 
   let event: Stripe.Event;
   try {
