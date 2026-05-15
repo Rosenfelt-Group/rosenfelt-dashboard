@@ -74,6 +74,18 @@ function FileIcon({ size = 15 }: { size?: number }) {
   );
 }
 
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+      {open
+        ? <polyline points="15 18 9 12 15 6"/>
+        : <polyline points="9 18 15 12 9 6"/>
+      }
+    </svg>
+  );
+}
+
 // ── Heading components for ReactMarkdown (adds id anchors) ────────────────────
 
 function makeHeading(Tag: "h1" | "h2" | "h3" | "h4") {
@@ -281,6 +293,7 @@ function DocumentsPageInner() {
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [category,      setCategory]      = useState(initialCat);
+  const [listOpen,      setListOpen]      = useState(true);
 
   const contentRef  = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<string | null>(null);
@@ -441,62 +454,63 @@ function DocumentsPageInner() {
       </div>
 
       {/* Content area */}
-      <div className="flex gap-4" style={{ height: "calc(100vh - 14rem)" }}>
+      <div className="flex gap-4" style={{ height: "calc(100dvh - 14rem)" }}>
 
-        {/* Left panel */}
-        <div className="w-64 flex-shrink-0 flex flex-col gap-2">
-          <input
-            value={q}
-            onChange={e => setQ(e.target.value)}
-            placeholder="Search docs…"
-            className="text-sm border border-brand-border rounded-lg px-3 py-2
-                       focus:outline-none focus:border-brand-orange w-full"
-          />
+        {/* Left panel — collapsible */}
+        {listOpen && (
+          <div className="w-64 flex-shrink-0 flex flex-col gap-2">
+            <input
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Search docs…"
+              className="text-sm border border-brand-border rounded-lg px-3 py-2
+                         focus:outline-none focus:border-brand-orange w-full"
+            />
 
-          <div className="card p-0 overflow-y-auto flex-1">
-            {listLoading ? (
-              <div className="p-4 space-y-3">
-                {[1, 2, 3, 4].map(i => (
-                  <div key={i} className="animate-pulse h-10 bg-brand-offwhite rounded" />
-                ))}
-              </div>
-            ) : listError ? (
-              <div className="p-6 text-center">
-                <p className="text-xs text-red-600 font-medium">{listError}</p>
-              </div>
-            ) : isSearchMode ? (
-              <SearchResultsPanel
-                results={searchResults}
-                loading={searchLoading}
-                docs={docs}
-                selected={selected}
-                onSelect={openDoc}
-              />
-            ) : (
-              <DocListPanel
-                docs={docs}
-                selected={selected}
-                category={category}
-                onSelect={openDoc}
-              />
-            )}
+            <div className="card p-0 overflow-y-auto flex-1">
+              {listLoading ? (
+                <div className="p-4 space-y-3">
+                  {[1, 2, 3, 4].map(i => (
+                    <div key={i} className="animate-pulse h-10 bg-brand-offwhite rounded" />
+                  ))}
+                </div>
+              ) : listError ? (
+                <div className="p-6 text-center">
+                  <p className="text-xs text-red-600 font-medium">{listError}</p>
+                </div>
+              ) : isSearchMode ? (
+                <SearchResultsPanel
+                  results={searchResults}
+                  loading={searchLoading}
+                  docs={docs}
+                  selected={selected}
+                  onSelect={openDoc}
+                />
+              ) : (
+                <DocListPanel
+                  docs={docs}
+                  selected={selected}
+                  category={category}
+                  onSelect={openDoc}
+                />
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Center: content viewer */}
         <div className="card flex-1 overflow-hidden flex flex-col min-w-0">
-          {!selected ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-              <div className="w-12 h-12 bg-brand-offwhite rounded-xl flex items-center justify-center mb-4">
-                <FileIcon />
-              </div>
-              <p className="text-sm font-medium text-brand-black mb-1">Select a document</p>
-              <p className="text-xs text-brand-muted">Choose a file from the list to view its contents</p>
-            </div>
-          ) : (
-            <>
-              {/* Doc header */}
-              <div className="px-5 py-3 border-b border-brand-border flex items-center gap-2 flex-shrink-0 flex-wrap">
+          {/* Doc header — always shown, contains list toggle */}
+          <div className="px-3 py-2.5 border-b border-brand-border flex items-center gap-2 flex-shrink-0 flex-wrap">
+            <button
+              onClick={() => setListOpen(!listOpen)}
+              title={listOpen ? "Collapse document list" : "Show document list"}
+              className="p-1 rounded hover:bg-brand-offwhite text-brand-muted hover:text-brand-black transition-colors flex-shrink-0"
+            >
+              <ChevronIcon open={listOpen} />
+            </button>
+            {selected ? (
+              <>
                 <FileIcon />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-brand-black truncate">{selected.name}</p>
@@ -508,48 +522,66 @@ function DocumentsPageInner() {
                     indexed {formatDistanceToNow(parseISO(selected.last_indexed_at), { addSuffix: true })}
                   </span>
                 )}
-              </div>
+              </>
+            ) : (
+              <p className="text-sm text-brand-muted">
+                {listOpen ? "Select a document" : "Open document list to browse"}
+              </p>
+            )}
+          </div>
 
-              {/* Doc content */}
-              <div ref={contentRef} className="flex-1 overflow-y-auto p-5">
-                {docLoading ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3, 5, 4].map(i => (
-                      <div key={i} className="animate-pulse h-4 bg-brand-offwhite rounded"
-                           style={{ width: `${60 + i * 8}%` }} />
-                    ))}
-                  </div>
-                ) : contentError ? (
-                  <div className="text-sm text-red-600 bg-red-50 rounded-lg p-4">{contentError}</div>
-                ) : content !== null ? (
-                  selected.path.endsWith(".md") ? (
-                    <div className="prose prose-sm max-w-none
-                      prose-headings:font-semibold prose-headings:text-brand-black prose-headings:mt-6 prose-headings:mb-2
-                      prose-p:text-brand-black prose-p:leading-relaxed
-                      prose-a:text-brand-orange prose-a:no-underline hover:prose-a:underline
-                      prose-strong:text-brand-black
-                      prose-code:bg-gray-200 prose-code:text-gray-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
-                      prose-pre:bg-gray-200 prose-pre:text-gray-800 prose-pre:rounded-lg prose-pre:text-xs prose-pre:border prose-pre:border-gray-300
-                      prose-blockquote:border-brand-orange prose-blockquote:text-brand-muted
-                      prose-table:text-sm prose-th:text-brand-black prose-td:text-brand-black
-                      prose-hr:border-brand-border
-                      prose-li:text-brand-black">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={MD_COMPONENTS}
-                      >
-                        {content}
-                      </ReactMarkdown>
-                    </div>
-                  ) : (
-                    <pre className="text-xs text-brand-black font-mono whitespace-pre-wrap break-words
-                                    bg-brand-offwhite rounded-lg p-4">
-                      {content}
-                    </pre>
-                  )
-                ) : null}
+          {!selected ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+              <div className="w-12 h-12 bg-brand-offwhite rounded-xl flex items-center justify-center mb-4">
+                <FileIcon />
               </div>
-            </>
+              <p className="text-sm font-medium text-brand-black mb-1">Select a document</p>
+              <p className="text-xs text-brand-muted">
+                {listOpen
+                  ? "Choose a file from the list to view its contents"
+                  : "Tap the arrow to open the document list"}
+              </p>
+            </div>
+          ) : (
+            /* Doc content */
+            <div ref={contentRef} className="flex-1 overflow-y-auto p-5">
+              {docLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3, 5, 4].map(i => (
+                    <div key={i} className="animate-pulse h-4 bg-brand-offwhite rounded"
+                         style={{ width: `${60 + i * 8}%` }} />
+                  ))}
+                </div>
+              ) : contentError ? (
+                <div className="text-sm text-red-600 bg-red-50 rounded-lg p-4">{contentError}</div>
+              ) : content !== null ? (
+                selected.path.endsWith(".md") ? (
+                  <div className="prose prose-sm max-w-none
+                    prose-headings:font-semibold prose-headings:text-brand-black prose-headings:mt-6 prose-headings:mb-2
+                    prose-p:text-brand-black prose-p:leading-relaxed
+                    prose-a:text-brand-orange prose-a:no-underline hover:prose-a:underline
+                    prose-strong:text-brand-black
+                    prose-code:bg-gray-200 prose-code:text-gray-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
+                    prose-pre:bg-gray-200 prose-pre:text-gray-800 prose-pre:rounded-lg prose-pre:text-xs prose-pre:border prose-pre:border-gray-300
+                    prose-blockquote:border-brand-orange prose-blockquote:text-brand-muted
+                    prose-table:text-sm prose-th:text-brand-black prose-td:text-brand-black
+                    prose-hr:border-brand-border
+                    prose-li:text-brand-black">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={MD_COMPONENTS}
+                    >
+                      {content}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <pre className="text-xs text-brand-black font-mono whitespace-pre-wrap break-words
+                                  bg-brand-offwhite rounded-lg p-4">
+                    {content}
+                  </pre>
+                )
+              ) : null}
+            </div>
           )}
         </div>
 
