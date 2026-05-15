@@ -214,6 +214,9 @@ export interface CRMClient {
   monthly_value?: number;
   assigned_agents?: string[];
   notes?: string;
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
+  stripe_subscription_status?: string;
   created_at: string;
   updated_at: string;
   business?: CRMBusiness;

@@ -6,6 +6,14 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { Agent } from "@/types";
 import { CRMNav } from "@/components/CRMNav";
 
+const STRIPE_STATUS_STYLES: Record<string, string> = {
+  active:   "badge-success",
+  trialing: "badge-warning",
+  past_due: "badge-error",
+  canceled: "badge-neutral",
+  unpaid:   "badge-error",
+};
+
 const TIER_LABELS: Record<string, string> = {
   newsroom: "Newsroom",
   operations: "Operations",
@@ -45,6 +53,8 @@ export default function ClientsPage() {
   const [availableContacts, setAvailableContacts] = useState<CRMContact[]>([]);
   const [form, setForm] = useState(BLANK_FORM);
   const [saving, setSaving] = useState(false);
+  const [paymentLink, setPaymentLink] = useState<{ url: string; businessName: string } | null>(null);
+  const [generatingLinkFor, setGeneratingLinkFor] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/crm/clients")
@@ -66,6 +76,25 @@ export default function ClientsPage() {
   }
 
   const businessContacts = availableContacts.filter(c => c.business_id === form.businessId);
+
+  async function generatePaymentLink(client: CRMClient) {
+    if (!client.monthly_value) return alert("Set a monthly value on this client before generating a payment link.");
+    setGeneratingLinkFor(client.id);
+    try {
+      const r = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: client.id }),
+      });
+      const data = await r.json();
+      if (!r.ok) return alert(data.error ?? "Failed to generate link");
+      setPaymentLink({ url: data.url, businessName: client.business?.name ?? "client" });
+      // Refresh the customer ID on the card without a full reload
+      setClients(prev => prev.map(c => c.id === client.id ? { ...c, stripe_customer_id: data.customerId } : c));
+    } finally {
+      setGeneratingLinkFor(null);
+    }
+  }
 
   async function createClient() {
     if (!form.businessId) return;
@@ -126,6 +155,11 @@ export default function ClientsPage() {
                   <span className={clsx("badge text-xs", STATUS_COLORS[client.billing_status] ?? "badge-neutral")}>
                     {client.billing_status}
                   </span>
+                  {client.stripe_subscription_status && (
+                    <span className={clsx("badge text-xs", STRIPE_STATUS_STYLES[client.stripe_subscription_status] ?? "badge-neutral")}>
+                      stripe: {client.stripe_subscription_status}
+                    </span>
+                  )}
                   {client.service_tier && (
                     <span className="badge badge-orange text-xs">{TIER_LABELS[client.service_tier] ?? client.service_tier}</span>
                   )}
@@ -143,16 +177,60 @@ export default function ClientsPage() {
                 {client.contract_end && (
                   <span>Ends {client.contract_end}</span>
                 )}
-                {client.assigned_agents && client.assigned_agents.length > 0 && (
-                  <div className="flex items-center gap-1 ml-auto">
-                    {client.assigned_agents.map(agent => (
-                      <AgentBadge key={agent} agent={agent as Agent} size="sm" />
-                    ))}
-                  </div>
-                )}
+                <div className="ml-auto flex items-center gap-2">
+                  {client.assigned_agents && client.assigned_agents.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      {client.assigned_agents.map(agent => (
+                        <AgentBadge key={agent} agent={agent as Agent} size="sm" />
+                      ))}
+                    </div>
+                  )}
+                  {!client.stripe_subscription_id && (
+                    <button
+                      onClick={() => generatePaymentLink(client)}
+                      disabled={generatingLinkFor === client.id}
+                      className="text-xs text-brand-orange underline underline-offset-2 hover:opacity-70 disabled:opacity-40 whitespace-nowrap"
+                    >
+                      {generatingLinkFor === client.id ? "Generating…" : "Send payment link"}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {paymentLink && (
+        <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-brand-black">Payment link ready</h2>
+              <button onClick={() => setPaymentLink(null)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
+            </div>
+            <p className="text-sm text-brand-muted mb-3">
+              Send this link to <span className="font-medium text-brand-black">{paymentLink.businessName}</span> to set up their monthly subscription.
+            </p>
+            <div className="bg-gray-50 border border-brand-border rounded-lg px-3 py-2 text-xs text-brand-black font-mono break-all mb-4">
+              {paymentLink.url}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { navigator.clipboard.writeText(paymentLink.url); }}
+                className="btn-primary flex-1 text-sm"
+              >
+                Copy link
+              </button>
+              <a
+                href={paymentLink.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-ghost flex-1 text-sm text-center"
+              >
+                Preview
+              </a>
+            </div>
+          </div>
         </div>
       )}
 
