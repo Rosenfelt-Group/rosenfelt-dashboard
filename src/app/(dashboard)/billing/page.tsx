@@ -68,6 +68,7 @@ function RefundModal({ invoice, mode, onClose, onDone }: RefundModalProps) {
   const [reason, setReason] = useState("requested_by_customer");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [succeeded, setSucceeded] = useState<string | null>(null);
 
   const total = invoice.amount_paid / 100;
 
@@ -92,59 +93,71 @@ function RefundModal({ invoice, mode, onClose, onDone }: RefundModalProps) {
     const data = await r.json();
     setLoading(false);
     if (!r.ok) { setError(data.error ?? "Refund failed"); return; }
-    onDone();
+    const refundedAmt = data.refund?.amount ? fmt(data.refund.amount) : (amtNum ? `$${amtNum.toFixed(2)}` : fmt(invoice.amount_paid));
+    setSucceeded(refundedAmt);
+    setTimeout(onDone, 2000);
   }
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-xl">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-brand-black">Refund invoice</h2>
-          <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
-        </div>
-        <p className="text-sm text-brand-muted mb-4">
-          Invoice total: <span className="font-medium text-brand-black">{fmt(invoice.amount_paid)}</span>
-        </p>
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs text-brand-muted mb-1 block">Amount (leave blank for full refund)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              max={total}
-              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-              placeholder={`${total.toFixed(2)}`}
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-            />
+        {succeeded ? (
+          <div className="text-center py-4">
+            <div className="text-3xl mb-3">✓</div>
+            <p className="text-sm font-semibold text-brand-black">Refund issued</p>
+            <p className="text-xs text-brand-muted mt-1">{succeeded} will be returned to the customer.</p>
           </div>
-          <div>
-            <label className="text-xs text-brand-muted mb-1 block">Reason</label>
-            <select
-              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-              value={reason}
-              onChange={e => setReason(e.target.value)}
-            >
-              <option value="requested_by_customer">Requested by customer</option>
-              <option value="duplicate">Duplicate</option>
-              <option value="fraudulent">Fraudulent</option>
-            </select>
-          </div>
-          {error && <p className="text-xs text-red-500">{error}</p>}
-        </div>
-        <div className="flex gap-2 mt-5">
-          <button onClick={onClose} className="btn-ghost flex-1">Cancel</button>
-          <button
-            onClick={submit}
-            disabled={loading || !invoicePaymentIntentId(invoice)}
-            className="btn-primary flex-1 disabled:opacity-50"
-          >
-            {loading ? "Refunding…" : "Refund"}
-          </button>
-        </div>
-        {!invoicePaymentIntentId(invoice) && (
-          <p className="text-xs text-brand-muted mt-2 text-center">No payment intent attached to this invoice.</p>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-brand-black">Refund invoice</h2>
+              <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
+            </div>
+            <p className="text-sm text-brand-muted mb-4">
+              Invoice total: <span className="font-medium text-brand-black">{fmt(invoice.amount_paid)}</span>
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-brand-muted mb-1 block">Amount (leave blank for full refund)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max={total}
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                  placeholder={`${total.toFixed(2)}`}
+                  value={amount}
+                  onChange={e => setAmount(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-brand-muted mb-1 block">Reason</label>
+                <select
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                  value={reason}
+                  onChange={e => setReason(e.target.value)}
+                >
+                  <option value="requested_by_customer">Requested by customer</option>
+                  <option value="duplicate">Duplicate</option>
+                  <option value="fraudulent">Fraudulent</option>
+                </select>
+              </div>
+              {error && <p className="text-xs text-red-500">{error}</p>}
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={onClose} className="btn-ghost flex-1">Cancel</button>
+              <button
+                onClick={submit}
+                disabled={loading || !invoicePaymentIntentId(invoice)}
+                className="btn-primary flex-1 disabled:opacity-50"
+              >
+                {loading ? "Refunding…" : "Refund"}
+              </button>
+            </div>
+            {!invoicePaymentIntentId(invoice) && (
+              <p className="text-xs text-brand-muted mt-2 text-center">No payment intent attached to this invoice.</p>
+            )}
+          </>
         )}
       </div>
     </div>
