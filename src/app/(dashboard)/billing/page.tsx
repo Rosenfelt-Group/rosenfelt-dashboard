@@ -42,7 +42,7 @@ function fmtDate(ts: number) {
 }
 function customerName(c: Stripe.Customer | Stripe.DeletedCustomer | string | null): string {
   if (!c || typeof c === "string") return c ?? "—";
-  if ("deleted" in c) return c.email ?? c.id;
+  if ("deleted" in c) return c.id;
   return c.name || c.email || c.id;
 }
 
