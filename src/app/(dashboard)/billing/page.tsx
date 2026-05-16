@@ -4,7 +4,7 @@ import clsx from "clsx";
 import type Stripe from "stripe";
 
 type StripeMode = "live" | "test";
-type Tab = "subscriptions" | "invoices" | "customers";
+type Tab = "subscriptions" | "invoices" | "customers" | "refunds";
 
 interface DashboardData {
   mode: StripeMode;
@@ -12,7 +12,8 @@ interface DashboardData {
   customers: Stripe.Customer[];
   subscriptions: Stripe.Subscription[];
   invoices: Stripe.Invoice[];
-  stats: { customerCount: number; activeSubCount: number; failedInvoices: number };
+  refunds: Stripe.Refund[];
+  stats: { customerCount: number; activeSubCount: number; failedInvoices: number; refundCount: number };
 }
 
 const SUB_STATUS_STYLES: Record<string, string> = {
@@ -32,6 +33,20 @@ const INV_STATUS_STYLES: Record<string, string> = {
   void:          "badge-neutral",
   uncollectible: "badge-error",
   draft:         "badge-neutral",
+};
+
+const REFUND_STATUS_STYLES: Record<string, string> = {
+  succeeded:       "badge-success",
+  pending:         "badge-warning",
+  requires_action: "badge-warning",
+  failed:          "badge-error",
+  canceled:        "badge-neutral",
+};
+
+const REFUND_REASON_LABELS: Record<string, string> = {
+  requested_by_customer: "Requested by customer",
+  duplicate:             "Duplicate",
+  fraudulent:            "Fraudulent",
 };
 
 function fmt(cents: number) {
@@ -276,7 +291,7 @@ export default function BillingPage() {
             { label: "MRR",               value: fmt(data.mrr) },
             { label: "Active subs",        value: String(data.stats.activeSubCount) },
             { label: "Customers",          value: String(data.stats.customerCount) },
-            { label: "Failed invoices",    value: String(data.stats.failedInvoices) },
+            { label: "Refunds",            value: String(data.stats.refundCount) },
           ].map(s => (
             <div key={s.label} className="card">
               <p className="text-xs text-brand-muted">{s.label}</p>
@@ -288,7 +303,7 @@ export default function BillingPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4 border-b border-brand-border">
-        {(["subscriptions", "invoices", "customers"] as Tab[]).map(t => (
+        {(["subscriptions", "invoices", "customers", "refunds"] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -303,6 +318,7 @@ export default function BillingPage() {
             {t === "subscriptions" && data && <span className="ml-1.5 text-xs opacity-60">({activeSubs.length})</span>}
             {t === "invoices" && data && <span className="ml-1.5 text-xs opacity-60">({data.invoices.length})</span>}
             {t === "customers" && data && <span className="ml-1.5 text-xs opacity-60">({data.stats.customerCount})</span>}
+            {t === "refunds" && data && <span className="ml-1.5 text-xs opacity-60">({data.stats.refundCount})</span>}
           </button>
         ))}
       </div>
@@ -456,6 +472,50 @@ export default function BillingPage() {
                   <span>{custSubs.length} subscription{custSubs.length !== 1 ? "s" : ""}</span>
                   {cust.created && <span>Since {fmtDate(cust.created)}</span>}
                   <span className="ml-auto font-mono opacity-60">{cust.id}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Refunds */}
+      {!loading && tab === "refunds" && data && (
+        <div className="space-y-3">
+          {data.refunds.length === 0 ? (
+            <div className="card text-center py-10 text-sm text-brand-muted">No refunds yet.</div>
+          ) : data.refunds.map(refund => {
+            const pi = refund.payment_intent;
+            const piId = typeof pi === "string" ? pi : pi?.id ?? null;
+            return (
+              <div key={refund.id} className="card">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <p className="text-sm font-semibold text-brand-black">{fmt(refund.amount)}</p>
+                    <p className="text-xs text-brand-muted mt-0.5">
+                      {REFUND_REASON_LABELS[refund.reason ?? ""] ?? refund.reason ?? "No reason"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={clsx("badge text-xs", REFUND_STATUS_STYLES[refund.status ?? ""] ?? "badge-neutral")}>
+                      {refund.status}
+                    </span>
+                    {piId && (
+                      <a
+                        href={`${stripeBase}/payments/${piId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-brand-muted underline underline-offset-2 hover:text-brand-black"
+                      >
+                        Payment ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 mt-3 pt-3 border-t border-brand-border text-xs text-brand-muted">
+                  {refund.created && <span>{fmtDate(refund.created)}</span>}
+                  <span className="font-mono opacity-60">{refund.id}</span>
+                  {piId && <span className="ml-auto font-mono opacity-60">{piId}</span>}
                 </div>
               </div>
             );

@@ -5,10 +5,11 @@ export async function GET(req: NextRequest) {
   const mode = (req.nextUrl.searchParams.get("mode") ?? "live") as StripeMode;
   const stripe = getStripe(mode);
 
-  const [customers, subscriptions, invoices] = await Promise.all([
+  const [customers, subscriptions, invoices, refunds] = await Promise.all([
     stripe.customers.list({ limit: 100, expand: ["data.subscriptions"] }),
     stripe.subscriptions.list({ limit: 100, status: "all", expand: ["data.customer"] }),
     stripe.invoices.list({ limit: 30, expand: ["data.customer", "data.payments"] }),
+    stripe.refunds.list({ limit: 50, expand: ["data.payment_intent"] }),
   ]);
 
   const activeSubs  = subscriptions.data.filter(s => s.status === "active" || s.status === "trialing");
@@ -30,10 +31,12 @@ export async function GET(req: NextRequest) {
     customers: customers.data,
     subscriptions: subscriptions.data,
     invoices: invoices.data,
+    refunds: refunds.data,
     stats: {
       customerCount:    customers.data.length,
       activeSubCount:   activeSubs.length,
       failedInvoices:   invoices.data.filter(i => i.status === "uncollectible" || (i.attempt_count ?? 0) > 0 && i.status === "open").length,
+      refundCount:      refunds.data.length,
     },
   });
 }
