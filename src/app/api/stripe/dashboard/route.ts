@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   const [customers, subscriptions, invoices] = await Promise.all([
     stripe.customers.list({ limit: 100, expand: ["data.subscriptions"] }),
     stripe.subscriptions.list({ limit: 100, status: "all", expand: ["data.customer"] }),
-    stripe.invoices.list({ limit: 30, expand: ["data.customer"] }),
+    stripe.invoices.list({ limit: 30, expand: ["data.customer", "data.payments"] }),
   ]);
 
   const activeSubs  = subscriptions.data.filter(s => s.status === "active" || s.status === "trialing");

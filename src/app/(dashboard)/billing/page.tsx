@@ -46,6 +46,17 @@ function customerName(c: Stripe.Customer | Stripe.DeletedCustomer | string | nul
   return c.name || c.email || c.id;
 }
 
+// payment_intent and current_period_end were removed from top-level types in 2026-04-22.dahlia
+// but still exist at runtime; access via explicit cast.
+function invoicePaymentIntentId(inv: Stripe.Invoice): string | null {
+  const pi = inv.payments?.data?.[0]?.payment.payment_intent;
+  if (pi) return typeof pi === "string" ? pi : pi.id;
+  return (inv as unknown as Record<string, string>).payment_intent ?? null;
+}
+function subPeriodEnd(sub: Stripe.Subscription): number | null {
+  return (sub as unknown as Record<string, number>).current_period_end ?? null;
+}
+
 interface RefundModalProps {
   invoice: Stripe.Invoice;
   mode: StripeMode;
@@ -72,7 +83,7 @@ function RefundModal({ invoice, mode, onClose, onDone }: RefundModalProps) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        paymentIntentId: invoice.payment_intent,
+        paymentIntentId: invoicePaymentIntentId(invoice),
         amount: amtNum,
         reason,
         mode,
@@ -126,13 +137,13 @@ function RefundModal({ invoice, mode, onClose, onDone }: RefundModalProps) {
           <button onClick={onClose} className="btn-ghost flex-1">Cancel</button>
           <button
             onClick={submit}
-            disabled={loading || !invoice.payment_intent}
+            disabled={loading || !invoicePaymentIntentId(invoice)}
             className="btn-primary flex-1 disabled:opacity-50"
           >
             {loading ? "Refunding…" : "Refund"}
           </button>
         </div>
-        {!invoice.payment_intent && (
+        {!invoicePaymentIntentId(invoice) && (
           <p className="text-xs text-brand-muted mt-2 text-center">No payment intent attached to this invoice.</p>
         )}
       </div>
@@ -330,8 +341,8 @@ export default function BillingPage() {
                 </div>
                 <div className="flex items-center gap-4 mt-3 pt-3 border-t border-brand-border text-xs text-brand-muted flex-wrap">
                   <span>Started {fmtDate(sub.start_date)}</span>
-                  {sub.current_period_end && (
-                    <span>Next billing {fmtDate(sub.current_period_end)}</span>
+                  {subPeriodEnd(sub) && (
+                    <span>Next billing {fmtDate(subPeriodEnd(sub)!)}</span>
                   )}
                   <span className="ml-auto font-mono text-brand-muted opacity-60">{sub.id}</span>
                 </div>
@@ -347,7 +358,7 @@ export default function BillingPage() {
           {data.invoices.length === 0 ? (
             <div className="card text-center py-10 text-sm text-brand-muted">No invoices yet.</div>
           ) : data.invoices.map(inv => {
-            const canRefund = inv.status === "paid" && !!inv.payment_intent;
+            const canRefund = inv.status === "paid" && !!invoicePaymentIntentId(inv);
             return (
               <div key={inv.id} className="card">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
