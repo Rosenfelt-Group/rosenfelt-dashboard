@@ -5,6 +5,7 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
+import { SupabaseSqlQuery } from "@/components/engineering/SupabaseSqlQuery";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -559,6 +560,8 @@ function SupabaseTab() {
           </div>
         </div>
       )}
+
+      <SupabaseSqlQuery />
     </div>
   );
 }
