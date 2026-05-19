@@ -21,7 +21,8 @@ async function fetchTerminalToken(): Promise<string> {
 export default function TerminalPanel() {
   const termRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(true);
+  const [connecting, setConnecting] = useState(false);
+  const [started, setStarted] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
 
   const connect = useCallback(async () => {
@@ -111,9 +112,13 @@ export default function TerminalPanel() {
   }, []);
 
   useEffect(() => {
-    connect();
     return () => cleanupRef.current?.();
-  }, [connect]);
+  }, []);
+
+  function handleStart() {
+    setStarted(true);
+    connect();
+  }
 
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900 overflow-hidden">
@@ -125,16 +130,18 @@ export default function TerminalPanel() {
         <span className="ml-2 text-xs text-slate-400 font-mono flex-1">
           jordan@rosably-vps
         </span>
-        {connecting && (
+        {started && connecting && (
           <span className="text-[10px] text-slate-500 animate-pulse">connecting…</span>
         )}
-        <button
-          onClick={() => { cleanupRef.current?.(); connect(); }}
-          className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors ml-2"
-          title="Reconnect"
-        >
-          ↺ reconnect
-        </button>
+        {started && (
+          <button
+            onClick={() => { cleanupRef.current?.(); connect(); }}
+            className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors ml-2"
+            title="Reconnect"
+          >
+            ↺ reconnect
+          </button>
+        )}
       </div>
 
       {error ? (
@@ -148,7 +155,18 @@ export default function TerminalPanel() {
           </button>
         </div>
       ) : (
-        <div className="p-2">
+        <div className="relative p-2">
+          {!started && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-900 rounded">
+              <span className="text-slate-400 text-xs font-mono">jordan@rosably-vps</span>
+              <button
+                onClick={handleStart}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm rounded transition-colors border border-slate-600"
+              >
+                Start Session
+              </button>
+            </div>
+          )}
           <div ref={termRef} className="h-[480px] w-full" />
         </div>
       )}
