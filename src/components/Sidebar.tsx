@@ -42,6 +42,7 @@ const nav: NavItem[] = [
   { label: "Intelligence", href: "/agents/intelligence", icon: "brain",      module: "engineering" },
   { label: "Tasks",        href: "/tasks",               icon: "check",      module: "engineering" },
   { label: "Chat",         href: "/chat",                icon: "chat",       module: "engineering", requiredPermission: "use_chat" },
+  { label: "Terminal",     href: "/engineering",         icon: "terminal",   module: "engineering", requiredPermission: "manage_users" },
 
   // Security
   { label: "Users",        href: "/users",               icon: "shield",     module: "security", requiredPermission: "manage_users" },
@@ -83,6 +84,7 @@ function Icon({ name }: { name: string }) {
     activity: <><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></>,
     wrench:   <><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.4-2.4z"/></>,
     lock:     <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
+    terminal: <><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></>,
   };
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
