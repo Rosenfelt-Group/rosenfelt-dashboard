@@ -957,7 +957,6 @@ export default function BacklogPage() {
       if (!res.ok) {
         return data.error || `Jordan request failed (HTTP ${res.status})`;
       }
-      await reload();
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : "Network error";
