@@ -26,6 +26,21 @@ interface DailyRow {
   cost_usd: number;
 }
 
+function getETDateString(d: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(d);
+}
+
+function getMinDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 30);
+  return getETDateString(d);
+}
+
+function formatDisplayDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
 function fmt(n: number, decimals = 4) {
   return `$${n.toFixed(decimals)}`;
 }
@@ -103,15 +118,23 @@ function BudgetInput({ agent, current, onSave }: { agent: Agent; current: number
 }
 
 export default function CostPage() {
+  const todayET = getETDateString();
+
+  const [selectedDate, setSelectedDate] = useState<string>(todayET);
+  const selectedDateRef = useRef<string>(todayET);
   const [agents,  setAgents]  = useState<AgentSummary[]>([]);
   const [daily,   setDaily]   = useState<DailyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
   const seenIds = useRef<Set<string>>(new Set());
 
+  useEffect(() => { selectedDateRef.current = selectedDate; }, [selectedDate]);
+
+  const isViewingToday = selectedDate === getETDateString();
+
   const load = useCallback(async () => {
     try {
-      const res  = await fetch("/api/usage?days=7");
+      const res  = await fetch(`/api/usage?date=${selectedDate}`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       seenIds.current.clear();
@@ -123,11 +146,11 @@ export default function CostPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedDate]);
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 600_000); // 10-min fallback in case WS drops
+    const interval = setInterval(load, 600_000);
 
     const channel = supabase
       .channel("token-usage-inserts")
@@ -141,10 +164,42 @@ export default function CostPage() {
           };
           if (seenIds.current.has(row.id)) return;
           seenIds.current.add(row.id);
-          const todayDate = new Date().toISOString().slice(0, 10);
-          const rowDate   = row.created_at.slice(0, 10);
-          const isToday   = rowDate === todayDate;
-          const cost      = Number(row.cost_usd ?? 0);
+
+          const rowDate  = getETDateString(new Date(row.created_at));
+          const cost     = Number(row.cost_usd ?? 0);
+          const viewing  = selectedDateRef.current;
+          const isToday  = rowDate === getETDateString();
+
+          // Always update the 30-day breakdown table
+          setDaily(prev => {
+            if (prev.some(r => r.date === rowDate && r.agent === row.agent)) {
+              return prev.map(r =>
+                r.date === rowDate && r.agent === row.agent
+                  ? {
+                      ...r,
+                      calls:             r.calls + 1,
+                      prompt_tokens:     r.prompt_tokens     + (row.prompt_tokens     ?? 0),
+                      completion_tokens: r.completion_tokens + (row.completion_tokens ?? 0),
+                      total_tokens:      r.total_tokens      + (row.total_tokens      ?? 0),
+                      cost_usd:          r.cost_usd          + cost,
+                    }
+                  : r
+              );
+            }
+            const entry: DailyRow = {
+              date: rowDate, agent: row.agent as Agent, calls: 1,
+              prompt_tokens: row.prompt_tokens ?? 0,
+              completion_tokens: row.completion_tokens ?? 0,
+              total_tokens: row.total_tokens ?? 0,
+              cost_usd: cost,
+            };
+            return [entry, ...prev].sort((a, b) =>
+              b.date.localeCompare(a.date) || a.agent.localeCompare(b.agent)
+            );
+          });
+
+          // Only update summary cards when viewing today
+          if (viewing !== getETDateString()) return;
 
           setAgents(prev => prev.map(a => {
             if (a.agent !== row.agent) return a;
@@ -159,35 +214,6 @@ export default function CostPage() {
               } : {}),
             };
           }));
-
-          setDaily(prev => {
-            const hit = prev.find(r => r.date === rowDate && r.agent === row.agent);
-            if (hit) {
-              return prev.map(r =>
-                r.date === rowDate && r.agent === row.agent
-                  ? {
-                      ...r,
-                      calls:             r.calls + 1,
-                      prompt_tokens:     r.prompt_tokens     + (row.prompt_tokens     ?? 0),
-                      completion_tokens: r.completion_tokens + (row.completion_tokens ?? 0),
-                      total_tokens:      r.total_tokens      + (row.total_tokens      ?? 0),
-                      cost_usd:          r.cost_usd          + cost,
-                    }
-                  : r
-              );
-            }
-            // First call of this date/agent combo — add a new row to the breakdown
-            const entry: DailyRow = {
-              date: rowDate, agent: row.agent as Agent, calls: 1,
-              prompt_tokens: row.prompt_tokens ?? 0,
-              completion_tokens: row.completion_tokens ?? 0,
-              total_tokens: row.total_tokens ?? 0,
-              cost_usd: cost,
-            };
-            return [entry, ...prev].sort((a, b) =>
-              b.date.localeCompare(a.date) || a.agent.localeCompare(b.agent)
-            );
-          });
         }
       )
       .subscribe();
@@ -214,21 +240,64 @@ export default function CostPage() {
 
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8 max-w-5xl">
-      <div className="mb-5 flex items-start justify-between">
+      {/* ── Header ── */}
+      <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-brand-black">Cost</h1>
           <p className="text-sm text-brand-muted mt-0.5">
-            API usage and spend — today &amp; last 7 days
+            API usage and spend — last 30 days
           </p>
         </div>
-        {!loading && !error && (
-          <div className="text-right">
-            <p className="text-xs text-brand-muted">Today</p>
-            <p className="text-lg font-semibold text-brand-black">{fmt(totalTodayCost)}</p>
-            <p className="text-xs text-brand-muted mt-0.5">7-day: {fmt(totalWeekCost, 2)}</p>
+
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          {/* Date picker */}
+          <div className="flex items-center gap-2">
+            {!isViewingToday && (
+              <button
+                onClick={() => setSelectedDate(getETDateString())}
+                className="text-xs px-3 py-1.5 rounded-lg bg-brand-orange text-white hover:bg-brand-orange/90 font-medium transition-colors"
+              >
+                Today
+              </button>
+            )}
+            <input
+              type="date"
+              value={selectedDate}
+              min={getMinDate()}
+              max={getETDateString()}
+              onChange={e => {
+                if (e.target.value) {
+                  setLoading(true);
+                  setSelectedDate(e.target.value);
+                }
+              }}
+              className="text-xs px-2 py-1.5 border border-brand-border rounded-lg text-brand-black bg-white focus:outline-none focus:ring-1 focus:ring-brand-orange"
+            />
           </div>
-        )}
+
+          {/* Summary totals */}
+          {!loading && !error && (
+            <div className="text-right">
+              <p className="text-xs text-brand-muted">{isViewingToday ? "Today" : formatDisplayDate(selectedDate)}</p>
+              <p className="text-lg font-semibold text-brand-black">{fmt(totalTodayCost)}</p>
+              <p className="text-xs text-brand-muted mt-0.5">7-day: {fmt(totalWeekCost, 2)}</p>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* ── Historical date banner ── */}
+      {!isViewingToday && !loading && (
+        <div className="mb-4 flex items-center justify-between px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
+          <span>Viewing spend for <strong>{formatDisplayDate(selectedDate)}</strong> — live updates paused</span>
+          <button
+            onClick={() => setSelectedDate(getETDateString())}
+            className="underline font-medium hover:text-amber-900 ml-3 shrink-0"
+          >
+            Back to today
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -245,13 +314,13 @@ export default function CostPage() {
                 <div className="flex items-center gap-2 mb-3">
                   <AgentBadge agent={a.agent} size="sm" />
                   <span className="text-sm font-medium text-brand-black capitalize">{a.agent}</span>
-                  <span className="ml-auto text-xs text-brand-muted">{a.callsToday} calls today</span>
+                  <span className="ml-auto text-xs text-brand-muted">{a.callsToday} calls</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <div className="bg-brand-offwhite rounded-lg p-2 text-center">
                     <p className="text-base font-semibold text-brand-black">{fmt(a.todayCost)}</p>
-                    <p className="text-[10px] text-brand-muted">today</p>
+                    <p className="text-[10px] text-brand-muted">{isViewingToday ? "today" : "selected day"}</p>
                   </div>
                   <div className="bg-brand-offwhite rounded-lg p-2 text-center">
                     <p className="text-base font-semibold text-brand-black">{fmt(a.weekCost, 2)}</p>
@@ -259,7 +328,7 @@ export default function CostPage() {
                   </div>
                   <div className="bg-brand-offwhite rounded-lg p-2 text-center">
                     <p className="text-base font-semibold text-brand-black">{fmtTokens(a.todayTokens)}</p>
-                    <p className="text-[10px] text-brand-muted">tokens today</p>
+                    <p className="text-[10px] text-brand-muted">{isViewingToday ? "tokens today" : "tokens"}</p>
                   </div>
                   <div className="bg-brand-offwhite rounded-lg p-2 text-center">
                     <p className="text-base font-semibold text-brand-black">{fmtTokens(a.weekTokens)}</p>
@@ -276,7 +345,7 @@ export default function CostPage() {
           {/* ── Daily breakdown table ── */}
           <div className="card p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-brand-border">
-              <h2 className="text-sm font-medium text-brand-black">Daily breakdown — last 7 days</h2>
+              <h2 className="text-sm font-medium text-brand-black">Daily breakdown — last 30 days</h2>
             </div>
             {daily.length === 0 ? (
               <p className="text-xs text-brand-muted text-center py-10">No usage recorded yet</p>
@@ -296,7 +365,13 @@ export default function CostPage() {
                   </thead>
                   <tbody>
                     {daily.map((row, i) => (
-                      <tr key={i} className="border-b border-brand-border last:border-0 hover:bg-brand-offwhite/50">
+                      <tr
+                        key={i}
+                        className={clsx(
+                          "border-b border-brand-border last:border-0 hover:bg-brand-offwhite/50",
+                          row.date === selectedDate && "bg-amber-50/60"
+                        )}
+                      >
                         <td className="px-4 py-2.5 text-brand-black">{row.date}</td>
                         <td className="px-4 py-2.5">
                           <AgentBadge agent={row.agent} size="sm" />
