@@ -108,27 +108,10 @@ export function SupabaseSqlQuery() {
   useEffect(() => {
     async function load() {
       try {
-        const [tblRes, colRes] = await Promise.all([
-          fetch("/api/supabase/query", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sql: "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name" }),
-          }),
-          fetch("/api/supabase/query", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sql: "SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position" }),
-          }),
-        ]);
-        const tblData = await tblRes.json();
-        const colData = await colRes.json();
-
-        const tblNames: string[] = (tblData.rows ?? []).map((r: unknown[]) => r[0] as string).filter(Boolean);
-        const colMap: Record<string, SchemaColumn[]> = {};
-        for (const name of tblNames) colMap[name] = [];
-        for (const row of (colData.rows ?? []) as string[][]) {
-          const [t, c, dt] = row;
-          if (colMap[t]) colMap[t].push({ name: c, type: dt });
-        }
-        setTables(tblNames.map(name => ({ name, columns: colMap[name] ?? [] })));
+        const res = await fetch("/api/supabase/schema");
+        if (!res.ok) return;
+        const { tables: t } = await res.json();
+        if (Array.isArray(t)) setTables(t);
       } catch {}
     }
     load();

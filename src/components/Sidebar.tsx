@@ -246,13 +246,13 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
                         title={collapsed ? item.label : undefined}
                         className={clsx(
                           "flex items-center gap-2.5 rounded-lg transition-colors",
-                          collapsed ? "justify-center p-2.5" : "px-3 py-2",
+                          collapsed ? "justify-center p-2" : "px-3 py-2",
                           active
                             ? "bg-orange-50 text-brand-orange"
                             : "text-brand-muted hover:bg-brand-offwhite hover:text-brand-black"
                         )}
                       >
-                        <Icon name={item.icon} />
+                        <Icon name={item.icon} size={collapsed ? 20 : 18} />
                         {!collapsed && (
                           <span className={clsx("text-sm truncate", active && "font-medium text-brand-orange")}>
                             {item.label}
@@ -275,10 +275,10 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           title={collapsed ? "Sign out" : undefined}
           className={clsx(
             "flex items-center rounded-lg text-sm text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors w-full",
-            collapsed ? "justify-center p-2.5" : "gap-2.5 px-3 py-2"
+            collapsed ? "justify-center p-2" : "gap-2.5 px-3 py-2"
           )}
         >
-          <Icon name="logOut" />
+          <Icon name="logOut" size={collapsed ? 20 : 18} />
           {!collapsed && "Sign out"}
         </button>
       </div>
