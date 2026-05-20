@@ -23,6 +23,7 @@ const MODULES = [
   { key: "salesMarketing", label: "Sales & Marketing" },
   { key: "accounting",     label: "Accounting" },
   { key: "agents",         label: "Agents" },
+  { key: "documentation",  label: "Documentation" },
   { key: "security",       label: "Security" },
 ];
 
@@ -35,9 +36,8 @@ const NAV: NavItem[] = [
   { label: "Status",       href: "/status",              icon: "activity",   module: "systems" },
   { label: "Backlog",      href: "/backlog",             icon: "wrench",     module: "systems" },
   { label: "Tasks",        href: "/tasks",               icon: "check",      module: "systems" },
-  { label: "Documents",    href: "/documents",           icon: "folder",     module: "systems" },
-  { label: "Images",       href: "/images",              icon: "image",      module: "systems" },
   { label: "Backup",       href: "/backup",              icon: "archive",    module: "systems" },
+  { label: "SQL",          href: "/sql",                 icon: "database",   module: "systems",       requiredPermission: "manage_users" },
   { label: "Terminal",     href: "/engineering",         icon: "terminal",   module: "systems",       requiredPermission: "manage_users" },
 
   // Sales & Marketing
@@ -53,6 +53,10 @@ const NAV: NavItem[] = [
   { label: "Chat",         href: "/chat",                icon: "chat",       module: "agents",  requiredPermission: "use_chat" },
   { label: "Intelligence", href: "/agents/intelligence", icon: "brain",      module: "agents" },
   { label: "History",      href: "/agents/history",      icon: "history",    module: "agents" },
+
+  // Documentation
+  { label: "Documents",    href: "/documents",           icon: "folder",     module: "documentation" },
+  { label: "Images",       href: "/images",              icon: "image",      module: "documentation" },
 
   // Security
   { label: "Users",        href: "/users",               icon: "shield",     module: "security", requiredPermission: "manage_users" },
@@ -87,6 +91,7 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     chevronRight: <><polyline points="9 18 15 12 9 6"/></>,
     menu:         <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>,
     x:            <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+    database:     <><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></>,
     logOut:       <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
   };
   return (

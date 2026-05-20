@@ -5,7 +5,6 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
-import { SupabaseSqlQuery } from "@/components/engineering/SupabaseSqlQuery";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -561,7 +560,10 @@ function SupabaseTab() {
         </div>
       )}
 
-      <SupabaseSqlQuery />
+      <div className="card flex items-center justify-between">
+        <p className="text-sm text-brand-muted">Run queries against the database in the dedicated SQL page.</p>
+        <Link href="/sql" className="text-xs text-brand-orange hover:underline flex-shrink-0 ml-4">Open SQL →</Link>
+      </div>
     </div>
   );
 }
