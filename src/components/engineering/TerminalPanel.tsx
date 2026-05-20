@@ -20,6 +20,7 @@ async function fetchTerminalToken(): Promise<string> {
 
 export default function TerminalPanel() {
   const termRef = useRef<HTMLDivElement>(null);
+  const [launched, setLaunched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -111,9 +112,10 @@ export default function TerminalPanel() {
   }, []);
 
   useEffect(() => {
+    if (!launched) return;
     connect();
     return () => cleanupRef.current?.();
-  }, [connect]);
+  }, [launched, connect]);
 
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900 overflow-hidden">
@@ -128,16 +130,35 @@ export default function TerminalPanel() {
         {connecting && (
           <span className="text-[10px] text-slate-500 animate-pulse">connecting…</span>
         )}
-        <button
-          onClick={() => { cleanupRef.current?.(); connect(); }}
-          className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors ml-2"
-          title="Reconnect"
-        >
-          ↺ reconnect
-        </button>
+        {launched && (
+          <button
+            onClick={() => { cleanupRef.current?.(); connect(); }}
+            className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors ml-2"
+            title="Reconnect"
+          >
+            ↺ reconnect
+          </button>
+        )}
       </div>
 
-      {error ? (
+      {!launched ? (
+        <div className="flex flex-col items-center justify-center h-[480px] gap-4">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="4 17 10 11 4 5"/>
+              <line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+            <p className="text-sm text-slate-400 font-mono">Secure shell — Jordan VPS</p>
+            <p className="text-xs text-slate-600">Session not started</p>
+          </div>
+          <button
+            onClick={() => setLaunched(true)}
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm rounded-md transition-colors font-mono"
+          >
+            Launch Terminal
+          </button>
+        </div>
+      ) : error ? (
         <div className="flex flex-col items-center justify-center h-[480px] gap-3">
           <p className="text-red-400 text-sm font-mono">{error}</p>
           <button
