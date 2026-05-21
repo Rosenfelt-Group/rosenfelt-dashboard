@@ -85,10 +85,10 @@ export async function GET(req: NextRequest) {
       .select("role, content, created_at")
       .eq("session_id", `${agent}_${chatId}`)
       .eq("agent", agent)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(50);
 
-    return NextResponse.json(data ?? []);
+    return NextResponse.json((data ?? []).reverse());
   } catch {
     return NextResponse.json([], { status: 500 });
   }
