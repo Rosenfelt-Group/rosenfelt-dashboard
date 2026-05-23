@@ -2,7 +2,109 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
+import { supabase } from "@/lib/supabase";
 import { Sidebar } from "./Sidebar";
+
+// ── Audit alerts (Casey) ──────────────────────────────────────────────────────
+
+interface AuditAlert {
+  id: string;
+  title: string;
+  description: string;
+  severity: string;
+  created_at: string;
+}
+
+function useAuditAlerts(): { alerts: AuditAlert[]; dismiss: (id: string) => Promise<void> } {
+  const [alerts, setAlerts] = useState<AuditAlert[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function fetchAlerts() {
+      try {
+        const { data, error } = await supabase
+          .from("audit_alerts")
+          .select("id,title,description,severity,created_at")
+          .is("resolved_at", null)
+          .order("created_at", { ascending: false });
+        if (!error && mounted) setAlerts((data as AuditAlert[]) ?? []);
+      } catch {}
+    }
+
+    fetchAlerts();
+
+    const channel = supabase
+      .channel("audit-alerts-banner")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "audit_alerts" },
+        (payload) => {
+          const row = payload.new as AuditAlert & { resolved_at: string | null };
+          if (row.resolved_at) return;
+          setAlerts(prev => prev.some(a => a.id === row.id) ? prev : [row, ...prev]);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "audit_alerts" },
+        (payload) => {
+          const row = payload.new as AuditAlert & { resolved_at: string | null };
+          if (row.resolved_at) {
+            setAlerts(prev => prev.filter(a => a.id !== row.id));
+          } else {
+            setAlerts(prev => prev.map(a => a.id === row.id ? { ...a, ...row } : a));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  async function dismiss(id: string): Promise<void> {
+    setAlerts(prev => prev.filter(a => a.id !== id));
+    try {
+      await fetch(`/api/audit-alerts/${id}/resolve`, { method: "PATCH" });
+    } catch {}
+  }
+
+  return { alerts, dismiss };
+}
+
+function AuditAlertBanners() {
+  const { alerts, dismiss } = useAuditAlerts();
+  if (alerts.length === 0) return null;
+  return (
+    <>
+      {alerts.map(alert => (
+        <div
+          key={alert.id}
+          className="flex items-center gap-2 px-4 py-2.5 text-xs border-b bg-red-50 border-red-200 text-red-800"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span className="font-bold flex-shrink-0">⚠ AUDIT ALERT</span>
+          <span className="font-semibold flex-shrink-0 text-red-700">{alert.title}</span>
+          <span className="truncate opacity-80">{alert.description}</span>
+          <button
+            onClick={() => dismiss(alert.id)}
+            aria-label="Dismiss audit alert"
+            className="ml-auto flex-shrink-0 px-2 py-0.5 rounded text-red-700 hover:bg-red-100 transition-colors font-medium"
+          >
+            Dismiss
+          </button>
+        </div>
+      ))}
+    </>
+  );
+}
 
 // ── System alerts ─────────────────────────────────────────────────────────────
 
@@ -145,6 +247,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         "pt-14 md:pt-0",
         collapsed ? "md:ml-14" : "md:ml-56"
       )}>
+        <AuditAlertBanners />
         <SystemBanner />
         {children}
       </main>
