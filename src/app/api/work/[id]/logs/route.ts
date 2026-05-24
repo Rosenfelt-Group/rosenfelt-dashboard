@@ -76,10 +76,9 @@ export async function POST(
     return NextResponse.json({ error: insertErr.message }, { status: 500 });
   }
 
-  // Dispatch to any @mentioned agents (skip 'brian' — not an endpoint)
-  const agentsToNotify = mentions.filter(
-    (m) => isAgent(m) && m !== "brian",
-  ) as AgentName[];
+  // Dispatch to any @mentioned agents. isAgent narrows to AgentName which
+  // does not include 'brian', so @brian mentions are excluded automatically.
+  const agentsToNotify = mentions.filter(isAgent);
   await Promise.all(
     agentsToNotify.map(async (agentName) => {
       const url = dispatchUrl(agentName);

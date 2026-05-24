@@ -27,16 +27,20 @@ export async function POST(
     return NextResponse.json({ error: "work item not found" }, { status: 404 });
   }
 
-  const agent = (targetOverride || item.assigned_agent || "").toLowerCase();
-  if (!isAgent(agent) || agent === "brian") {
+  const agentRaw = (targetOverride || item.assigned_agent || "").toLowerCase();
+  // 'brian' is a legal AgentName for assigned_agent but NOT a dispatch target —
+  // isAgent's union doesn't include it, so the type guard covers the brian case
+  // implicitly. Both checks fall into the same 400.
+  if (!isAgent(agentRaw)) {
     return NextResponse.json(
-      { error: `cannot dispatch to '${agent}' — assign to jordan/riley/avery/casey first` },
+      { error: `cannot dispatch to '${agentRaw}' — assign to jordan/riley/avery/casey first` },
       { status: 400 },
     );
   }
+  const agent: AgentName = agentRaw;
 
-  const url = dispatchUrl(agent as AgentName);
-  const secret = AGENT_SECRETS[agent as AgentName];
+  const url = dispatchUrl(agent);
+  const secret = AGENT_SECRETS[agent];
   if (!url || !secret) {
     return NextResponse.json(
       { error: `agent ${agent} not configured (missing URL or secret)` },
