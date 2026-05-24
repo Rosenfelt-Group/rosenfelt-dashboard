@@ -4,6 +4,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { supabase } from "@/lib/supabase";
 import { AgentBadge } from "@/components/AgentBadge";
+import { WorkLogPanel } from "@/components/work/WorkLogPanel";
+import { WorkDocsPanel } from "@/components/work/WorkDocsPanel";
+import { BulkActionBar } from "@/components/work/BulkActionBar";
 import { WorkItem, WorkStatus, WorkType, AgentName, TaskPriority, Agent } from "@/types";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -145,6 +148,19 @@ function WorkPageInner() {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Reload items (used after bulk actions or other refresh-needed flows)
+  const reload = useCallback(async () => {
+    try {
+      const url = filters.showArchived ? "/api/work" : "/api/work?archived=false";
+      const res = await fetch(url);
+      const data = await res.json();
+      setItems(data);
+    } catch (err) {
+      console.error("Failed to reload work items", err);
+    }
+  }, [filters.showArchived]);
 
   // Initial fetch
   useEffect(() => {
@@ -162,6 +178,15 @@ function WorkPageInner() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Addition 1: URL ?item=<id> auto-opens the slide-over on mount (and follows URL changes)
+  useEffect(() => {
+    const target = searchParams.get("item");
+    if (!target) return;
+    if (items.some(i => i.id === target)) {
+      setSelectedId(target);
+    }
+  }, [searchParams, items]);
 
   // If user toggles "show archived", refetch including archived
   useEffect(() => {
@@ -321,24 +346,35 @@ function WorkPageInner() {
             subtitle="Inbox · Approved · Prompt-ready"
             items={pipeline}
             onSelect={setSelectedId}
+            selectedIds={selectedIds}
+            setSelectedIds={setSelectedIds}
           />
           <Panel
             title="Active"
             subtitle="Agents are working these"
             items={active}
             onSelect={setSelectedId}
+            selectedIds={selectedIds}
+            setSelectedIds={setSelectedIds}
           />
           <Panel
             title="Needs Brian"
             subtitle="Assigned to you or deferred"
             items={needsBrian}
             onSelect={setSelectedId}
+            selectedIds={selectedIds}
+            setSelectedIds={setSelectedIds}
           />
         </div>
       )}
 
       {filters.showArchived && (
-        <ArchivedSection items={archived} onSelect={setSelectedId} />
+        <ArchivedSection
+          items={archived}
+          onSelect={setSelectedId}
+          selectedIds={selectedIds}
+          setSelectedIds={setSelectedIds}
+        />
       )}
 
       {selected && (
@@ -355,6 +391,12 @@ function WorkPageInner() {
           }}
         />
       )}
+
+      <BulkActionBar
+        selectedIds={selectedIds}
+        onClear={() => setSelectedIds([])}
+        onComplete={async () => { await reload(); setSelectedIds([]); }}
+      />
     </div>
   );
 }
@@ -381,11 +423,13 @@ function FilterSelect<T extends string>({ value, options, onChange, placeholder 
   );
 }
 
-function Panel({ title, subtitle, items, onSelect }: {
+function Panel({ title, subtitle, items, onSelect, selectedIds, setSelectedIds }: {
   title: string;
   subtitle: string;
   items: WorkItem[];
   onSelect: (id: string) => void;
+  selectedIds: string[];
+  setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
 }) {
   return (
     <section className="bg-white border border-brand-border rounded-lg overflow-hidden flex flex-col">
@@ -397,20 +441,54 @@ function Panel({ title, subtitle, items, onSelect }: {
         {items.length === 0 ? (
           <p className="text-xs text-brand-muted text-center py-8">Nothing here</p>
         ) : (
-          items.map(i => <Card key={i.id} item={i} onClick={() => onSelect(i.id)} />)
+          items.map(i => (
+            <Card
+              key={i.id}
+              item={i}
+              onClick={() => onSelect(i.id)}
+              selectedIds={selectedIds}
+              setSelectedIds={setSelectedIds}
+            />
+          ))
         )}
       </div>
     </section>
   );
 }
 
-function Card({ item, onClick }: { item: WorkItem; onClick: () => void }) {
+function Card({ item, onClick, selectedIds, setSelectedIds }: {
+  item: WorkItem;
+  onClick: () => void;
+  selectedIds: string[];
+  setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
+}) {
+  const isSelected = selectedIds.includes(item.id);
+  const anySelected = selectedIds.length > 0;
+
+  function toggleSelect(e: React.MouseEvent | React.ChangeEvent) {
+    e.stopPropagation();
+    setSelectedIds(prev =>
+      prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id]
+    );
+  }
+
   return (
-    <button
+    <div
       onClick={onClick}
-      className="w-full text-left bg-brand-offwhite border border-brand-border rounded-md p-3 hover:border-brand-orange transition-colors"
+      className="group cursor-pointer w-full text-left bg-brand-offwhite border border-brand-border rounded-md p-3 hover:border-brand-orange transition-colors relative"
     >
-      <div className="flex items-center gap-2 mb-1.5">
+      <input
+        type="checkbox"
+        checked={isSelected}
+        onClick={(e) => e.stopPropagation()}
+        onChange={toggleSelect}
+        className={clsx(
+          "absolute top-2 right-2 rounded border-brand-border cursor-pointer transition-opacity",
+          anySelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
+        aria-label={isSelected ? "Deselect item" : "Select item"}
+      />
+      <div className="flex items-center gap-2 mb-1.5 pr-6">
         <span className={clsx("text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wide font-medium", WORK_TYPE_STYLES[item.work_type])}>
           {item.work_type}
         </span>
@@ -433,13 +511,15 @@ function Card({ item, onClick }: { item: WorkItem; onClick: () => void }) {
           <span className="text-[10px] text-brand-muted">due {item.due_date}</span>
         )}
       </div>
-    </button>
+    </div>
   );
 }
 
-function ArchivedSection({ items, onSelect }: {
+function ArchivedSection({ items, onSelect, selectedIds, setSelectedIds }: {
   items: WorkItem[];
   onSelect: (id: string) => void;
+  selectedIds: string[];
+  setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -455,7 +535,15 @@ function ArchivedSection({ items, onSelect }: {
       </button>
       {open && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 p-3 border-t border-brand-border">
-          {items.map(i => <Card key={i.id} item={i} onClick={() => onSelect(i.id)} />)}
+          {items.map(i => (
+            <Card
+              key={i.id}
+              item={i}
+              onClick={() => onSelect(i.id)}
+              selectedIds={selectedIds}
+              setSelectedIds={setSelectedIds}
+            />
+          ))}
         </div>
       )}
     </section>
@@ -568,6 +656,9 @@ function DetailSlideOver({ item, onClose, onPatch, onDelete }: {
   const [prompt, setPrompt] = useState(item.prompt ?? "");
   const [archNotes, setArchNotes] = useState(item.arch_notes ?? "");
   const [showLegacy, setShowLegacy] = useState(false);
+  const [slideTab, setSlideTab] = useState<"details" | "log">("details");
+  const [writePromptPending, setWritePromptPending] = useState(false);
+  const [getStatusPending, setGetStatusPending] = useState(false);
 
   useEffect(() => {
     setTitle(item.title);
@@ -578,11 +669,72 @@ function DetailSlideOver({ item, onClose, onPatch, onDelete }: {
 
   const allowedTransitions = TRANSITIONS[item.status] ?? [];
   const statusOptions = Array.from(new Set([item.status, ...allowedTransitions, ...ALL_STATUSES]));
+  const statusDisabled = !item.assigned_agent || item.assigned_agent === "brian";
+
+  async function handleWritePrompt() {
+    // If a prompt already exists, ask whether to overwrite
+    if (item.prompt && item.prompt.length > 0) {
+      const ok = confirm(
+        "A prompt already exists. Overwrite by dispatching to Jordan? (Cancel to copy the existing prompt.)"
+      );
+      if (!ok) {
+        try {
+          await navigator.clipboard.writeText(item.prompt);
+          alert("Existing prompt copied to clipboard.");
+        } catch {
+          // clipboard may not be available — silent
+        }
+        return;
+      }
+    }
+    setWritePromptPending(true);
+    try {
+      await fetch(`/api/work/${item.id}/dispatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "write_prompt", agent: "jordan" }),
+      });
+    } finally {
+      setWritePromptPending(false);
+    }
+  }
+
+  async function handleGetStatus() {
+    setGetStatusPending(true);
+    try {
+      await fetch(`/api/work/${item.id}/dispatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "get_status" }),
+      });
+    } finally {
+      setGetStatusPending(false);
+    }
+  }
+
+  async function handleAssignChange(newAgent: string | null) {
+    // null/empty/'brian' → straight PATCH, no dispatch
+    if (!newAgent || newAgent === "brian") {
+      await onPatch(item.id, { assigned_agent: (newAgent || null) as AgentName | null });
+      return;
+    }
+    // Real agent → confirm before dispatching
+    const ok = confirm(
+      `Assign to ${newAgent} and begin work? Reply will appear in the Log tab.`
+    );
+    if (!ok) return;
+    // Use fetch directly (not onPatch) so we can set dispatch:true
+    await fetch(`/api/work/${item.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assigned_agent: newAgent, dispatch: true }),
+    });
+  }
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
       <div
-        className="bg-white w-full md:w-[480px] h-full overflow-y-auto shadow-xl"
+        className="bg-white w-full md:w-[480px] h-full overflow-y-auto shadow-xl flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <header className="sticky top-0 bg-white border-b border-brand-border px-5 py-3 flex items-center justify-between z-10">
@@ -590,152 +742,204 @@ function DetailSlideOver({ item, onClose, onPatch, onDelete }: {
           <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-xl leading-none">×</button>
         </header>
 
-        <div className="p-5 space-y-4">
-          {/* Title */}
-          <Field label="Title">
-            <input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              onBlur={() => { if (title.trim() && title !== item.title) onPatch(item.id, { title: title.trim() }); }}
-              className="w-full text-sm font-medium border border-brand-border rounded-md px-3 py-2 focus:outline-none focus:border-brand-orange"
-            />
-          </Field>
-
-          {/* Status + meta selectors */}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Status">
-              <select
-                value={item.status}
-                onChange={e => onPatch(item.id, { status: e.target.value as WorkStatus })}
-                className="w-full text-xs border border-brand-border rounded-md px-2 py-1.5 bg-white"
-              >
-                {statusOptions.map(s => (
-                  <option key={s} value={s}>{STATUS_LABEL[s]}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Priority">
-              <select
-                value={item.priority}
-                onChange={e => onPatch(item.id, { priority: e.target.value as TaskPriority })}
-                className="w-full text-xs border border-brand-border rounded-md px-2 py-1.5 bg-white"
-              >
-                {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </Field>
-            <Field label="Type">
-              <select
-                value={item.work_type}
-                onChange={e => onPatch(item.id, { work_type: e.target.value as WorkType })}
-                className="w-full text-xs border border-brand-border rounded-md px-2 py-1.5 bg-white"
-              >
-                {WORK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </Field>
-            <Field label="Assigned agent">
-              <select
-                value={item.assigned_agent ?? ""}
-                onChange={e => onPatch(item.id, { assigned_agent: (e.target.value || null) as AgentName | null })}
-                className="w-full text-xs border border-brand-border rounded-md px-2 py-1.5 bg-white"
-              >
-                <option value="">Unassigned</option>
-                {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </Field>
-          </div>
-
-          {/* Description */}
-          <Field label="Description">
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              onBlur={() => { if (description !== (item.description ?? "")) onPatch(item.id, { description: description || null }); }}
-              rows={4}
-              className="w-full text-sm border border-brand-border rounded-md px-3 py-2 focus:outline-none focus:border-brand-orange"
-              placeholder="What's this about?"
-            />
-          </Field>
-
-          {/* Prompt */}
-          <Collapsible label="Prompt" hasContent={!!item.prompt}>
-            <textarea
-              value={prompt}
-              onChange={e => setPrompt(e.target.value)}
-              onBlur={() => { if (prompt !== (item.prompt ?? "")) onPatch(item.id, { prompt: prompt || null }); }}
-              rows={8}
-              className="w-full text-xs font-mono border border-brand-border rounded-md px-3 py-2 focus:outline-none focus:border-brand-orange"
-              placeholder="Claude Code / agent prompt…"
-            />
-          </Collapsible>
-
-          {/* Arch notes */}
-          <Collapsible label="Arch notes" hasContent={!!item.arch_notes}>
-            <textarea
-              value={archNotes}
-              onChange={e => setArchNotes(e.target.value)}
-              onBlur={() => { if (archNotes !== (item.arch_notes ?? "")) onPatch(item.id, { arch_notes: archNotes || null }); }}
-              rows={4}
-              className="w-full text-xs border border-brand-border rounded-md px-3 py-2 focus:outline-none focus:border-brand-orange"
-              placeholder="Architecture / design notes"
-            />
-          </Collapsible>
-
-          {/* Due date — Documents UI is mounted by Task 7.5 (WorkDocsPanel) */}
-          <Field label="Due date">
-            <input
-              type="date"
-              value={item.due_date ?? ""}
-              onChange={e => onPatch(item.id, { due_date: e.target.value || null })}
-              className="w-full text-xs border border-brand-border rounded-md px-2 py-1.5"
-            />
-          </Field>
-
-          {/* Timestamps */}
-          <div className="text-[11px] text-brand-muted space-y-0.5 border-t border-brand-border pt-3">
-            <div>Created {fmt(item.created_at)}</div>
-            <div>Updated {fmt(item.updated_at)}</div>
-            {item.approved_at && <div>Approved {fmt(item.approved_at)}</div>}
-            {item.prompt_ready_at && <div>Prompt-ready {fmt(item.prompt_ready_at)}</div>}
-            {item.completed_at && <div>Completed {fmt(item.completed_at)}</div>}
-            {item.archived_at && <div>Archived {fmt(item.archived_at)}</div>}
-          </div>
-
-          {/* Legacy linkage */}
-          {(item.legacy_task_id || item.legacy_backlog_id) && (
-            <div>
-              <button
-                onClick={() => setShowLegacy(s => !s)}
-                className="text-[11px] text-brand-muted hover:text-brand-black"
-              >
-                {showLegacy ? "▼" : "▶"} Legacy IDs
-              </button>
-              {showLegacy && (
-                <div className="text-[11px] text-brand-muted mt-1 space-y-0.5">
-                  {item.legacy_task_id && <div>task: {item.legacy_task_id}</div>}
-                  {item.legacy_backlog_id != null && <div>backlog: {item.legacy_backlog_id}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Danger zone */}
-          <div className="border-t border-brand-border pt-4 flex justify-between items-center">
-            <button
-              onClick={() => onPatch(item.id, { archived: !item.archived })}
-              className="text-xs text-brand-muted hover:text-brand-black"
-            >
-              {item.archived ? "Unarchive" : "Archive"}
-            </button>
-            <button
-              onClick={() => {
-                if (confirm("Permanently delete this work item?")) onDelete(item.id);
-              }}
-              className="text-xs text-red-600 hover:text-red-800"
-            >
-              Delete forever
-            </button>
-          </div>
+        {/* Action buttons row */}
+        <div className="border-b border-brand-border p-3 flex gap-2">
+          <button
+            onClick={handleWritePrompt}
+            disabled={writePromptPending}
+            className="rounded border border-brand-border px-3 py-1 text-xs hover:bg-brand-cream disabled:opacity-50"
+          >
+            {writePromptPending ? "Dispatching…" : "Write Prompt"}
+          </button>
+          <button
+            onClick={handleGetStatus}
+            disabled={statusDisabled || getStatusPending}
+            className="rounded border border-brand-border px-3 py-1 text-xs hover:bg-brand-cream disabled:opacity-50"
+            title={statusDisabled
+              ? "Assign to an agent first"
+              : "Ask the assigned agent for a status update"}
+          >
+            {getStatusPending ? "Asking…" : "Get Status"}
+          </button>
         </div>
+
+        {/* Details / Log tab switcher */}
+        <div className="border-b border-brand-border flex gap-4 px-5">
+          <button
+            onClick={() => setSlideTab("details")}
+            className={slideTab === "details"
+              ? "py-2 text-sm font-semibold text-brand-orange border-b-2 border-brand-orange"
+              : "py-2 text-sm text-brand-muted hover:text-brand-black"}
+          >
+            Details
+          </button>
+          <button
+            onClick={() => setSlideTab("log")}
+            className={slideTab === "log"
+              ? "py-2 text-sm font-semibold text-brand-orange border-b-2 border-brand-orange"
+              : "py-2 text-sm text-brand-muted hover:text-brand-black"}
+          >
+            Log
+          </button>
+        </div>
+
+        {slideTab === "details" ? (
+          <div className="p-5 space-y-4">
+            {/* Title */}
+            <Field label="Title">
+              <input
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                onBlur={() => { if (title.trim() && title !== item.title) onPatch(item.id, { title: title.trim() }); }}
+                className="w-full text-sm font-medium border border-brand-border rounded-md px-3 py-2 focus:outline-none focus:border-brand-orange"
+              />
+            </Field>
+
+            {/* Status + meta selectors */}
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Status">
+                <select
+                  value={item.status}
+                  onChange={e => onPatch(item.id, { status: e.target.value as WorkStatus })}
+                  className="w-full text-xs border border-brand-border rounded-md px-2 py-1.5 bg-white"
+                >
+                  {statusOptions.map(s => (
+                    <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Priority">
+                <select
+                  value={item.priority}
+                  onChange={e => onPatch(item.id, { priority: e.target.value as TaskPriority })}
+                  className="w-full text-xs border border-brand-border rounded-md px-2 py-1.5 bg-white"
+                >
+                  {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </Field>
+              <Field label="Type">
+                <select
+                  value={item.work_type}
+                  onChange={e => onPatch(item.id, { work_type: e.target.value as WorkType })}
+                  className="w-full text-xs border border-brand-border rounded-md px-2 py-1.5 bg-white"
+                >
+                  {WORK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+              <Field label="Assigned agent">
+                <select
+                  value={item.assigned_agent ?? ""}
+                  onChange={e => handleAssignChange(e.target.value || null)}
+                  className="w-full text-xs border border-brand-border rounded-md px-2 py-1.5 bg-white"
+                >
+                  <option value="">Unassigned</option>
+                  {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </Field>
+            </div>
+
+            {/* Description */}
+            <Field label="Description">
+              <textarea
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                onBlur={() => { if (description !== (item.description ?? "")) onPatch(item.id, { description: description || null }); }}
+                rows={4}
+                className="w-full text-sm border border-brand-border rounded-md px-3 py-2 focus:outline-none focus:border-brand-orange"
+                placeholder="What's this about?"
+              />
+            </Field>
+
+            {/* Prompt */}
+            <Collapsible label="Prompt" hasContent={!!item.prompt}>
+              <textarea
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                onBlur={() => { if (prompt !== (item.prompt ?? "")) onPatch(item.id, { prompt: prompt || null }); }}
+                rows={8}
+                className="w-full text-xs font-mono border border-brand-border rounded-md px-3 py-2 focus:outline-none focus:border-brand-orange"
+                placeholder="Claude Code / agent prompt…"
+              />
+            </Collapsible>
+
+            {/* Arch notes */}
+            <Collapsible label="Arch notes" hasContent={!!item.arch_notes}>
+              <textarea
+                value={archNotes}
+                onChange={e => setArchNotes(e.target.value)}
+                onBlur={() => { if (archNotes !== (item.arch_notes ?? "")) onPatch(item.id, { arch_notes: archNotes || null }); }}
+                rows={4}
+                className="w-full text-xs border border-brand-border rounded-md px-3 py-2 focus:outline-none focus:border-brand-orange"
+                placeholder="Architecture / design notes"
+              />
+            </Collapsible>
+
+            {/* Due date */}
+            <Field label="Due date">
+              <input
+                type="date"
+                value={item.due_date ?? ""}
+                onChange={e => onPatch(item.id, { due_date: e.target.value || null })}
+                className="w-full text-xs border border-brand-border rounded-md px-2 py-1.5"
+              />
+            </Field>
+
+            {/* Documents */}
+            <div className="border-t border-brand-border pt-3">
+              <WorkDocsPanel workItemId={item.id} />
+            </div>
+
+            {/* Timestamps */}
+            <div className="text-[11px] text-brand-muted space-y-0.5 border-t border-brand-border pt-3">
+              <div>Created {fmt(item.created_at)}</div>
+              <div>Updated {fmt(item.updated_at)}</div>
+              {item.approved_at && <div>Approved {fmt(item.approved_at)}</div>}
+              {item.prompt_ready_at && <div>Prompt-ready {fmt(item.prompt_ready_at)}</div>}
+              {item.completed_at && <div>Completed {fmt(item.completed_at)}</div>}
+              {item.archived_at && <div>Archived {fmt(item.archived_at)}</div>}
+            </div>
+
+            {/* Legacy linkage */}
+            {(item.legacy_task_id || item.legacy_backlog_id) && (
+              <div>
+                <button
+                  onClick={() => setShowLegacy(s => !s)}
+                  className="text-[11px] text-brand-muted hover:text-brand-black"
+                >
+                  {showLegacy ? "▼" : "▶"} Legacy IDs
+                </button>
+                {showLegacy && (
+                  <div className="text-[11px] text-brand-muted mt-1 space-y-0.5">
+                    {item.legacy_task_id && <div>task: {item.legacy_task_id}</div>}
+                    {item.legacy_backlog_id != null && <div>backlog: {item.legacy_backlog_id}</div>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Danger zone */}
+            <div className="border-t border-brand-border pt-4 flex justify-between items-center">
+              <button
+                onClick={() => onPatch(item.id, { archived: !item.archived })}
+                className="text-xs text-brand-muted hover:text-brand-black"
+              >
+                {item.archived ? "Unarchive" : "Archive"}
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm("Permanently delete this work item?")) onDelete(item.id);
+                }}
+                className="text-xs text-red-600 hover:text-red-800"
+              >
+                Delete forever
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 min-h-0">
+            <WorkLogPanel workItemId={item.id} currentUser="brian" />
+          </div>
+        )}
       </div>
     </div>
   );
