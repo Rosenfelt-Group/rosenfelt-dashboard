@@ -102,6 +102,10 @@ export async function POST(
             priority: item.priority,
             prompt: item.prompt,
             message,
+            // Pass author info so the agent's _run_mention_response prompt
+            // can show the LLM who asked (Brian vs another agent).
+            mention_author: author,
+            mention_author_type: authorType,
             // @mentions are noise on Telegram — the log entry itself is the
             // canonical record and Brian sees it in the dashboard.
             suppress_notify: true,
