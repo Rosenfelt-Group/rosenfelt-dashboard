@@ -145,10 +145,18 @@ export type WorkStatus =
   | "prompt_ready"
   | "in_progress"
   | "open"
+  | "on_hold"
   | "done"
   | "deferred"
   | "cancelled"
   | "rejected";
+
+export type WorkItemSource =
+  | "manual"
+  | "casey_audit"
+  | "sprint_plan"
+  | "agent_suggestion"
+  | "backlog_migration";
 
 export type AgentName = "riley" | "jordan" | "avery" | "casey" | "brian";
 
@@ -162,6 +170,7 @@ export interface WorkItem {
   work_type: WorkType;
   priority: TaskPriority;
   status: WorkStatus;
+  source: WorkItemSource;
   assigned_agent: AgentName | null;
   suggested_by: AgentName | null;
   prompt: string | null;
@@ -175,6 +184,8 @@ export interface WorkItem {
   archived_at: string | null;
   legacy_task_id: string | null;
   legacy_backlog_id: number | null;
+  // Populated by /api/work GET via DISTINCT ON join (Phase 6); absent on raw inserts.
+  last_log?: WorkItemLog | null;
 }
 
 // RBAC

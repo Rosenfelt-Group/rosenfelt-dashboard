@@ -102,6 +102,9 @@ export async function POST(
             priority: item.priority,
             prompt: item.prompt,
             message,
+            // @mentions are noise on Telegram — the log entry itself is the
+            // canonical record and Brian sees it in the dashboard.
+            suppress_notify: true,
           }),
         });
       } catch (e) {

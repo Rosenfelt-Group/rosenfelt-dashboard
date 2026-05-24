@@ -43,6 +43,7 @@ const STATUS_PILL: Record<WorkStatus, string> = {
   prompt_ready: "bg-violet-100 text-violet-700",
   in_progress:  "bg-amber-100 text-amber-700",
   open:         "bg-slate-100 text-slate-700",
+  on_hold:      "bg-indigo-100 text-indigo-700",
   done:         "bg-green-100 text-green-700",
   deferred:     "bg-yellow-100 text-yellow-800",
   cancelled:    "bg-gray-200 text-gray-600",
@@ -55,6 +56,7 @@ const STATUS_LABEL: Record<WorkStatus, string> = {
   prompt_ready: "Prompt ready",
   in_progress:  "In progress",
   open:         "Open",
+  on_hold:      "On hold",
   done:         "Done",
   deferred:     "Deferred",
   cancelled:    "Cancelled",
@@ -63,15 +65,16 @@ const STATUS_LABEL: Record<WorkStatus, string> = {
 
 const ALL_STATUSES: WorkStatus[] = [
   "inbox", "approved", "prompt_ready", "in_progress",
-  "open", "done", "deferred", "cancelled", "rejected",
+  "open", "on_hold", "done", "deferred", "cancelled", "rejected",
 ];
 
 const TRANSITIONS: Record<WorkStatus, WorkStatus[]> = {
   inbox:        ["approved", "deferred", "cancelled"],
   approved:     ["prompt_ready", "inbox", "deferred", "cancelled"],
   prompt_ready: ["in_progress", "approved", "cancelled"],
-  in_progress:  ["done", "open", "prompt_ready", "cancelled"],
-  open:         ["in_progress", "done", "deferred", "cancelled"],
+  in_progress:  ["done", "on_hold", "open", "prompt_ready", "cancelled"],
+  open:         ["in_progress", "on_hold", "done", "deferred", "cancelled"],
+  on_hold:      ["in_progress", "open", "done", "cancelled"],
   deferred:     ["inbox", "cancelled"],
   done:         ["inbox"],
   cancelled:    ["inbox"],
