@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { supabase } from "@/lib/supabase";
@@ -129,6 +129,14 @@ function matchesFilters(item: WorkItem, f: Filters): boolean {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function WorkPage() {
+  return (
+    <Suspense fallback={<div className="p-4 md:p-6" />}>
+      <WorkPageInner />
+    </Suspense>
+  );
+}
+
+function WorkPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const filters = useMemo(() => buildFilters(new URLSearchParams(searchParams.toString())), [searchParams]);
