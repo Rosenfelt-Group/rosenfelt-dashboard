@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const EDITABLE_FIELDS = new Set([
   "title", "description", "summary", "work_type", "priority", "status",
-  "assigned_agent", "suggested_by", "prompt", "arch_notes", "doc_path",
+  "assigned_agent", "suggested_by", "prompt", "arch_notes",
   "due_date", "archived",
 ]);
 

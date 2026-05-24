@@ -567,7 +567,6 @@ function DetailSlideOver({ item, onClose, onPatch, onDelete }: {
   const [description, setDescription] = useState(item.description ?? "");
   const [prompt, setPrompt] = useState(item.prompt ?? "");
   const [archNotes, setArchNotes] = useState(item.arch_notes ?? "");
-  const [docPath, setDocPath] = useState(item.doc_path ?? "");
   const [showLegacy, setShowLegacy] = useState(false);
 
   useEffect(() => {
@@ -575,8 +574,7 @@ function DetailSlideOver({ item, onClose, onPatch, onDelete }: {
     setDescription(item.description ?? "");
     setPrompt(item.prompt ?? "");
     setArchNotes(item.arch_notes ?? "");
-    setDocPath(item.doc_path ?? "");
-  }, [item.id, item.title, item.description, item.prompt, item.arch_notes, item.doc_path]);
+  }, [item.id, item.title, item.description, item.prompt, item.arch_notes]);
 
   const allowedTransitions = TRANSITIONS[item.status] ?? [];
   const statusOptions = Array.from(new Set([item.status, ...allowedTransitions, ...ALL_STATUSES]));
@@ -682,26 +680,15 @@ function DetailSlideOver({ item, onClose, onPatch, onDelete }: {
             />
           </Collapsible>
 
-          {/* Doc path + due */}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Doc path">
-              <input
-                value={docPath}
-                onChange={e => setDocPath(e.target.value)}
-                onBlur={() => { if (docPath !== (item.doc_path ?? "")) onPatch(item.id, { doc_path: docPath || null }); }}
-                className="w-full text-xs border border-brand-border rounded-md px-2 py-1.5"
-                placeholder="docs/path.md"
-              />
-            </Field>
-            <Field label="Due date">
-              <input
-                type="date"
-                value={item.due_date ?? ""}
-                onChange={e => onPatch(item.id, { due_date: e.target.value || null })}
-                className="w-full text-xs border border-brand-border rounded-md px-2 py-1.5"
-              />
-            </Field>
-          </div>
+          {/* Due date — Documents UI is mounted by Task 7.5 (WorkDocsPanel) */}
+          <Field label="Due date">
+            <input
+              type="date"
+              value={item.due_date ?? ""}
+              onChange={e => onPatch(item.id, { due_date: e.target.value || null })}
+              className="w-full text-xs border border-brand-border rounded-md px-2 py-1.5"
+            />
+          </Field>
 
           {/* Timestamps */}
           <div className="text-[11px] text-brand-muted space-y-0.5 border-t border-brand-border pt-3">

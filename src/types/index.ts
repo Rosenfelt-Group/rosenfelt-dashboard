@@ -166,7 +166,6 @@ export interface WorkItem {
   suggested_by: AgentName | null;
   prompt: string | null;
   arch_notes: string | null;
-  doc_path: string | null;
   due_date: string | null;
   bundle_id: number | null;
   completed_at: string | null;
@@ -322,4 +321,37 @@ export interface DashboardStats {
   executions_today: number;
   errors_today: number;
   content_queue: number;
+}
+
+// Work item v2 — log stream + doc registry linking
+export type WorkItemLogEntryType =
+  | "progress"
+  | "question"
+  | "answer"
+  | "note"
+  | "error"
+  | "completion";
+
+export interface WorkItemLog {
+  id: string;
+  work_item_id: string;
+  created_at: string;
+  author: string;
+  author_type: "agent" | "human";
+  entry_type: WorkItemLogEntryType;
+  message: string;
+  mentions: string[] | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface WorkItemDoc {
+  id: string;
+  name: string;
+  path: string;
+  description: string | null;
+  category: string;
+  google_doc_url: string | null;
+  audience: string | null;
+  updated_at: string | null;
+  work_item_id: string;
 }

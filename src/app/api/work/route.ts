@@ -48,7 +48,6 @@ export async function POST(req: NextRequest) {
       suggested_by: body.suggested_by ?? null,
       prompt: body.prompt ?? null,
       arch_notes: body.arch_notes ?? null,
-      doc_path: body.doc_path ?? null,
       due_date: body.due_date ?? null,
     };
 
