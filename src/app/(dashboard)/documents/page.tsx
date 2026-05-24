@@ -30,15 +30,17 @@ function useReindex() {
 }
 
 interface DocEntry {
-  id:               string;
-  name:             string;
-  path:             string;
-  description?:     string;
-  category?:        string;
-  updated_at?:      string;
-  headings?:        string[];
-  last_indexed_at?: string;
-  chunk_count?:     number;
+  id:                string;
+  name:              string;
+  path:              string;
+  description?:      string;
+  category?:         string;
+  updated_at?:       string;
+  headings?:         string[];
+  last_indexed_at?:  string;
+  chunk_count?:      number;
+  work_item_id?:     string | null;
+  work_item_title?:  string | null;
 }
 
 interface SearchResult {
@@ -126,6 +128,16 @@ function DocRow({ doc, selected, onSelect }: {
         </p>
         {doc.description && (
           <p className="text-[11px] text-brand-muted truncate">{doc.description}</p>
+        )}
+        {doc.work_item_id && doc.work_item_title && (
+          <a
+            href={`/work?item=${doc.work_item_id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[10px] text-brand-orange hover:underline truncate block"
+            title={`Open work item: ${doc.work_item_title}`}
+          >
+            Work item: {doc.work_item_title}
+          </a>
         )}
       </div>
     </button>
