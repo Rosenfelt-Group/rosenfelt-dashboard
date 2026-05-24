@@ -64,6 +64,25 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       .single();
 
     if (error) throw error;
+
+    // Auto-dispatch when caller opts in via dispatch:true AND the patch
+    // assigned this item to a real agent (not brian / not unassigned).
+    if (
+      body.dispatch === true &&
+      typeof updates.assigned_agent === "string" &&
+      updates.assigned_agent &&
+      updates.assigned_agent !== "brian"
+    ) {
+      // Fire-and-forget: don't block the PATCH response on dispatch outcome.
+      // Failures are logged to work_item_logs by the dispatch route itself.
+      const cookieHeader = req.headers.get("cookie") ?? "";
+      fetch(`${req.nextUrl.origin}/api/work/${id}/dispatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", cookie: cookieHeader },
+        body: JSON.stringify({ action: "begin_work" }),
+      }).catch((e) => console.error("dispatch after assign failed:", e));
+    }
+
     return NextResponse.json(data);
   } catch (err) {
     console.error("Work update error:", err);
