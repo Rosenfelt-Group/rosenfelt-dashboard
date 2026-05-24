@@ -3,11 +3,18 @@
 import { useEffect, useState } from "react";
 import type { WorkItemDoc } from "@/types";
 import { VpsBrowserModal } from "./VpsBrowserModal";
+import { DocumentPicker } from "./DocumentPicker";
 
 type Props = { workItemId: string };
 
+function truncate(text: string | null, max: number): string {
+  if (!text) return "";
+  return text.length > max ? text.slice(0, max - 1) + "…" : text;
+}
+
 export function WorkDocsPanel({ workItemId }: Props) {
   const [docs, setDocs] = useState<WorkItemDoc[]>([]);
+  const [showPicker, setShowPicker] = useState(false);
   const [showBrowser, setShowBrowser] = useState(false);
   const [showGoogleDocModal, setShowGoogleDocModal] = useState(false);
   const [googleDocUrl, setGoogleDocUrl] = useState("");
@@ -64,44 +71,68 @@ export function WorkDocsPanel({ workItemId }: Props) {
 
   return (
     <div>
-      <div className="text-xs font-semibold mb-2 text-brand-muted uppercase tracking-wide">
-        Documents
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-xs font-semibold text-brand-muted uppercase tracking-wide">
+          Documents
+        </div>
+        <button
+          onClick={() => setShowPicker(true)}
+          className="rounded bg-brand-orange text-white text-xs px-2 py-1 hover:opacity-90"
+        >
+          + Attach Document
+        </button>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-2">
         {docs.map((d) => (
           <div
             key={d.id}
-            className="flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-brand-cream"
+            className="rounded border border-brand-border p-2 hover:bg-brand-offwhite"
           >
-            <span>📄</span>
-            <div className="flex-1 min-w-0">
-              <div className="truncate text-brand-black font-medium">{d.name}</div>
-              <div className="text-[10px] text-brand-muted truncate font-mono">{d.path}</div>
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-semibold text-brand-black truncate">
+                    {d.name}
+                  </span>
+                  {d.category && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+                      {d.category}
+                    </span>
+                  )}
+                </div>
+                {d.description && (
+                  <div className="text-xs text-brand-muted mt-0.5">
+                    {truncate(d.description, 80)}
+                  </div>
+                )}
+                <div className="text-[10px] text-brand-muted truncate font-mono mt-1">
+                  {d.path}
+                </div>
+              </div>
+              <button
+                onClick={() => unlink(d.id)}
+                className="text-brand-muted hover:text-red-600 text-sm"
+                title="Detach"
+              >
+                ×
+              </button>
             </div>
-            {d.google_doc_url ? (
+            {d.google_doc_url && (
               <a
                 href={d.google_doc_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-brand-orange"
-                title="Open in Google Drive"
+                className="text-xs text-brand-orange hover:underline inline-block mt-1"
               >
-                ↗
+                Open in Drive →
               </a>
-            ) : (
-              <span title={d.path} className="text-brand-muted">↗</span>
             )}
-            <button
-              onClick={() => unlink(d.id)}
-              className="text-brand-muted hover:text-red-600"
-              title="Unlink"
-            >
-              ×
-            </button>
           </div>
         ))}
         {docs.length === 0 && (
-          <div className="text-xs text-brand-muted px-2">No documents attached yet.</div>
+          <div className="text-xs text-brand-muted px-2 py-3 text-center border border-dashed border-brand-border rounded">
+            No documents linked. Use &quot;+ Attach Document&quot; to add one.
+          </div>
         )}
       </div>
       <div className="flex gap-2 mt-3 text-xs">
@@ -118,6 +149,14 @@ export function WorkDocsPanel({ workItemId }: Props) {
           + Link Google Doc
         </button>
       </div>
+
+      {showPicker && (
+        <DocumentPicker
+          workItemId={workItemId}
+          onClose={() => setShowPicker(false)}
+          onAttached={loadDocs}
+        />
+      )}
 
       {showBrowser && (
         <VpsBrowserModal

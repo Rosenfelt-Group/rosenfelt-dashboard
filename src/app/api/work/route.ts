@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import type { WorkItem, WorkItemLog } from "@/types";
 
 export async function GET(req: NextRequest) {
   try {
@@ -23,7 +24,32 @@ export async function GET(req: NextRequest) {
 
     const { data, error } = await q;
     if (error) throw error;
-    return NextResponse.json(data ?? []);
+    const items = (data ?? []) as WorkItem[];
+
+    // Avoid N+1: fetch logs in a single query, then pick the newest per item.
+    // (PostgREST has no DISTINCT ON, but order-desc + first-wins in JS is
+    // equivalent and the data volume is small — up to 500 items × ~5 KB.)
+    const itemIds = items.map((i) => i.id);
+    const latestById = new Map<string, WorkItemLog>();
+    if (itemIds.length > 0) {
+      const { data: logRows, error: logErr } = await supabaseAdmin
+        .from("work_item_logs")
+        .select("id, work_item_id, created_at, author, author_type, entry_type, message, mentions, metadata")
+        .in("work_item_id", itemIds)
+        .order("created_at", { ascending: false });
+      if (logErr) {
+        console.error("Work logs join error:", logErr);
+      } else {
+        for (const row of (logRows ?? []) as WorkItemLog[]) {
+          if (!latestById.has(row.work_item_id)) {
+            latestById.set(row.work_item_id, row);
+          }
+        }
+      }
+    }
+
+    const enriched = items.map((i) => ({ ...i, last_log: latestById.get(i.id) ?? null }));
+    return NextResponse.json(enriched);
   } catch (err) {
     console.error("Work list error:", err);
     return NextResponse.json([], { status: 500 });

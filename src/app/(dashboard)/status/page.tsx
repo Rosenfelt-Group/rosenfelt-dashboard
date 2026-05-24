@@ -144,24 +144,24 @@ function AgentsTab() {
     return () => clearInterval(id);
   }, [load]);
 
-  const combined = ["jordan","riley","avery"].map(name => ({
+  const combined = ["jordan","riley","avery","casey"].map(name => ({
     health: health.find(h => h.agent === name),
     stat:   stats.find(s => s.agent === name),
     name,
   }));
 
-  if (loading) return <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{[0,1,2].map(i => <div key={i} className="card animate-pulse h-40"/>)}</div>;
+  if (loading) return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{[0,1,2,3].map(i => <div key={i} className="card animate-pulse h-40"/>)}</div>;
 
   return (
     <div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
         {combined.map(({ name, health: h, stat: s }) => {
           const up = h?.status === "up";
           const down = h?.status === "down";
           return (
             <div key={name} className="card">
               <div className="flex items-center gap-3 mb-4">
-                <AgentBadge agent={name as "jordan"|"riley"|"avery"} />
+                <AgentBadge agent={name as "jordan"|"riley"|"avery"|"casey"} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-brand-black capitalize">{name}</p>
                   <p className="text-xs text-brand-muted">

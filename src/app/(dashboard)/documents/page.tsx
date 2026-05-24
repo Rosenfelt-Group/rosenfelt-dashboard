@@ -131,7 +131,7 @@ function DocRow({ doc, selected, onSelect }: {
         )}
         {doc.work_item_id && doc.work_item_title && (
           <a
-            href={`/work?item=${doc.work_item_id}`}
+            href={`/work/${doc.work_item_id}`}
             onClick={(e) => e.stopPropagation()}
             className="text-[10px] text-brand-orange hover:underline truncate block"
             title={`Open work item: ${doc.work_item_title}`}

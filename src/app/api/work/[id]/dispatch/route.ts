@@ -13,6 +13,9 @@ export async function POST(
   const action = String(body.action || "");
   const message = body.message ? String(body.message) : undefined;
   const targetOverride = body.agent ? String(body.agent) : undefined;
+  // suppress_notify: when true, agents skip Telegram side-channel for this
+  // dispatch (the work_item_log entry is the canonical record).
+  const suppressNotify = body.suppress_notify === true;
 
   if (!VALID_ACTIONS.has(action)) {
     return NextResponse.json({ error: `invalid action: ${action}` }, { status: 400 });
@@ -58,8 +61,14 @@ export async function POST(
     work_type: item.work_type,
     priority: item.priority,
     prompt: item.prompt,
+    suppress_notify: suppressNotify,
   };
   if (message) payload.message = message;
+  // Allow caller to pass arbitrary additional context (used by /write-prompt
+  // which sends linked_docs, recent_logs, assigned_agent_prompt, instruction).
+  if (body.context && typeof body.context === "object") {
+    Object.assign(payload, body.context);
+  }
 
   let dispatched = false;
   try {

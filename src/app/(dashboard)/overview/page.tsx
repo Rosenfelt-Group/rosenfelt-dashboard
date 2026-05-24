@@ -179,16 +179,16 @@ export default function OverviewPage() {
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        <StatCard label="Active agents"    value="3 / 3"                        sub="all online" />
+        <StatCard label="Active agents"    value="4 / 4"                        sub="all online" />
         <StatCard label="Executions today" value={stats?.executions_today ?? 0} sub={`${stats?.errors_today ?? 0} errors`}          warn={(stats?.errors_today ?? 0) > 0} />
         <StatCard label="Open tasks"       value={stats?.open_tasks ?? 0}        sub={stats?.overdue_tasks ? `${stats.overdue_tasks} overdue` : "none overdue"} alert={(stats?.overdue_tasks ?? 0) > 0} />
         <StatCard label="Approvals"        value={stats?.pending_approvals ?? 0} sub="waiting"                                       alert={(stats?.pending_approvals ?? 0) > 0} />
         <StatCard label="Content queue"    value={stats?.content_queue ?? 0}     sub="ideas queued" />
-        <StatCard label="API cost today"   value={costToday !== null ? `$${costToday.toFixed(4)}` : "$0.00"} sub={costToday !== null ? "across 3 agents" : "no usage yet"} />
+        <StatCard label="API cost today"   value={costToday !== null ? `$${costToday.toFixed(4)}` : "$0.00"} sub={costToday !== null ? "across 4 agents" : "no usage yet"} />
       </div>
 
       {/* Agent status row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {agentStatus.map(a => (
           <div key={a.agent} className="card flex items-center gap-3">
             <AgentBadge agent={a.agent} />

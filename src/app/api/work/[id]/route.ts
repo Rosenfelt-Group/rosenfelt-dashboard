@@ -75,12 +75,38 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     ) {
       // Fire-and-forget: don't block the PATCH response on dispatch outcome.
       // Failures are logged to work_item_logs by the dispatch route itself.
+      // suppress_notify: assignment changes shouldn't ping Brian on Telegram —
+      // the dashboard's existing log entry + new doc-summary entry below cover it.
       const cookieHeader = req.headers.get("cookie") ?? "";
       fetch(`${req.nextUrl.origin}/api/work/${id}/dispatch`, {
         method: "POST",
         headers: { "Content-Type": "application/json", cookie: cookieHeader },
-        body: JSON.stringify({ action: "begin_work" }),
+        body: JSON.stringify({ action: "begin_work", suppress_notify: true }),
       }).catch((e) => console.error("dispatch after assign failed:", e));
+    }
+
+    // Auto-log linked documents on assignment so the assigned agent sees them
+    // in their log context without Brian needing to paste URLs manually.
+    if (typeof updates.assigned_agent === "string" && updates.assigned_agent) {
+      const { data: linkedDocs } = await supabaseAdmin
+        .from("doc_registry")
+        .select("name, path, google_doc_url")
+        .eq("work_item_id", id);
+
+      if (linkedDocs && linkedDocs.length > 0) {
+        const lines = linkedDocs.map((d) => {
+          const drive = d.google_doc_url ? ` | Drive: ${d.google_doc_url}` : "";
+          return `• ${d.name} — ${d.path}${drive}`;
+        });
+        await supabaseAdmin.from("work_item_logs").insert({
+          work_item_id: id,
+          author: "brian",
+          author_type: "human",
+          entry_type: "note",
+          message: `Documents linked to this work item:\n${lines.join("\n")}`,
+          mentions: [updates.assigned_agent],
+        });
+      }
     }
 
     return NextResponse.json(data);

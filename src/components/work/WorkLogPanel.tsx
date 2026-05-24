@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import type { WorkItemLog, WorkItemLogEntryType } from "@/types";
+import type { WorkItemLog, WorkItemLogEntryType, WorkStatus } from "@/types";
 
 const ENTRY_TYPES: WorkItemLogEntryType[] = [
   "progress", "question", "answer", "note", "error", "completion",
@@ -13,11 +13,12 @@ const AGENT_OPTIONS = ["riley", "jordan", "avery", "casey"];
 type Props = {
   workItemId: string;
   currentUser: string;  // 'brian' or an agent name
+  workItemStatus?: WorkStatus;  // drives on-hold banner; absent in legacy callers
 };
 
 const entryTypeStyles: Record<WorkItemLogEntryType, string> = {
   progress: "border-l-2 border-brand-border",
-  question: "border-l-2 border-amber-500",
+  question: "border-l-4 border-amber-400 bg-amber-50/40",
   answer: "border-l-2 border-teal-500",
   note: "border-l-2 border-brand-border",
   error: "border-l-2 border-red-500",
@@ -29,7 +30,7 @@ function capitalizeAuthor(author: string): string {
   return author.charAt(0).toUpperCase() + author.slice(1);
 }
 
-export function WorkLogPanel({ workItemId, currentUser }: Props) {
+export function WorkLogPanel({ workItemId, currentUser, workItemStatus }: Props) {
   const [logs, setLogs] = useState<WorkItemLog[]>([]);
   const [entryType, setEntryType] = useState<WorkItemLogEntryType>("progress");
   const [message, setMessage] = useState("");
@@ -176,28 +177,96 @@ export function WorkLogPanel({ workItemId, currentUser }: Props) {
 
       {/* Log entries */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 bg-white">
-        {logs.length === 0 ? (
-          <div className="text-xs text-brand-muted text-center py-8">
-            No log entries yet.
-          </div>
-        ) : (
-          logs.map((log) => (
-            <div key={log.id} className={`pl-3 ${entryTypeStyles[log.entry_type]}`}>
-              <div className="flex items-center gap-2 text-xs text-brand-muted">
-                <span className="font-semibold text-brand-black">
-                  {capitalizeAuthor(log.author)}
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-brand-cream text-brand-black">
-                  {log.entry_type}
-                </span>
-                <span>{new Date(log.created_at).toLocaleString()}</span>
-              </div>
-              <div className="text-xs mt-1 whitespace-pre-wrap text-brand-black">
-                {log.message}
-              </div>
-            </div>
-          ))
+        <LogStream logs={logs} workItemStatus={workItemStatus} />
+      </div>
+    </div>
+  );
+}
+
+function LogStream({
+  logs,
+  workItemStatus,
+}: {
+  logs: WorkItemLog[];
+  workItemStatus?: WorkStatus;
+}) {
+  const { questions, others } = useMemo(() => {
+    const q: WorkItemLog[] = [];
+    const o: WorkItemLog[] = [];
+    for (const log of logs) {
+      if (log.entry_type === "question") q.push(log);
+      else o.push(log);
+    }
+    // Pinned questions: newest first so the most recent need is on top.
+    q.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    // Other entries: chronological (oldest first) — matches reading order.
+    o.sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return { questions: q, others: o };
+  }, [logs]);
+
+  // On-hold banner: shown when the item is on_hold AND the most recent
+  // entry overall is a progress entry (agent paused mid-work, awaiting input).
+  const showOnHoldBanner =
+    workItemStatus === "on_hold" &&
+    logs.length > 0 &&
+    [...logs].sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.entry_type ===
+      "progress";
+
+  if (logs.length === 0) {
+    return (
+      <div className="text-xs text-brand-muted text-center py-8">
+        No log entries yet.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {showOnHoldBanner && (
+        <div className="rounded border border-indigo-200 bg-indigo-50 text-indigo-800 text-xs px-3 py-2">
+          ⏸ Agent is on hold — awaiting input from Brian
+        </div>
+      )}
+      {questions.length > 0 && (
+        <div className="space-y-3">
+          {questions.map((log) => (
+            <LogEntry key={log.id} log={log} pinned />
+          ))}
+        </div>
+      )}
+      {others.map((log) => (
+        <LogEntry key={log.id} log={log} />
+      ))}
+    </>
+  );
+}
+
+function LogEntry({ log, pinned = false }: { log: WorkItemLog; pinned?: boolean }) {
+  const isQuestion = log.entry_type === "question";
+  return (
+    <div className={`pl-3 py-1 ${entryTypeStyles[log.entry_type]}`}>
+      <div className="flex items-center gap-2 text-xs text-brand-muted">
+        <span className="font-semibold text-brand-black">
+          {capitalizeAuthor(log.author)}
+        </span>
+        <span className="px-1.5 py-0.5 rounded bg-brand-cream text-brand-black">
+          {log.entry_type}
+        </span>
+        {isQuestion && (
+          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">
+            Needs clarification
+          </span>
         )}
+        {pinned && (
+          <span className="text-amber-600 text-[10px]" title="Pinned to top">
+            📌
+          </span>
+        )}
+        <span>{new Date(log.created_at).toLocaleString()}</span>
+      </div>
+      <div className="text-xs mt-1 whitespace-pre-wrap text-brand-black">
+        {isQuestion && <span className="mr-1">❓</span>}
+        {log.message}
       </div>
     </div>
   );
