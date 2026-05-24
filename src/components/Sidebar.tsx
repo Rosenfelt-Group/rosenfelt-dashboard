@@ -35,8 +35,6 @@ const NAV: NavItem[] = [
   // Systems
   { label: "Status",       href: "/status",              icon: "activity",   module: "systems" },
   { label: "Work",         href: "/work",                icon: "kanban",     module: "systems" },
-  { label: "Backlog",      href: "/backlog",             icon: "wrench",     module: "systems" },
-  { label: "Tasks",        href: "/tasks",               icon: "check",      module: "systems" },
   { label: "Backup",       href: "/backup",              icon: "archive",    module: "systems" },
   { label: "SQL",          href: "/sql",                 icon: "database",   module: "systems",       requiredPermission: "manage_users" },
   { label: "Terminal",     href: "/engineering",         icon: "terminal",   module: "systems",       requiredPermission: "manage_users" },

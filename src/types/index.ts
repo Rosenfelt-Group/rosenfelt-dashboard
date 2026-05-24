@@ -1,21 +1,5 @@
-export type TaskStatus = "open" | "in_progress" | "deferred" | "done" | "cancelled";
 export type TaskPriority = "high" | "medium" | "low";
 export type Agent = "riley" | "jordan" | "avery" | "brian" | "sam" | "casey";
-
-export interface Task {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  title: string;
-  description?: string;
-  assigned_agent: Agent;
-  priority: TaskPriority;
-  due_date?: string;
-  status: TaskStatus;
-  category?: string;
-  notes?: string;
-  completed_at?: string;
-}
 
 export interface WorkflowLog {
   id: string;
@@ -88,43 +72,6 @@ export interface ContentIdea {
   status: "queued" | "in_progress" | "revision_needed" | "published" | "discarded";
   post_id?: number;
   revision_notes?: string | null;
-}
-
-// Tool enhancement backlog
-export type BacklogStatus =
-  | "inbox"
-  | "approved"
-  | "bundled"
-  | "prompt_ready"
-  | "in_progress"
-  | "done"
-  | "rejected";
-
-export type BacklogArea =
-  | "workflow"
-  | "dashboard"
-  | "content"
-  | "infrastructure"
-  | "agent";
-
-export type BacklogSuggester = "riley" | "avery" | "jordan" | "brian";
-
-export interface BacklogItem {
-  id: number;
-  created_at: string;
-  suggested_by: BacklogSuggester;
-  title: string;
-  summary: string;
-  problem_detail?: string | null;
-  affected_area: BacklogArea;
-  status: BacklogStatus;
-  bundle_id?: number | null;
-  priority?: TaskPriority | null;
-  claude_code_prompt?: string | null;
-  arch_notes?: string | null;
-  approved_at?: string | null;
-  prompt_ready_at?: string | null;
-  doc_path?: string | null;
 }
 
 // ─── Unified work items (replaces tasks + tool_backlog conceptually) ──────────
