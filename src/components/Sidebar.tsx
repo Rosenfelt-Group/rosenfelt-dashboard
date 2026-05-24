@@ -34,6 +34,7 @@ const NAV: NavItem[] = [
 
   // Systems
   { label: "Status",       href: "/status",              icon: "activity",   module: "systems" },
+  { label: "Work",         href: "/work",                icon: "kanban",     module: "systems" },
   { label: "Backlog",      href: "/backlog",             icon: "wrench",     module: "systems" },
   { label: "Tasks",        href: "/tasks",               icon: "check",      module: "systems" },
   { label: "Backup",       href: "/backup",              icon: "archive",    module: "systems" },
@@ -92,6 +93,7 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     menu:         <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>,
     x:            <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
     database:     <><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></>,
+    kanban:       <><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="4" height="8" rx="1"/></>,
     logOut:       <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
   };
   return (

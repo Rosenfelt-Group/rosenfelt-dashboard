@@ -7,6 +7,7 @@ const config: Record<Agent, { label: string; color: string }> = {
   avery:  { label: "AV", color: "bg-blue-100 text-blue-700" },
   brian:  { label: "BR", color: "bg-orange-100 text-brand-orange" },
   sam:    { label: "SA", color: "bg-purple-100 text-purple-700" },
+  casey:  { label: "CA", color: "bg-rose-100 text-rose-700" },
 };
 
 export function AgentBadge({ agent, size = "md" }: { agent: Agent; size?: "sm" | "md" }) {
@@ -24,7 +25,7 @@ export function AgentBadge({ agent, size = "md" }: { agent: Agent; size?: "sm" |
 
 export function AgentName({ agent }: { agent: Agent }) {
   const names: Record<Agent, string> = {
-    riley: "Riley", jordan: "Jordan", avery: "Avery", brian: "Brian", sam: "Sam"
+    riley: "Riley", jordan: "Jordan", avery: "Avery", brian: "Brian", sam: "Sam", casey: "Casey"
   };
   return <span className="capitalize">{names[agent] ?? agent}</span>;
 }

@@ -1,6 +1,6 @@
 export type TaskStatus = "open" | "in_progress" | "deferred" | "done" | "cancelled";
 export type TaskPriority = "high" | "medium" | "low";
-export type Agent = "riley" | "jordan" | "avery" | "brian" | "sam";
+export type Agent = "riley" | "jordan" | "avery" | "brian" | "sam" | "casey";
 
 export interface Task {
   id: string;
@@ -125,6 +125,57 @@ export interface BacklogItem {
   approved_at?: string | null;
   prompt_ready_at?: string | null;
   doc_path?: string | null;
+}
+
+// ─── Unified work items (replaces tasks + tool_backlog conceptually) ──────────
+
+export type WorkType =
+  | "infrastructure"
+  | "agent"
+  | "dashboard"
+  | "content"
+  | "website"
+  | "operations"
+  | "business"
+  | "workflow";
+
+export type WorkStatus =
+  | "inbox"
+  | "approved"
+  | "prompt_ready"
+  | "in_progress"
+  | "open"
+  | "done"
+  | "deferred"
+  | "cancelled"
+  | "rejected";
+
+export type AgentName = "riley" | "jordan" | "avery" | "casey" | "brian";
+
+export interface WorkItem {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  title: string;
+  description: string | null;
+  summary: string | null;
+  work_type: WorkType;
+  priority: TaskPriority;
+  status: WorkStatus;
+  assigned_agent: AgentName | null;
+  suggested_by: AgentName | null;
+  prompt: string | null;
+  arch_notes: string | null;
+  doc_path: string | null;
+  due_date: string | null;
+  bundle_id: number | null;
+  completed_at: string | null;
+  approved_at: string | null;
+  prompt_ready_at: string | null;
+  archived: boolean;
+  archived_at: string | null;
+  legacy_task_id: string | null;
+  legacy_backlog_id: number | null;
 }
 
 // RBAC
