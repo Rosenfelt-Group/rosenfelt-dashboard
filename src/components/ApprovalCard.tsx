@@ -50,6 +50,12 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
   const auditClient = approval.payload?.company_name as string | undefined;
   const auditEmail = approval.payload?.contact_email as string | undefined;
   const auditWords = approval.payload?.word_count as number | undefined;
+  const auditWorkItemId = approval.payload?.work_item_id as string | undefined;
+  // Prefer the canonical work-item deliverable URL; fall back to the
+  // legacy approval-based proxy if the approval somehow isn't linked.
+  const previewHref = auditWorkItemId
+    ? `/api/work/${auditWorkItemId}/deliverable.pdf`
+    : `/api/audit/pdf?approval_id=${approval.id}`;
 
   return (
     <div className="card border-l-4 border-l-brand-orange space-y-3">
@@ -149,7 +155,7 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
             <span>{auditWords} words</span>
           )}
           <a
-            href={`/api/audit/pdf?approval_id=${approval.id}`}
+            href={previewHref}
             target="_blank"
             rel="noopener noreferrer"
             className="text-brand-orange hover:underline flex items-center gap-1"

@@ -385,6 +385,15 @@ function DocumentsPageInner() {
     setContentError(null);
     setDocLoading(true);
     if (heading) pendingScroll.current = heading;
+
+    // URL-based docs (e.g. PDFs proxied through dashboard routes) are
+    // rendered directly via an embed below — no markdown fetch needed.
+    if (doc.path.startsWith("/api/") || doc.path.endsWith(".pdf")) {
+      setContent("");
+      setDocLoading(false);
+      return;
+    }
+
     try {
       const res  = await fetch(`/api/docs?path=${encodeURIComponent(doc.path)}`);
       const data = await res.json();
@@ -567,7 +576,24 @@ function DocumentsPageInner() {
               ) : contentError ? (
                 <div className="text-sm text-red-600 bg-red-50 rounded-lg p-4">{contentError}</div>
               ) : content !== null ? (
-                selected.path.endsWith(".md") ? (
+                selected.path.endsWith(".pdf") || selected.path.startsWith("/api/") ? (
+                  /* PDFs and proxied URLs render inline via the browser PDF viewer */
+                  <div className="flex flex-col gap-2 h-full">
+                    <div className="flex items-center justify-between gap-3 text-xs text-brand-muted">
+                      <span>{selected.name}</span>
+                      <a href={selected.path} target="_blank" rel="noopener noreferrer"
+                         className="text-brand-orange hover:underline">
+                        Open in new tab ↗
+                      </a>
+                    </div>
+                    <iframe
+                      src={selected.path}
+                      title={selected.name}
+                      className="flex-1 w-full border border-brand-border rounded-lg"
+                      style={{ minHeight: "70vh" }}
+                    />
+                  </div>
+                ) : selected.path.endsWith(".md") ? (
                   <div className="prose prose-sm max-w-none
                     prose-headings:font-semibold prose-headings:text-brand-black prose-headings:mt-6 prose-headings:mb-2
                     prose-p:text-brand-black prose-p:leading-relaxed
