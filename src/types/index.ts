@@ -103,7 +103,9 @@ export type WorkItemSource =
   | "casey_audit"
   | "sprint_plan"
   | "agent_suggestion"
-  | "backlog_migration";
+  | "backlog_migration"
+  | "typeform"
+  | "stripe";
 
 export type AgentName = "riley" | "jordan" | "avery" | "casey" | "brian";
 
