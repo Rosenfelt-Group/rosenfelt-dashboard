@@ -84,7 +84,9 @@ export type WorkType =
   | "website"
   | "operations"
   | "business"
-  | "workflow";
+  | "workflow"
+  | "deliverable"
+  | "intake";
 
 export type WorkStatus =
   | "inbox"

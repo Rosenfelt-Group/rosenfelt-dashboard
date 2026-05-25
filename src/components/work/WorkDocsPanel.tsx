@@ -83,52 +83,72 @@ export function WorkDocsPanel({ workItemId }: Props) {
         </button>
       </div>
       <div className="space-y-2">
-        {docs.map((d) => (
-          <div
-            key={d.id}
-            className="rounded border border-brand-border p-2 hover:bg-brand-offwhite"
-          >
-            <div className="flex items-start gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold text-brand-black truncate">
-                    {d.name}
-                  </span>
-                  {d.category && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
-                      {d.category}
-                    </span>
-                  )}
-                </div>
-                {d.description && (
-                  <div className="text-xs text-brand-muted mt-0.5">
-                    {truncate(d.description, 80)}
+        {docs.map((d) => {
+          // Anything served by a dashboard API route, or any .pdf, is
+          // directly openable in a new tab. Markdown docs deep-link
+          // into the Documents library so the user gets the markdown
+          // viewer instead of raw text.
+          const openHref =
+            d.path.startsWith("/api/") || d.path.endsWith(".pdf")
+              ? d.path
+              : d.path.endsWith(".md")
+              ? `/documents?path=${encodeURIComponent(d.path)}`
+              : null;
+          const NameTag: React.ElementType = openHref ? "a" : "span";
+          const nameProps = openHref
+            ? {
+                href: openHref,
+                target: "_blank" as const,
+                rel: "noopener noreferrer",
+                className:
+                  "text-sm font-semibold text-brand-orange truncate hover:underline",
+              }
+            : { className: "text-sm font-semibold text-brand-black truncate" };
+          return (
+            <div
+              key={d.id}
+              className="rounded border border-brand-border p-2 hover:bg-brand-offwhite"
+            >
+              <div className="flex items-start gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <NameTag {...nameProps}>{d.name}</NameTag>
+                    {d.category && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+                        {d.category}
+                      </span>
+                    )}
                   </div>
-                )}
-                <div className="text-[10px] text-brand-muted truncate font-mono mt-1">
-                  {d.path}
+                  {d.description && (
+                    <div className="text-xs text-brand-muted mt-0.5">
+                      {truncate(d.description, 80)}
+                    </div>
+                  )}
+                  <div className="text-[10px] text-brand-muted truncate font-mono mt-1">
+                    {d.path}
+                  </div>
                 </div>
+                <button
+                  onClick={() => unlink(d.id)}
+                  className="text-brand-muted hover:text-red-600 text-sm"
+                  title="Detach"
+                >
+                  ×
+                </button>
               </div>
-              <button
-                onClick={() => unlink(d.id)}
-                className="text-brand-muted hover:text-red-600 text-sm"
-                title="Detach"
-              >
-                ×
-              </button>
+              {d.google_doc_url && (
+                <a
+                  href={d.google_doc_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-brand-orange hover:underline inline-block mt-1"
+                >
+                  Open in Drive →
+                </a>
+              )}
             </div>
-            {d.google_doc_url && (
-              <a
-                href={d.google_doc_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-brand-orange hover:underline inline-block mt-1"
-              >
-                Open in Drive →
-              </a>
-            )}
-          </div>
-        ))}
+          );
+        })}
         {docs.length === 0 && (
           <div className="text-xs text-brand-muted px-2 py-3 text-center border border-dashed border-brand-border rounded">
             No documents linked. Use &quot;+ Attach Document&quot; to add one.
