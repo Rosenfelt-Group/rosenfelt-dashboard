@@ -66,6 +66,31 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
   const [showArchNotes, setShowArchNotes] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resendPending, setResendPending] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+
+  const isClientDeliverable =
+    item.work_type === "deliverable" &&
+    (item.source === "typeform" || item.source === "stripe");
+
+  async function resendAudit() {
+    if (!confirm("Resend the Stack Audit PDF to the client?")) return;
+    setResendPending(true);
+    setResendMessage(null);
+    try {
+      const res = await fetch(`/api/work/${item.id}/resend-audit`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.ok) {
+        setResendMessage(`Failed: ${body?.error ?? body?.detail ?? `HTTP ${res.status}`}`);
+      } else {
+        setResendMessage(body.detail ?? "Audit resent");
+      }
+    } catch (e) {
+      setResendMessage(e instanceof Error ? e.message : "Resend failed");
+    } finally {
+      setResendPending(false);
+    }
+  }
 
   // Realtime: pick up updates to this work item (status flips, prompt writes
   // from Jordan, etc.) without requiring a manual refresh.
@@ -217,14 +242,26 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
           >
             ← Back to board
           </Link>
-          <span
-            className={clsx(
-              "rounded-full px-3 py-1 text-xs font-medium",
-              STATUS_PILL[item.status],
+          <div className="flex items-center gap-2">
+            {isClientDeliverable && (
+              <button
+                onClick={resendAudit}
+                disabled={resendPending}
+                className="rounded-full px-3 py-1 text-xs font-medium border border-brand-orange text-brand-orange hover:bg-brand-orange hover:text-white transition-colors disabled:opacity-50"
+                title="Re-fire delivery to the client's email"
+              >
+                {resendPending ? "Resending…" : "Resend audit"}
+              </button>
             )}
-          >
-            {STATUS_LABEL[item.status]}
-          </span>
+            <span
+              className={clsx(
+                "rounded-full px-3 py-1 text-xs font-medium",
+                STATUS_PILL[item.status],
+              )}
+            >
+              {STATUS_LABEL[item.status]}
+            </span>
+          </div>
         </div>
         <h1 className="text-xl font-semibold text-brand-black mt-2">
           {item.title}
@@ -241,6 +278,17 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
           )}
         </div>
       </div>
+
+      {resendMessage && (
+        <div className={clsx(
+          "px-4 sm:px-6 py-2 text-xs border-b",
+          resendMessage.startsWith("Failed")
+            ? "text-red-700 bg-red-50 border-red-100"
+            : "text-green-700 bg-green-50 border-green-100",
+        )}>
+          {resendMessage}
+        </div>
+      )}
 
       {error && (
         <div className="px-4 sm:px-6 py-2 text-xs text-red-700 bg-red-50 border-b border-red-100">

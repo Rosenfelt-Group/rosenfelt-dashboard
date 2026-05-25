@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
+// Image extensions hidden from the Documents library (they belong on
+// the Images page). Note: .pdf is NOT included — PDFs are documents,
+// not images, and Stack Audit deliverables are PDFs.
 const IMAGE_EXTENSIONS = new Set([
   ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
-  ".eps", ".pdf", ".ai", ".psd", ".tiff", ".tif", ".bmp", ".ico",
+  ".eps", ".ai", ".psd", ".tiff", ".tif", ".bmp", ".ico",
 ]);
 
 function isImagePath(path: string) {

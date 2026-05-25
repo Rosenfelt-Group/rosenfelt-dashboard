@@ -28,6 +28,8 @@ const WORK_TYPE_STYLES: Record<WorkType, string> = {
   operations:     "bg-slate-100 text-slate-700",
   business:       "bg-orange-100 text-orange-700",
   workflow:       "bg-indigo-100 text-indigo-700",
+  deliverable:    "bg-emerald-100 text-emerald-700",
+  intake:         "bg-cyan-100 text-cyan-700",
 };
 
 function timeAgo(iso: string): string {
