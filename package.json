@@ -12,6 +12,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@google-analytics/data": "^6.0.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
     "@xterm/addon-fit": "^0.11.0",
@@ -24,6 +25,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^9.0.1",
+    "recharts": "^3.8.1",
     "remark-gfm": "^4.0.1",
     "stripe": "^22.1.1"
   },
