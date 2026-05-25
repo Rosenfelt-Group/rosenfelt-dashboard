@@ -11,9 +11,10 @@ interface ApprovalCardProps {
 }
 
 export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCardProps) {
-  const [loading,       setLoading]       = useState<"approved" | "rejected" | "revision_requested" | null>(null);
+  const [loading,       setLoading]       = useState<"approved" | "rejected" | "revision_requested" | "send_audit" | null>(null);
   const [showRevise,    setShowRevise]    = useState(false);
   const [revisionNotes, setRevisionNotes] = useState("");
+  const [sendError,     setSendError]     = useState<string | null>(null);
 
   async function handle(status: "approved" | "rejected" | "revision_requested", notes?: string) {
     setLoading(status);
@@ -23,7 +24,32 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
     setRevisionNotes("");
   }
 
+  async function handleSendAudit() {
+    setLoading("send_audit");
+    setSendError(null);
+    try {
+      const res = await fetch("/api/audit/deliver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approval_id: approval.id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.ok) {
+        setSendError(body?.error ?? body?.detail ?? `HTTP ${res.status}`);
+      }
+      // On success Realtime will move the row to history via the UPDATE handler.
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : "send failed");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  const isStackAudit = approval.action_type === "stack_audit_report";
   const editUrl = approval.payload?.edit_url as string | undefined;
+  const auditClient = approval.payload?.company_name as string | undefined;
+  const auditEmail = approval.payload?.contact_email as string | undefined;
+  const auditWords = approval.payload?.word_count as number | undefined;
 
   return (
     <div className="card border-l-4 border-l-brand-orange space-y-3">
@@ -59,27 +85,48 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
         {/* Action buttons — hidden when revise form is open */}
         {isAdmin && !showRevise && (
           <div className="flex gap-1.5 flex-shrink-0">
-            <button
-              onClick={() => handle("approved")}
-              disabled={loading !== null}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors disabled:opacity-50"
-            >
-              {loading === "approved" ? "…" : "Approve"}
-            </button>
-            <button
-              onClick={() => setShowRevise(true)}
-              disabled={loading !== null}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50"
-            >
-              Revise
-            </button>
-            <button
-              onClick={() => handle("rejected")}
-              disabled={loading !== null}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
-            >
-              {loading === "rejected" ? "…" : "Reject"}
-            </button>
+            {isStackAudit ? (
+              <>
+                <button
+                  onClick={handleSendAudit}
+                  disabled={loading !== null}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-orange text-white hover:bg-brand-orange/90 transition-colors disabled:opacity-50"
+                >
+                  {loading === "send_audit" ? "Sending…" : "Send Audit to Client"}
+                </button>
+                <button
+                  onClick={() => handle("rejected")}
+                  disabled={loading !== null}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                >
+                  {loading === "rejected" ? "…" : "Reject"}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => handle("approved")}
+                  disabled={loading !== null}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors disabled:opacity-50"
+                >
+                  {loading === "approved" ? "…" : "Approve"}
+                </button>
+                <button
+                  onClick={() => setShowRevise(true)}
+                  disabled={loading !== null}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                >
+                  Revise
+                </button>
+                <button
+                  onClick={() => handle("rejected")}
+                  disabled={loading !== null}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                >
+                  {loading === "rejected" ? "…" : "Reject"}
+                </button>
+              </>
+            )}
           </div>
         )}
         {!isAdmin && (
@@ -88,6 +135,26 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
           </span>
         )}
       </div>
+
+      {/* Stack Audit recipient summary — surfaces who the PDF will go to */}
+      {isStackAudit && (auditClient || auditEmail) && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-brand-muted border-t border-brand-border pt-2">
+          {auditClient && (
+            <span>Client: <span className="text-brand-black">{auditClient}</span></span>
+          )}
+          {auditEmail && (
+            <span>To: <span className="text-brand-black font-mono">{auditEmail}</span></span>
+          )}
+          {typeof auditWords === "number" && (
+            <span>{auditWords} words</span>
+          )}
+        </div>
+      )}
+      {sendError && (
+        <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          Send failed: {sendError}
+        </div>
+      )}
 
       {/* Inline revision form */}
       {showRevise && isAdmin && (
