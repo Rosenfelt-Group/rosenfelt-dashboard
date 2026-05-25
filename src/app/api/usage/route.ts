@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
       prompt_tokens: number; completion_tokens: number; total_tokens: number; cost_usd: number;
     }[];
 
-    const agents = ["jordan", "riley", "avery"];
+    const agents = ["jordan", "riley", "avery", "casey"];
 
     const agentSummary = agents.map(agent => {
       const agentRows = rows.filter(r => r.agent === agent);

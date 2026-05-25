@@ -4,7 +4,7 @@ import { AgentBadge } from "@/components/AgentBadge";
 import clsx from "clsx";
 import { supabase } from "@/lib/supabase";
 
-type Agent = "jordan" | "riley" | "avery";
+type Agent = "jordan" | "riley" | "avery" | "casey";
 
 interface AgentSummary {
   agent: Agent;
@@ -300,15 +300,15 @@ export default function CostPage() {
       )}
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          {[1, 2, 3].map(i => <div key={i} className="card animate-pulse h-44" />)}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {[1, 2, 3, 4].map(i => <div key={i} className="card animate-pulse h-44" />)}
         </div>
       ) : error ? (
         <div className="card p-6 text-sm text-red-600 bg-red-50 mb-8">{error}</div>
       ) : (
         <>
           {/* ── Per-agent cards ── */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             {agents.map(a => (
               <div key={a.agent} className="card">
                 <div className="flex items-center gap-2 mb-3">
