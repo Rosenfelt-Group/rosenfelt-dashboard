@@ -44,15 +44,16 @@ export async function PATCH(req: NextRequest) {
     if (fetchError) throw fetchError;
 
     const isPublishPost = approval?.agent === "avery" && approval?.action_type === "publish_post";
+    const isStackAudit  = approval?.agent === "avery" && approval?.action_type === "stack_audit_report";
     const ideaId = approval?.payload?.idea_id as string | undefined;
     const postId = approval?.payload?.post_id as number | undefined;
     const avUrl  = process.env.AVERY_AGENT_URL;
     const secret = process.env.AVERY_WEBHOOK_SECRET || process.env.JORDAN_WEBHOOK_SECRET;
 
-    // Human gate: publish requires an identified reviewer
-    if (status === "approved" && isPublishPost && !reviewer) {
+    // Human gate: publish / send-deliverable requires an identified reviewer
+    if (status === "approved" && (isPublishPost || isStackAudit) && !reviewer) {
       return NextResponse.json(
-        { error: "Publish blocked: no human approval on record" },
+        { error: "Approval blocked: no human reviewer on record" },
         { status: 403 },
       );
     }
@@ -111,6 +112,50 @@ export async function PATCH(req: NextRequest) {
       });
 
       return NextResponse.json({ success: true, publish: publishResult });
+    }
+
+    // ── APPROVED → deliver Stack Audit PDF via Avery /deliver-audit ─────────
+    if (status === "approved" && isStackAudit) {
+      if (!avUrl || !secret) {
+        await supabaseAdmin.from("workflow_logs").insert({
+          workflow_name: "Dashboard Stack Audit Gate",
+          agent: "avery",
+          trigger_text: approval.title ?? `approval ${id}`,
+          status: "error",
+          error_message: "Missing AVERY_AGENT_URL or webhook secret",
+        });
+        return NextResponse.json({ success: true, deliver: { ok: false, detail: "config missing" } });
+      }
+
+      let deliverResult: { ok: boolean; detail: string };
+      try {
+        const res = await fetch(`${avUrl}/deliver-audit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Webhook-Secret": secret },
+          body: JSON.stringify({
+            approval_id: approval.id,
+            payload: approval.payload,
+          }),
+        });
+        deliverResult = {
+          ok: res.ok,
+          detail: res.ok
+            ? `audit delivery triggered for ${approval.payload?.contact_email} by ${reviewer}`
+            : `avery returned HTTP ${res.status}`,
+        };
+      } catch (e) {
+        deliverResult = { ok: false, detail: e instanceof Error ? e.message : "deliver-audit call failed" };
+      }
+
+      await supabaseAdmin.from("workflow_logs").insert({
+        workflow_name: "Dashboard Stack Audit Gate",
+        agent: "avery",
+        trigger_text: approval.title ?? `approval ${id}`,
+        status: deliverResult.ok ? "success" : "error",
+        ...(deliverResult.ok ? {} : { error_message: deliverResult.detail }),
+      });
+
+      return NextResponse.json({ success: true, deliver: deliverResult });
     }
 
     // ── REJECTED → reset idea to queued ─────────────────────────────────────
