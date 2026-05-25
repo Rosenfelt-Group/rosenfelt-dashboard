@@ -20,13 +20,15 @@ export async function GET() {
         .select("*", { count: "exact", head: true })
         .eq("status", "pending"),
       supabaseAdmin
-        .from("tasks")
-        .select("*", { count: "exact", head: true })
-        .in("status", ["open", "in_progress"]),
-      supabaseAdmin
-        .from("tasks")
+        .from("work_items")
         .select("*", { count: "exact", head: true })
         .in("status", ["open", "in_progress"])
+        .eq("archived", false),
+      supabaseAdmin
+        .from("work_items")
+        .select("*", { count: "exact", head: true })
+        .in("status", ["open", "in_progress"])
+        .eq("archived", false)
         .lt("due_date", now.toISOString().split("T")[0]),
       supabaseAdmin
         .from("workflow_logs")
