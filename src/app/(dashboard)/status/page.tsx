@@ -2,13 +2,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { AgentBadge } from "@/components/AgentBadge";
+import RegressionPanel from "@/components/status/RegressionPanel";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "agents" | "github" | "vercel" | "supabase" | "vps" | "n8n";
+type Tab = "agents" | "github" | "vercel" | "supabase" | "vps" | "n8n" | "regression";
 
 interface AgentHealth {
   agent: string;
@@ -839,23 +840,32 @@ function N8nTab() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "agents",   label: "Agents"   },
-  { id: "github",   label: "GitHub"   },
-  { id: "vercel",   label: "Vercel"   },
-  { id: "supabase", label: "Supabase" },
-  { id: "vps",      label: "VPS"      },
-  { id: "n8n",      label: "n8n"      },
+  { id: "agents",     label: "Agents"     },
+  { id: "github",     label: "GitHub"     },
+  { id: "vercel",     label: "Vercel"     },
+  { id: "supabase",   label: "Supabase"   },
+  { id: "vps",        label: "VPS"        },
+  { id: "n8n",        label: "n8n"        },
+  { id: "regression", label: "Regression" },
 ];
 
 export default function StatusPage() {
   const [tab, setTab] = useState<Tab>("agents");
   const [live, setLive] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Single Realtime connection shared across the page lifetime
   useEffect(() => {
     const ch = supabase.channel("status-page-liveness")
       .subscribe(s => setLive(s === "SUBSCRIBED"));
     return () => { supabase.removeChannel(ch); };
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setIsAdmin(d?.role === "admin"))
+      .catch(() => setIsAdmin(false));
   }, []);
 
   return (
@@ -891,12 +901,13 @@ export default function StatusPage() {
       </div>
 
       {/* Tab content — all mounted, hidden when inactive to keep Realtime alive */}
-      <div className={tab === "agents"   ? "block" : "hidden"}><AgentsTab /></div>
-      <div className={tab === "github"   ? "block" : "hidden"}><GitHubTab live={live} /></div>
-      <div className={tab === "vercel"   ? "block" : "hidden"}><VercelTab /></div>
-      <div className={tab === "supabase" ? "block" : "hidden"}><SupabaseTab /></div>
-      <div className={tab === "vps"      ? "block" : "hidden"}><VpsTab /></div>
-      <div className={tab === "n8n"      ? "block" : "hidden"}><N8nTab /></div>
+      <div className={tab === "agents"     ? "block" : "hidden"}><AgentsTab /></div>
+      <div className={tab === "github"     ? "block" : "hidden"}><GitHubTab live={live} /></div>
+      <div className={tab === "vercel"     ? "block" : "hidden"}><VercelTab /></div>
+      <div className={tab === "supabase"   ? "block" : "hidden"}><SupabaseTab /></div>
+      <div className={tab === "vps"        ? "block" : "hidden"}><VpsTab /></div>
+      <div className={tab === "n8n"        ? "block" : "hidden"}><N8nTab /></div>
+      <div className={tab === "regression" ? "block" : "hidden"}><RegressionPanel isAdmin={isAdmin} /></div>
     </div>
   );
 }
