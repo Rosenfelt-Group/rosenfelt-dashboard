@@ -4,6 +4,13 @@ import { verifySessionToken, COOKIE_NAME } from "@/lib/session";
 
 export const maxDuration = 30;
 
+/**
+ * Legacy proxy kept for backwards compatibility: takes an approval_id
+ * and resolves to the linked work_item's deliverable PDF. The canonical
+ * URL is /api/work/[id]/deliverable.pdf — new dashboard surfaces should
+ * link there directly using work_item_id. This route exists so older
+ * ApprovalCard renders and any external bookmarks still work.
+ */
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   const session = token ? await verifySessionToken(token) : null;
@@ -29,39 +36,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Not a stack_audit_report approval" }, { status: 400 });
   }
 
-  const pdfPath = (approval.payload as { pdf_path?: string } | null)?.pdf_path;
-  if (typeof pdfPath !== "string" || !pdfPath.startsWith("/tmp/")) {
-    return NextResponse.json({ error: "Invalid pdf_path on approval" }, { status: 400 });
-  }
-  const filename = pdfPath.replace(/^\/tmp\//, "");
-  if (!/^stack_audit_[a-f0-9]{8}\.pdf$/.test(filename)) {
-    return NextResponse.json({ error: "Invalid pdf filename" }, { status: 400 });
-  }
-
-  const avUrl = process.env.AVERY_AGENT_URL;
-  const secret = process.env.AVERY_WEBHOOK_SECRET || process.env.JORDAN_WEBHOOK_SECRET;
-  if (!avUrl || !secret) {
-    return NextResponse.json({ error: "Server config missing" }, { status: 500 });
-  }
-
-  const res = await fetch(`${avUrl}/audit-pdf/${filename}`, {
-    headers: { "X-Webhook-Secret": secret },
-  });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
+  const workItemId = (approval.payload as { work_item_id?: string } | null)?.work_item_id;
+  if (!workItemId) {
     return NextResponse.json(
-      { error: `Avery returned HTTP ${res.status}`, detail },
-      { status: 502 },
+      { error: "Approval is not linked to a work_item — cannot resolve deliverable" },
+      { status: 404 },
     );
   }
 
-  // Stream the PDF straight back to the browser
-  return new NextResponse(res.body, {
-    status: 200,
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${filename}"`,
-      "Cache-Control": "private, no-store",
-    },
-  });
+  // Internal redirect to the canonical work-item deliverable proxy.
+  // 302 keeps the session cookie attached and lets the browser open the
+  // resolved URL directly (clean URL in the new tab).
+  return NextResponse.redirect(
+    new URL(`/api/work/${workItemId}/deliverable.pdf`, req.url),
+    { status: 302 },
+  );
 }
