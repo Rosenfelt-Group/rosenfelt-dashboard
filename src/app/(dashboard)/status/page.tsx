@@ -9,7 +9,7 @@ import Link from "next/link";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "agents" | "github" | "vercel" | "supabase" | "vps" | "n8n" | "regression";
+type Tab = "agents" | "github" | "vercel" | "supabase" | "vps" | "n8n" | "wordpress" | "regression";
 
 interface AgentHealth {
   agent: string;
@@ -77,7 +77,40 @@ interface SupabaseUsage {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const REPO_ORDER = ["rosenfelt-docs","jordan-agent","riley-agent","avery-agent","rosenfelt-dashboard","vps-config"];
+const REPO_PRIORITY = ["rosenfelt-docs","jordan-agent","riley-agent","avery-agent","casey-agent","rosenfelt-dashboard","website","vps-config","docker-configs","rosenfelt-workflows"];
+const HIDDEN_REPOS_STORAGE_KEY = "status_github_hidden_repos";
+
+interface RepoInfo {
+  name: string;
+  description: string | null;
+  html_url: string;
+  pushed_at: string | null;
+  archived: boolean;
+  private: boolean;
+  default_branch: string;
+}
+
+interface WordpressStatusData {
+  configured: boolean;
+  wp_url: string | null;
+  fetched_at: string;
+  posts: {
+    pending: { id: number; title: string; status: string; date: string; modified: string; edit_url: string; view_url: string }[];
+    draft:   { id: number; title: string; status: string; date: string; modified: string; edit_url: string; view_url: string }[];
+    future:  { id: number; title: string; status: string; date: string; modified: string; edit_url: string; view_url: string }[];
+  };
+  core: { current_version: string | null; latest_version: string | null; update_available: boolean };
+  themes: {
+    active: { stylesheet: string; name: string; version: string; is_active: boolean } | null;
+    all: { stylesheet: string; name: string; version: string; is_active: boolean }[];
+  };
+  plugins: {
+    plugin: string; slug: string; name: string;
+    current_version: string; latest_version: string | null;
+    update_available: boolean; status: "active" | "inactive"; plugin_uri: string;
+  }[];
+  errors: string[];
+}
 
 function ago(ts: string | number | null) {
   if (!ts) return null;
@@ -217,13 +250,103 @@ function AgentsTab() {
 
 // ─── GitHub Tab ───────────────────────────────────────────────────────────────
 
-function GitHubTab({ live }: { live: boolean }) {
-  const [runs, setRuns]   = useState<RunLog[]>([]);
+function GearIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  );
+}
+
+function RepoSettingsModal({
+  open, onClose, repos, hidden, onChange,
+}: {
+  open: boolean;
+  onClose: () => void;
+  repos: RepoInfo[];
+  hidden: Set<string>;
+  onChange: (next: Set<string>) => void;
+}) {
+  if (!open) return null;
+  const toggle = (name: string) => {
+    const next = new Set(hidden);
+    if (next.has(name)) next.delete(name); else next.add(name);
+    onChange(next);
+  };
+  const showAll = () => onChange(new Set());
+  const hideAll = () => onChange(new Set(repos.map(r => r.name)));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b border-brand-border flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-brand-black">Visible repositories</h3>
+          <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg leading-none">×</button>
+        </div>
+        <div className="px-4 py-2 border-b border-brand-border flex items-center gap-3 text-xs">
+          <button onClick={showAll} className="text-brand-orange hover:underline">Show all</button>
+          <span className="text-brand-muted">·</span>
+          <button onClick={hideAll} className="text-brand-muted hover:text-brand-black">Hide all</button>
+          <span className="ml-auto text-brand-muted">{repos.length - hidden.size} of {repos.length} visible</span>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 py-2">
+          {repos.map(r => (
+            <label key={r.name} className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-brand-offwhite rounded px-1">
+              <input
+                type="checkbox"
+                checked={!hidden.has(r.name)}
+                onChange={() => toggle(r.name)}
+                className="accent-brand-orange"
+              />
+              <span className="font-mono text-xs text-brand-black flex-1 truncate">{r.name}</span>
+              {r.archived && <span className="badge text-[9px] px-1 py-0 bg-gray-100 text-gray-500">archived</span>}
+              {!r.private && <span className="badge text-[9px] px-1 py-0 bg-blue-50 text-blue-700">public</span>}
+            </label>
+          ))}
+        </div>
+        <div className="px-4 py-2 border-t border-brand-border text-[10px] text-brand-muted">
+          Saved per-browser. Hiding a repo removes it from the GitHub tab only.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GitHubTab({ live: _live }: { live: boolean }) {
+  const [runs, setRuns]     = useState<RunLog[]>([]);
+  const [repos, setRepos]   = useState<RepoInfo[]>([]);
+  const [reposError, setReposError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+
+  // Hydrate hidden-repos preference from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(HIDDEN_REPOS_STORAGE_KEY);
+      if (stored) setHidden(new Set(JSON.parse(stored)));
+    } catch { /* ignore */ }
+  }, []);
+
+  const updateHidden = useCallback((next: Set<string>) => {
+    setHidden(next);
+    try { localStorage.setItem(HIDDEN_REPOS_STORAGE_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+  }, []);
 
   const load = useCallback(async () => {
-    const data = await fetch("/api/github/runs").then(r => r.json()).catch(() => []);
-    setRuns(Array.isArray(data) ? data : []);
+    const [runsData, reposRes] = await Promise.all([
+      fetch("/api/github/runs").then(r => r.json()).catch(() => []),
+      fetch("/api/github/repos").then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))).catch(e => ({ __error: e instanceof Error ? e.message : String(e) })),
+    ]);
+    setRuns(Array.isArray(runsData) ? runsData : []);
+    if (Array.isArray(reposRes)) {
+      setRepos(reposRes);
+      setReposError(null);
+    } else {
+      setRepos([]);
+      setReposError(reposRes?.__error ?? reposRes?.message ?? "Failed to load repos");
+    }
     setLoading(false);
   }, []);
 
@@ -238,85 +361,165 @@ function GitHubTab({ live }: { live: boolean }) {
     return () => { supabase.removeChannel(channel); };
   }, [load]);
 
-  const byRepo = useMemo(() => {
-    const map = new Map<string, RunLog[]>();
+  // Merge repos + runs into one ordered list
+  const cards = useMemo(() => {
+    const runsByRepo = new Map<string, RunLog[]>();
     for (const run of runs) {
-      const list = map.get(run.repo) ?? [];
+      const list = runsByRepo.get(run.repo) ?? [];
       list.push(run);
-      map.set(run.repo, list);
+      runsByRepo.set(run.repo, list);
     }
-    const ordered: [string, RunLog[]][] = [];
-    for (const repo of REPO_ORDER) { if (map.has(repo)) ordered.push([repo, map.get(repo)!]); }
-    for (const [repo, list] of map) { if (!REPO_ORDER.includes(repo)) ordered.push([repo, list]); }
-    return ordered;
-  }, [runs]);
 
-  if (loading) return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[0,1,2].map(i=><div key={i} className="card animate-pulse h-36"/>)}</div>;
-  if (byRepo.length === 0) return <div className="card text-sm text-brand-muted text-center py-12">No runs yet — trigger a workflow to see results.</div>;
+    // If repos failed to load, fall back to repos derived from runs only.
+    const allRepoNames = new Set<string>();
+    repos.forEach(r => allRepoNames.add(r.name));
+    runsByRepo.forEach((_v, k) => allRepoNames.add(k));
+
+    const sortKey = (name: string) => {
+      const i = REPO_PRIORITY.indexOf(name);
+      return i === -1 ? REPO_PRIORITY.length : i;
+    };
+
+    return [...allRepoNames]
+      .filter(name => !hidden.has(name))
+      .sort((a, b) => {
+        const ka = sortKey(a), kb = sortKey(b);
+        if (ka !== kb) return ka - kb;
+        return a.localeCompare(b);
+      })
+      .map(name => ({
+        name,
+        info: repos.find(r => r.name === name) ?? null,
+        runs: runsByRepo.get(name) ?? [],
+      }));
+  }, [runs, repos, hidden]);
+
+  if (loading) return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[0,1,2,3].map(i=><div key={i} className="card animate-pulse h-36"/>)}</div>;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {byRepo.map(([repo, repoRuns]) => {
-        const latest = repoRuns[0];
-        const meta = runMeta(latest.status, latest.conclusion);
-        const history = repoRuns.slice(1, 6);
-        return (
-          <div key={repo} className="card">
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-muted flex-shrink-0">
-                  <circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/>
-                  <path d="M18 9a9 9 0 0 1-9 9"/><path d="M6 9a9 9 0 0 0 3.6 7.2"/>
-                </svg>
-                <h3 className="text-sm font-semibold text-brand-black font-mono">{repo}</h3>
-              </div>
-              <span className={clsx("badge text-[10px] px-1.5 py-0.5", meta.badge)}>{meta.label}</span>
-            </div>
-            {/* Latest run */}
-            <div className="flex items-center gap-3 py-2.5">
-              <div className={clsx("w-2 h-2 rounded-full flex-shrink-0", meta.dot)} />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-brand-black">{latest.workflow_name ?? "Workflow"}</p>
-                <p className="text-[10px] text-brand-muted mt-0.5">
-                  {latest.branch && <span className="font-mono">{latest.branch}</span>}
-                  {latest.triggered_by && <span> · {latest.triggered_by}</span>}
-                  {ago(latest.status === "completed" ? latest.completed_at : latest.started_at) && (
-                    <span> · {ago(latest.status === "completed" ? latest.completed_at : latest.started_at)}</span>
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs text-brand-muted">
+          {cards.length} of {repos.length || runs.length} repos
+          {hidden.size > 0 && <span> · {hidden.size} hidden</span>}
+          {reposError && <span className="text-red-600 ml-2">· repos: {reposError}</span>}
+        </p>
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="flex items-center gap-1.5 text-xs text-brand-muted hover:text-brand-black px-2 py-1 rounded hover:bg-brand-offwhite"
+          aria-label="Repository visibility settings"
+        >
+          <GearIcon size={13} />
+          <span>Repos</span>
+        </button>
+      </div>
+
+      {reposError && repos.length === 0 && runs.length === 0 && (
+        <div className="card text-sm text-brand-muted text-center py-8 mb-4">
+          <p className="text-brand-black font-medium mb-1">Repository list unavailable</p>
+          <p className="text-xs">Set <code className="bg-brand-offwhite px-1 rounded">GITHUB_API_TOKEN</code> in Vercel to list all repositories. Workflow runs will still appear here when triggered.</p>
+        </div>
+      )}
+
+      {cards.length === 0 ? (
+        <div className="card text-sm text-brand-muted text-center py-12">No repositories to show. Open settings to enable.</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {cards.map(({ name, info, runs: repoRuns }) => {
+            const latest = repoRuns[0] ?? null;
+            const meta = latest ? runMeta(latest.status, latest.conclusion) : null;
+            const history = repoRuns.slice(1, 6);
+            return (
+              <div key={name} className="card">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-muted flex-shrink-0">
+                      <circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/>
+                      <path d="M18 9a9 9 0 0 1-9 9"/><path d="M6 9a9 9 0 0 0 3.6 7.2"/>
+                    </svg>
+                    {info ? (
+                      <a href={info.html_url} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-black font-mono truncate hover:text-brand-orange">{name}</a>
+                    ) : (
+                      <h3 className="text-sm font-semibold text-brand-black font-mono truncate">{name}</h3>
+                    )}
+                    {info?.archived && <span className="badge text-[9px] px-1 py-0 bg-gray-100 text-gray-500 flex-shrink-0">archived</span>}
+                  </div>
+                  {meta ? (
+                    <span className={clsx("badge text-[10px] px-1.5 py-0.5 flex-shrink-0", meta.badge)}>{meta.label}</span>
+                  ) : (
+                    <span className="badge text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 flex-shrink-0">No runs</span>
                   )}
-                </p>
-              </div>
-              {latest.run_url && (
-                <a href={latest.run_url} target="_blank" rel="noreferrer" className="flex-shrink-0 text-brand-muted hover:text-brand-black">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-                  </svg>
-                </a>
-              )}
-            </div>
-            {history.length > 0 && (
-              <div className="border-t border-brand-border divide-y divide-brand-border">
-                {history.map(run => {
-                  const m = runMeta(run.status, run.conclusion);
-                  return (
-                    <div key={run.id} className="flex items-center gap-3 py-2">
-                      <div className={clsx("w-1.5 h-1.5 rounded-full flex-shrink-0", m.dot)} />
-                      <span className="text-[10px] text-brand-muted flex-1 truncate">{run.workflow_name ?? "Workflow"}</span>
-                      <span className="text-[10px] text-brand-muted flex-shrink-0">{ago(run.status === "completed" ? run.completed_at : run.started_at)}</span>
-                      {run.run_url && (
-                        <a href={run.run_url} target="_blank" rel="noreferrer" className="flex-shrink-0 text-brand-muted hover:text-brand-black">
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                </div>
+
+                {info?.description && (
+                  <p className="text-[10px] text-brand-muted mb-1 line-clamp-1">{info.description}</p>
+                )}
+
+                {latest && meta ? (
+                  <>
+                    <div className="flex items-center gap-3 py-2.5">
+                      <div className={clsx("w-2 h-2 rounded-full flex-shrink-0", meta.dot)} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-brand-black">{latest.workflow_name ?? "Workflow"}</p>
+                        <p className="text-[10px] text-brand-muted mt-0.5">
+                          {latest.branch && <span className="font-mono">{latest.branch}</span>}
+                          {latest.triggered_by && <span> · {latest.triggered_by}</span>}
+                          {ago(latest.status === "completed" ? latest.completed_at : latest.started_at) && (
+                            <span> · {ago(latest.status === "completed" ? latest.completed_at : latest.started_at)}</span>
+                          )}
+                        </p>
+                      </div>
+                      {latest.run_url && (
+                        <a href={latest.run_url} target="_blank" rel="noreferrer" className="flex-shrink-0 text-brand-muted hover:text-brand-black">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
                           </svg>
                         </a>
                       )}
                     </div>
-                  );
-                })}
+                    {history.length > 0 && (
+                      <div className="border-t border-brand-border divide-y divide-brand-border">
+                        {history.map(run => {
+                          const m = runMeta(run.status, run.conclusion);
+                          return (
+                            <div key={run.id} className="flex items-center gap-3 py-2">
+                              <div className={clsx("w-1.5 h-1.5 rounded-full flex-shrink-0", m.dot)} />
+                              <span className="text-[10px] text-brand-muted flex-1 truncate">{run.workflow_name ?? "Workflow"}</span>
+                              <span className="text-[10px] text-brand-muted flex-shrink-0">{ago(run.status === "completed" ? run.completed_at : run.started_at)}</span>
+                              {run.run_url && (
+                                <a href={run.run_url} target="_blank" rel="noreferrer" className="flex-shrink-0 text-brand-muted hover:text-brand-black">
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                                  </svg>
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="py-3 text-center">
+                    <p className="text-xs text-brand-muted">No workflow runs yet</p>
+                    {info?.pushed_at && (
+                      <p className="text-[10px] text-brand-muted mt-1">Last push {ago(info.pushed_at)}</p>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      )}
+
+      <RepoSettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        repos={repos}
+        hidden={hidden}
+        onChange={updateHidden}
+      />
     </div>
   );
 }
@@ -837,6 +1040,216 @@ function N8nTab() {
   );
 }
 
+// ─── WordPress Tab ────────────────────────────────────────────────────────────
+
+// WP REST returns titles with HTML entities (e.g. "It&#8217;s"). Decode named + numeric
+// entities to plain text without touching the DOM (avoids any innerHTML surface).
+const HTML_NAMED_ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", hellip: "…",
+  mdash: "—", ndash: "–", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”",
+  copy: "©", reg: "®", trade: "™",
+};
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&([a-z]+);/gi, (m, name) => HTML_NAMED_ENTITIES[name.toLowerCase()] ?? m);
+}
+
+function WordpressTab() {
+  const [data, setData] = useState<WordpressStatusData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/wordpress/status");
+      if (!res.ok) { setError(`Failed to load (HTTP ${res.status})`); setLoading(false); return; }
+      const d = await res.json();
+      setData(d);
+      setLoading(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fetch failed");
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 600_000); // refresh every 10 min
+    return () => clearInterval(id);
+  }, [load]);
+
+  if (loading) return <div className="card animate-pulse h-64" />;
+  if (error)   return <div className="card text-sm text-red-600 py-8 text-center">{error}</div>;
+  if (!data)   return <div className="card text-sm text-brand-muted text-center py-8">No data</div>;
+
+  if (!data.configured) {
+    return (
+      <div className="card text-sm text-brand-muted text-center py-12">
+        <p className="text-brand-black font-medium mb-2">WordPress not configured</p>
+        <p className="text-xs">Set <code className="bg-brand-offwhite px-1 rounded">WP_URL</code> and <code className="bg-brand-offwhite px-1 rounded">WP_AUTH</code> in Vercel environment variables.</p>
+      </div>
+    );
+  }
+
+  const totalPosts = data.posts.pending.length + data.posts.draft.length + data.posts.future.length;
+  const pluginUpdates = data.plugins.filter(p => p.update_available);
+  const activePlugins = data.plugins.filter(p => p.status === "active").length;
+
+  return (
+    <div className="space-y-4">
+      {/* Summary header */}
+      <div className="card flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-muted">
+            <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+          <a href={data.wp_url ?? "#"} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-black hover:text-brand-orange">
+            {data.wp_url?.replace(/^https?:\/\//, "")}
+          </a>
+        </div>
+        <span className="text-[10px] text-brand-muted">Updated {ago(data.fetched_at)}</span>
+      </div>
+
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="card text-center py-3">
+          <p className={clsx("text-xl font-semibold", totalPosts > 0 ? "text-amber-600" : "text-brand-black")}>{totalPosts}</p>
+          <p className="text-[10px] text-brand-muted mt-0.5 uppercase tracking-wide">Posts in queue</p>
+        </div>
+        <div className="card text-center py-3">
+          <p className={clsx("text-xl font-semibold", pluginUpdates.length > 0 ? "text-amber-600" : "text-green-600")}>{pluginUpdates.length}</p>
+          <p className="text-[10px] text-brand-muted mt-0.5 uppercase tracking-wide">Plugin updates</p>
+        </div>
+        <div className="card text-center py-3">
+          <p className={clsx("text-xl font-semibold", data.core.update_available ? "text-amber-600" : "text-green-600")}>
+            {data.core.current_version ?? "—"}
+          </p>
+          <p className="text-[10px] text-brand-muted mt-0.5 uppercase tracking-wide">WordPress core</p>
+        </div>
+        <div className="card text-center py-3">
+          <p className="text-xl font-semibold text-brand-black">{activePlugins}</p>
+          <p className="text-[10px] text-brand-muted mt-0.5 uppercase tracking-wide">Active plugins</p>
+        </div>
+      </div>
+
+      {/* Errors (if any) */}
+      {data.errors.length > 0 && (
+        <div className="card border-amber-200 bg-amber-50">
+          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Fetch warnings</p>
+          <ul className="text-xs text-amber-900 space-y-0.5 font-mono">
+            {data.errors.map((e, i) => <li key={i}>· {e}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {/* Posts in queue */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide">Posts in queue</p>
+          <span className="text-[10px] text-brand-muted">
+            {data.posts.pending.length} pending · {data.posts.draft.length} drafts · {data.posts.future.length} scheduled
+          </span>
+        </div>
+        {totalPosts === 0 ? (
+          <p className="text-xs text-brand-muted text-center py-3">No posts pending, drafted, or scheduled.</p>
+        ) : (
+          <div className="divide-y divide-brand-border">
+            {[
+              { label: "pending",   list: data.posts.pending,  badge: "bg-amber-50 text-amber-700" },
+              { label: "draft",     list: data.posts.draft,    badge: "bg-gray-100 text-gray-600" },
+              { label: "scheduled", list: data.posts.future,   badge: "bg-blue-50 text-blue-700"  },
+            ].flatMap(group => group.list.map(p => ({ ...p, _group: group.label, _badge: group.badge })))
+              .map(p => (
+              <div key={`${p._group}-${p.id}`} className="flex items-center gap-3 py-2 text-xs">
+                <span className={clsx("badge text-[9px] px-1.5 py-0.5 capitalize flex-shrink-0", p._badge)}>{p._group}</span>
+                <span className="flex-1 truncate text-brand-black">{decodeHtmlEntities(p.title)}</span>
+                <span className="text-[10px] text-brand-muted flex-shrink-0">
+                  {p._group === "scheduled" ? `for ${new Date(p.date).toLocaleDateString()}` : ago(p.modified)}
+                </span>
+                <a href={p.edit_url} target="_blank" rel="noreferrer" className="text-brand-muted hover:text-brand-orange flex-shrink-0" title="Edit in wp-admin">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Core + theme */}
+      <div className="card">
+        <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-3">Core & theme</p>
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 py-1.5 text-xs">
+            <span className="font-mono text-brand-black flex-1">WordPress core</span>
+            <span className="text-brand-muted">v{data.core.current_version ?? "unknown"}</span>
+            {data.core.update_available ? (
+              <span className="badge text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-700">→ {data.core.latest_version}</span>
+            ) : data.core.current_version ? (
+              <span className="badge text-[10px] px-1.5 py-0.5 bg-green-50 text-green-700">up to date</span>
+            ) : (
+              <span className="badge text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500">—</span>
+            )}
+          </div>
+          {data.themes.active && (
+            <div className="flex items-center gap-3 py-1.5 text-xs border-t border-brand-border pt-2">
+              <span className="font-mono text-brand-black flex-1">{decodeHtmlEntities(data.themes.active.name)} <span className="text-brand-muted">(active theme)</span></span>
+              <span className="text-brand-muted">v{data.themes.active.version}</span>
+            </div>
+          )}
+          {data.themes.all.filter(t => !t.is_active).length > 0 && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-brand-muted hover:text-brand-black py-1">
+                {data.themes.all.filter(t => !t.is_active).length} inactive theme(s)
+              </summary>
+              <div className="divide-y divide-brand-border mt-1">
+                {data.themes.all.filter(t => !t.is_active).map(t => (
+                  <div key={t.stylesheet} className="flex items-center gap-3 py-1.5">
+                    <span className="font-mono text-brand-black flex-1">{decodeHtmlEntities(t.name)}</span>
+                    <span className="text-brand-muted">v{t.version}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      </div>
+
+      {/* Plugins */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide">Plugins</p>
+          <span className="text-[10px] text-brand-muted">{data.plugins.length} installed · {activePlugins} active</span>
+        </div>
+        {data.plugins.length === 0 ? (
+          <p className="text-xs text-brand-muted text-center py-3">No plugins reported.</p>
+        ) : (
+          <div className="divide-y divide-brand-border">
+            {data.plugins.map(p => (
+              <div key={p.plugin} className="flex items-center gap-3 py-1.5 text-xs">
+                <div className={clsx("w-1.5 h-1.5 rounded-full flex-shrink-0",
+                  p.update_available ? "bg-amber-400" : p.status === "active" ? "bg-green-500" : "bg-gray-300")} />
+                <span className="text-brand-black flex-1 truncate">{decodeHtmlEntities(p.name)}</span>
+                <span className="text-brand-muted text-[10px] font-mono flex-shrink-0">v{p.current_version}</span>
+                {p.update_available && p.latest_version ? (
+                  <span className="badge text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-700 flex-shrink-0">→ {p.latest_version}</span>
+                ) : p.status === "active" ? (
+                  <span className="badge text-[9px] px-1 py-0 bg-green-50 text-green-700 flex-shrink-0">active</span>
+                ) : (
+                  <span className="badge text-[9px] px-1 py-0 bg-gray-100 text-gray-500 flex-shrink-0">inactive</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string }[] = [
@@ -846,6 +1259,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "supabase",   label: "Supabase"   },
   { id: "vps",        label: "VPS"        },
   { id: "n8n",        label: "n8n"        },
+  { id: "wordpress",  label: "WordPress"  },
   { id: "regression", label: "Regression" },
 ];
 
@@ -907,6 +1321,7 @@ export default function StatusPage() {
       <div className={tab === "supabase"   ? "block" : "hidden"}><SupabaseTab /></div>
       <div className={tab === "vps"        ? "block" : "hidden"}><VpsTab /></div>
       <div className={tab === "n8n"        ? "block" : "hidden"}><N8nTab /></div>
+      <div className={tab === "wordpress"  ? "block" : "hidden"}><WordpressTab /></div>
       <div className={tab === "regression" ? "block" : "hidden"}><RegressionPanel isAdmin={isAdmin} /></div>
     </div>
   );
