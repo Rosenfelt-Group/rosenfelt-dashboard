@@ -83,6 +83,37 @@ export async function POST(req: NextRequest) {
         .eq("stripe_subscription_id", sub.id);
     }
 
+    if (event.type === "checkout.session.completed") {
+      // Fires after a one_time service's Stripe Checkout completes successfully.
+      // (Subscription-mode checkout would route through customer.subscription.created
+      // instead — Stripe handles that one separately.) The session metadata carries
+      // client_service_id (set at /activate time) so we can flip the row to active.
+      const session = event.data.object as Stripe.Checkout.Session;
+      const isTestMode = session.metadata?.test_mode === "true";
+      const csId = session.metadata?.client_service_id;
+      // Only act on paid one-time checkouts. Subscription-mode sessions land here
+      // too on completion but the customer.subscription.created event already
+      // handled the writeback for those.
+      if (
+        !isTestMode
+        && csId
+        && session.payment_status === "paid"
+        && session.mode === "payment"
+      ) {
+        const priceRef = session.line_items?.data[0]?.price?.id;
+        await supabaseAdmin
+          .schema("crm")
+          .from("client_services")
+          .update({
+            status: "active",
+            billing_activated_at: new Date().toISOString(),
+            billing_activated_by: "stripe_checkout",
+            ...(priceRef ? { stripe_price_id: priceRef } : {}),
+          })
+          .eq("id", csId);
+      }
+    }
+
     if (event.type === "invoice.payment_failed") {
       const invoice = event.data.object as Stripe.Invoice;
       const customerRef = invoice.customer;

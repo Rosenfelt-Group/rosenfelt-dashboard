@@ -3,16 +3,44 @@ import { useEffect, useState } from "react";
 import { CRMContact, CRMBusiness } from "@/types";
 import { CRMNav } from "@/components/CRMNav";
 
-const BLANK_FORM = { firstName: "", lastName: "", email: "", phone: "", title: "", businessId: "" };
+type Form = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  title: string;
+  businessId: string;
+  isPrimary: boolean;
+  notes: string;
+};
+const BLANK_FORM: Form = {
+  firstName: "", lastName: "", email: "", phone: "", title: "",
+  businessId: "", isPrimary: false, notes: "",
+};
+
+function formFromContact(c: CRMContact): Form {
+  return {
+    firstName: c.first_name,
+    lastName: c.last_name ?? "",
+    email: c.email ?? "",
+    phone: c.phone ?? "",
+    title: c.title ?? "",
+    businessId: c.business_id ?? "",
+    isPrimary: c.is_primary,
+    notes: c.notes ?? "",
+  };
+}
 
 export default function ContactsPage() {
   const [contacts, setContacts] = useState<CRMContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
   const [businesses, setBusinesses] = useState<CRMBusiness[]>([]);
-  const [form, setForm] = useState(BLANK_FORM);
+  const [form, setForm] = useState<Form>(BLANK_FORM);
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/crm/contacts")
@@ -20,35 +48,66 @@ export default function ContactsPage() {
       .then(d => { setContacts(Array.isArray(d) ? d : []); setLoading(false); });
   }, []);
 
-  async function openCreate() {
+  async function loadBusinessesIfNeeded() {
     if (businesses.length === 0) {
       const d = await fetch("/api/crm/businesses").then(r => r.json());
       setBusinesses(Array.isArray(d) ? d : []);
     }
-    setForm(BLANK_FORM);
-    setShowCreate(true);
   }
 
-  async function createContact() {
+  async function openCreate() {
+    await loadBusinessesIfNeeded();
+    setEditingId(null);
+    setForm(BLANK_FORM);
+    setErr(null);
+    setShowModal(true);
+  }
+
+  async function openEdit(c: CRMContact) {
+    await loadBusinessesIfNeeded();
+    setEditingId(c.id);
+    setForm(formFromContact(c));
+    setErr(null);
+    setShowModal(true);
+  }
+
+  async function saveContact() {
     if (!form.firstName.trim()) return;
     setSaving(true);
-    const r = await fetch("/api/crm/contacts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    setErr(null);
+    try {
+      const payload = {
         first_name: form.firstName.trim(),
-        last_name: form.lastName.trim() || undefined,
-        email: form.email.trim() || undefined,
-        phone: form.phone.trim() || undefined,
-        title: form.title.trim() || undefined,
-        business_id: form.businessId || undefined,
-        is_primary: false,
-      }),
-    });
-    const contact = await r.json();
-    setContacts(prev => [contact, ...prev]);
-    setShowCreate(false);
-    setSaving(false);
+        last_name: form.lastName.trim() || null,
+        email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
+        title: form.title.trim() || null,
+        business_id: form.businessId || null,
+        is_primary: form.isPrimary,
+        notes: form.notes.trim() || null,
+      };
+      const url = editingId ? `/api/crm/contacts/${editingId}` : "/api/crm/contacts";
+      const method = editingId ? "PATCH" : "POST";
+      const r = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const t = await r.text().catch(() => "");
+        throw new Error(`HTTP ${r.status}: ${t.slice(0, 200)}`);
+      }
+      const contact = await r.json();
+      setContacts(prev => editingId
+        ? prev.map(c => c.id === contact.id ? contact : c)
+        : [contact, ...prev],
+      );
+      setShowModal(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const filtered = contacts.filter(c => {
@@ -89,8 +148,8 @@ export default function ContactsPage() {
       ) : (
         <div className="card divide-y divide-brand-border">
           {filtered.map(contact => (
-            <div key={contact.id} className="py-3 flex items-center justify-between gap-4">
-              <div className="min-w-0">
+            <div key={contact.id} className="py-3 flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-brand-black truncate">
                   {contact.first_name}{contact.last_name ? " " + contact.last_name : ""}
                   {contact.is_primary && (
@@ -104,25 +163,33 @@ export default function ContactsPage() {
                   <p className="text-xs text-brand-orange">{contact.email}</p>
                 )}
               </div>
-              <div className="text-right shrink-0">
+              <div className="text-right shrink-0 space-y-1">
                 {contact.business && (
                   <p className="text-xs text-brand-muted truncate max-w-[140px]">{contact.business.name}</p>
                 )}
                 {contact.phone && (
                   <p className="text-xs text-brand-muted">{contact.phone}</p>
                 )}
+                <button
+                  onClick={() => openEdit(contact)}
+                  className="text-xs px-2 py-1 rounded border border-brand-border hover:bg-brand-cream block ml-auto"
+                >
+                  Edit
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {showCreate && (
+      {showModal && (
         <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-semibold text-brand-black">New contact</h2>
-              <button onClick={() => setShowCreate(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
+              <h2 className="text-base font-semibold text-brand-black">
+                {editingId ? "Edit contact" : "New contact"}
+              </h2>
+              <button onClick={() => setShowModal(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
             </div>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
@@ -154,25 +221,27 @@ export default function ContactsPage() {
                   placeholder="CEO"
                 />
               </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Email</label>
-                <input
-                  type="email"
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={form.email}
-                  onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                  placeholder="jane@acme.com"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Phone</label>
-                <input
-                  type="tel"
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={form.phone}
-                  onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
-                  placeholder="+1 555 000 0000"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-brand-muted mb-1 block">Email</label>
+                  <input
+                    type="email"
+                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                    value={form.email}
+                    onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                    placeholder="jane@acme.com"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-brand-muted mb-1 block">Phone</label>
+                  <input
+                    type="tel"
+                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                    value={form.phone}
+                    onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
+                    placeholder="+1 555 000 0000"
+                  />
+                </div>
               </div>
               <div>
                 <label className="text-xs text-brand-muted mb-1 block">Business</label>
@@ -187,15 +256,33 @@ export default function ContactsPage() {
                   ))}
                 </select>
               </div>
+              <label className="flex items-center gap-2 text-xs text-brand-black">
+                <input
+                  type="checkbox"
+                  checked={form.isPrimary}
+                  onChange={e => setForm(p => ({ ...p, isPrimary: e.target.checked }))}
+                />
+                Primary contact for this business
+              </label>
+              <div>
+                <label className="text-xs text-brand-muted mb-1 block">Notes</label>
+                <textarea
+                  rows={2}
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                  value={form.notes}
+                  onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+                />
+              </div>
+              {err && <div className="text-xs text-red-700">{err}</div>}
             </div>
             <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowCreate(false)} className="btn-ghost flex-1">Cancel</button>
+              <button onClick={() => setShowModal(false)} className="btn-ghost flex-1">Cancel</button>
               <button
-                onClick={createContact}
+                onClick={saveContact}
                 disabled={saving || !form.firstName.trim()}
                 className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? "Creating…" : "Create contact"}
+                {saving ? "Saving…" : editingId ? "Save changes" : "Create contact"}
               </button>
             </div>
           </div>
