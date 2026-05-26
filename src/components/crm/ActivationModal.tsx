@@ -188,8 +188,23 @@ export function ActivationModal({ service, onClose, onActivated }: Props) {
                   : "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set in this environment. Set it in Vercel before activating recurring services."}
               </div>
             )
+          ) : testMode ? (
+            <div className="space-y-2">
+              <div className="text-sm text-brand-black">✅ Test mode succeeded.</div>
+              <p className="text-xs text-brand-muted leading-relaxed">
+                Stripe accepted the card and created the subscription in <strong>test mode</strong>.
+                Check the Stripe Dashboard (Test mode) → Subscriptions to see it.
+                The CRM row stays in <code className="text-[11px] bg-brand-cream px-1 rounded">pending_activation</code> —
+                untick Test mode and re-run to activate for real.
+              </p>
+            </div>
           ) : (
-            <div className="text-sm text-brand-black">✅ Service activated.</div>
+            <div className="space-y-2">
+              <div className="text-sm text-brand-black">✅ Service activated.</div>
+              <p className="text-xs text-brand-muted">
+                Subscription created. Row flipped to <code className="text-[11px] bg-brand-cream px-1 rounded">active</code>.
+              </p>
+            </div>
           )}
         </div>
         <div className="px-4 py-3 border-t border-brand-border flex justify-end gap-2">
