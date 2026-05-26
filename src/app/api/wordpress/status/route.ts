@@ -85,6 +85,17 @@ interface WordpressStatus {
 let cache: { at: number; data: WordpressStatus } | null = null;
 const TTL_MS = 10 * 60_000;
 
+function authDiag(auth: string | undefined): string {
+  if (!auth) return "WP_AUTH=missing";
+  const trimmed = auth.trim();
+  const decoded = (() => {
+    try { return Buffer.from(trimmed, "base64").toString("utf8"); } catch { return ""; }
+  })();
+  const hasColon = decoded.includes(":");
+  const looksB64 = /^[A-Za-z0-9+/=]+$/.test(trimmed);
+  return `WP_AUTH=len:${auth.length} trim:${trimmed.length} b64:${looksB64} decode-has-colon:${hasColon} user:${decoded.split(":")[0] || "?"}`;
+}
+
 function getTitle(t: WPPost["title"]): string {
   if (typeof t === "object" && "rendered" in t) return t.rendered;
   return "Untitled";
@@ -107,7 +118,11 @@ async function fetchWP<T>(url: string, auth: string, errors: string[]): Promise<
       cache: "no-store",
     });
     if (!res.ok) {
-      errors.push(`${url.split("/wp-json/")[1] ?? url}: HTTP ${res.status}`);
+      const body = await res.text();
+      let code = "";
+      try { code = JSON.parse(body)?.code ?? ""; } catch { /* not JSON */ }
+      const detail = code ? ` (${code})` : ` ${body.slice(0, 80)}`;
+      errors.push(`${url.split("/wp-json/")[1] ?? url}: HTTP ${res.status}${detail}`);
       return null;
     }
     return (await res.json()) as T;
@@ -172,8 +187,8 @@ function compareVersions(a: string, b: string): number {
 }
 
 export async function GET() {
-  const wpUrl = process.env.WP_URL?.replace(/\/$/, "");
-  const wpAuth = process.env.WP_AUTH;
+  const wpUrl = process.env.WP_URL?.replace(/\/$/, "").trim();
+  const wpAuth = process.env.WP_AUTH?.trim();
 
   if (!wpUrl || !wpAuth) {
     return NextResponse.json({
@@ -193,6 +208,9 @@ export async function GET() {
   }
 
   const errors: string[] = [];
+  // Diagnostic: surface auth-presence and shape so we can distinguish "wrong value"
+  // from "right value, stale credential at WP" without leaking the secret.
+  errors.push(authDiag(wpAuth));
 
   const [pendingPosts, draftPosts, futurePosts, plugins, themes, currentWPVersion, latestWPVersion] = await Promise.all([
     fetchWP<WPPost[]>(`${wpUrl}/wp-json/wp/v2/posts?status=pending&per_page=20&context=edit&_fields=id,title,status,date,modified,link,author`, wpAuth, errors),
