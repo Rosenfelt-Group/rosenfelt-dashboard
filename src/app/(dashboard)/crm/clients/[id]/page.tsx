@@ -230,7 +230,10 @@ export default function ClientDetailPage() {
         <ActivationModal
           service={activatingService}
           onClose={() => setActivatingService(null)}
-          onActivated={() => { setActivatingService(null); loadServices(); }}
+          // Refresh the services list but DON'T close the modal — the modal's
+          // "done" step shows the success message (and clarifies what didn't
+          // happen in test mode). User closes it via the Close button.
+          onActivated={() => loadServices()}
         />
       )}
 
