@@ -267,7 +267,7 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
           {item.title}
         </h1>
         <div className="flex items-center gap-2 mt-1 text-xs text-brand-muted">
-          <SourceBadge source={item.source} />
+          <SourceBadge source={item.source} sprintNumber={item.sprint_number} />
           <span className="capitalize">{item.work_type}</span>
           {item.assigned_agent && (
             <>
@@ -380,7 +380,7 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
                   {item.source === "manual" ? (
                     <span className="text-xs text-brand-muted">Manual</span>
                   ) : (
-                    <SourceBadge source={item.source} />
+                    <SourceBadge source={item.source} sprintNumber={item.sprint_number} />
                   )}
                 </div>
               </Field>

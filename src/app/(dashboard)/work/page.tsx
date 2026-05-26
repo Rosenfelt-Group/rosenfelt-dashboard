@@ -10,6 +10,7 @@ import type {
   TaskPriority,
   WorkItem,
   WorkItemSource,
+  WorkItemType,
   WorkStatus,
   WorkType,
 } from "@/types";
@@ -28,8 +29,13 @@ const AGENT_FILTER_OPTIONS: (AgentName | "unassigned")[] = [
 const PRIORITIES: TaskPriority[] = ["high", "medium", "low"];
 
 const SOURCES: WorkItemSource[] = [
-  "manual", "casey_audit", "sprint_plan", "agent_suggestion", "backlog_migration",
+  "manual", "casey_audit", "sprint_plan", "sprint",
+  "agent_suggestion", "backlog_migration", "typeform", "stripe",
 ];
+
+const ITEM_TYPES: WorkItemType[] = ["internal", "client"];
+type ItemTypeFilter = WorkItemType | "all";
+const ITEM_TYPE_FILTERS: ItemTypeFilter[] = ["internal", "client", "all"];
 
 const STATUS_PILL: Record<WorkStatus, string> = {
   inbox:        "bg-gray-100 text-gray-700",
@@ -96,6 +102,9 @@ type Filters = {
   workTypes: Set<WorkType>;
   priorities: Set<TaskPriority>;
   sources: Set<WorkItemSource>;
+  sprints: Set<number>;
+  // Server-side filter (passed to /api/work?itemType=) — single value, defaults to "internal"
+  itemType: ItemTypeFilter;
 };
 
 function parseSetParam<T extends string>(
@@ -109,12 +118,29 @@ function parseSetParam<T extends string>(
   );
 }
 
+function parseSprints(raw: string | null): Set<number> {
+  if (!raw) return new Set();
+  const out = new Set<number>();
+  for (const part of raw.split(",")) {
+    const n = parseInt(part.trim(), 10);
+    if (Number.isInteger(n) && n >= 0) out.add(n);
+  }
+  return out;
+}
+
+function parseItemType(raw: string | null): ItemTypeFilter {
+  if (raw === "client" || raw === "all") return raw;
+  return "internal";
+}
+
 function buildFilters(sp: URLSearchParams): Filters {
   return {
     agents: parseSetParam<AgentName | "unassigned">(sp.get("agent"), AGENT_FILTER_OPTIONS),
     workTypes: parseSetParam<WorkType>(sp.get("type"), WORK_TYPES),
     priorities: parseSetParam<TaskPriority>(sp.get("priority"), PRIORITIES),
     sources: parseSetParam<WorkItemSource>(sp.get("source"), SOURCES),
+    sprints: parseSprints(sp.get("sprint")),
+    itemType: parseItemType(sp.get("itemType")),
   };
 }
 
@@ -124,6 +150,9 @@ function filtersToQuery(f: Filters): string {
   if (f.workTypes.size) sp.set("type", Array.from(f.workTypes).join(","));
   if (f.priorities.size) sp.set("priority", Array.from(f.priorities).join(","));
   if (f.sources.size) sp.set("source", Array.from(f.sources).join(","));
+  if (f.sprints.size) sp.set("sprint", Array.from(f.sprints).sort((a, b) => a - b).join(","));
+  // Only persist itemType when it's not the default ("internal")
+  if (f.itemType !== "internal") sp.set("itemType", f.itemType);
   return sp.toString();
 }
 
@@ -135,6 +164,13 @@ function matchesFilters(item: WorkItem, f: Filters): boolean {
   if (f.workTypes.size && !f.workTypes.has(item.work_type)) return false;
   if (f.priorities.size && !f.priorities.has(item.priority)) return false;
   if (f.sources.size && !f.sources.has(item.source)) return false;
+  if (f.sprints.size) {
+    if (item.sprint_number == null || !f.sprints.has(item.sprint_number)) return false;
+  }
+  // itemType is enforced server-side via /api/work?itemType=, but defensively re-check
+  // here so a stale fetch doesn't leak across toggle states.
+  if (f.itemType === "internal" && item.work_item_type !== "internal") return false;
+  if (f.itemType === "client" && item.work_item_type !== "client") return false;
   return true;
 }
 
@@ -193,6 +229,7 @@ function WorkPageInner() {
   const [columnCfg, setColumnCfg] = useState<ColumnConfig>(() => loadColumnConfig());
   const [newItemOpen, setNewItemOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [availableSprints, setAvailableSprints] = useState<number[]>([]);
 
   // Persist filter snapshot for back-from-detail navigation.
   useEffect(() => {
@@ -203,11 +240,11 @@ function WorkPageInner() {
     }
   }, [filters]);
 
-  // Fetch items
-  const load = useCallback(async () => {
+  // Fetch items — server-filters by itemType so client/internal swap re-queries.
+  const load = useCallback(async (itemType: ItemTypeFilter) => {
     setLoading(true);
     try {
-      const res = await fetch("/api/work?archived=false");
+      const res = await fetch(`/api/work?archived=false&itemType=${itemType}`);
       const data = await res.json();
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -218,23 +255,43 @@ function WorkPageInner() {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    load(filters.itemType);
+  }, [load, filters.itemType]);
 
-  // Realtime updates on work_items: refetch (cheaper than reconciling)
+  // Fetch sprint number options once on mount; refresh after new items are created.
+  const reloadSprintOptions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/work/sprint-numbers");
+      const data = await res.json();
+      setAvailableSprints(Array.isArray(data) ? data : []);
+    } catch {
+      // Non-critical — the Sprint dropdown just shows no options
+    }
+  }, []);
+
+  useEffect(() => {
+    reloadSprintOptions();
+  }, [reloadSprintOptions]);
+
+  // Realtime updates on work_items: refetch (cheaper than reconciling).
+  // Re-subscribe when itemType changes so the refetch carries the right filter.
   useEffect(() => {
     const channel = supabase
       .channel("work-items-kanban")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "work_items" },
-        () => load(),
+        () => {
+          load(filters.itemType);
+          // A new item may introduce a previously-unseen sprint number
+          reloadSprintOptions();
+        },
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [load]);
+  }, [load, filters.itemType, reloadSprintOptions]);
 
   const setFilters = useCallback(
     (next: Filters) => {
@@ -257,10 +314,10 @@ function WorkPageInner() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Move failed");
-        load();
+        load(filters.itemType);
       }
     },
-    [load],
+    [load, filters.itemType],
   );
 
   const onColumnConfigChange = useCallback((cfg: ColumnConfig) => {
@@ -283,8 +340,14 @@ function WorkPageInner() {
 
   const visibleColumns = columnCfg.order.filter((s) => columnCfg.visible.includes(s));
 
+  // itemType always has a value; only count it as "active" when it differs from the default.
   const activeFilterCount =
-    filters.agents.size + filters.workTypes.size + filters.priorities.size + filters.sources.size;
+    filters.agents.size +
+    filters.workTypes.size +
+    filters.priorities.size +
+    filters.sources.size +
+    filters.sprints.size +
+    (filters.itemType === "internal" ? 0 : 1);
 
   return (
     <div className="p-4 sm:p-6 space-y-4">
@@ -309,7 +372,7 @@ function WorkPageInner() {
       </div>
 
       {/* Filter bar */}
-      <FilterBar filters={filters} setFilters={setFilters} />
+      <FilterBar filters={filters} setFilters={setFilters} availableSprints={availableSprints} />
 
       {/* Active filter chips */}
       {activeFilterCount > 0 && (
@@ -358,6 +421,25 @@ function WorkPageInner() {
               }}
             />
           ))}
+          {Array.from(filters.sprints)
+            .sort((a, b) => a - b)
+            .map((n) => (
+              <FilterChip
+                key={`sp-${n}`}
+                label={`Sprint ${n}`}
+                onRemove={() => {
+                  const next = new Set(filters.sprints);
+                  next.delete(n);
+                  setFilters({ ...filters, sprints: next });
+                }}
+              />
+            ))}
+          {filters.itemType !== "internal" && (
+            <FilterChip
+              label={`Items: ${filters.itemType}`}
+              onRemove={() => setFilters({ ...filters, itemType: "internal" })}
+            />
+          )}
           <button
             onClick={() =>
               setFilters({
@@ -365,6 +447,8 @@ function WorkPageInner() {
                 workTypes: new Set(),
                 priorities: new Set(),
                 sources: new Set(),
+                sprints: new Set(),
+                itemType: "internal",
               })
             }
             className="text-xs text-brand-orange hover:underline"
@@ -405,7 +489,13 @@ function WorkPageInner() {
       )}
 
       {newItemOpen && (
-        <NewItemModal onClose={() => setNewItemOpen(false)} onCreated={load} />
+        <NewItemModal
+          onClose={() => setNewItemOpen(false)}
+          onCreated={() => {
+            load(filters.itemType);
+            reloadSprintOptions();
+          }}
+        />
       )}
     </div>
   );
@@ -416,9 +506,11 @@ function WorkPageInner() {
 function FilterBar({
   filters,
   setFilters,
+  availableSprints,
 }: {
   filters: Filters;
   setFilters: (next: Filters) => void;
+  availableSprints: number[];
 }) {
   function toggle<T>(set: Set<T>, value: T): Set<T> {
     const next = new Set(set);
@@ -428,33 +520,135 @@ function FilterBar({
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-      <MultiSelect
-        label="Agent"
-        options={AGENT_FILTER_OPTIONS}
-        selected={filters.agents}
-        onToggle={(v) => setFilters({ ...filters, agents: toggle(filters.agents, v) })}
+    <div className="space-y-2">
+      {/* Items toggle (Internal / Client / All) — server-side filter */}
+      <ItemTypeToggle
+        value={filters.itemType}
+        onChange={(v) => setFilters({ ...filters, itemType: v })}
       />
-      <MultiSelect
-        label="Type"
-        options={WORK_TYPES}
-        selected={filters.workTypes}
-        onToggle={(v) => setFilters({ ...filters, workTypes: toggle(filters.workTypes, v) })}
-      />
-      <MultiSelect
-        label="Priority"
-        options={PRIORITIES}
-        selected={filters.priorities}
-        onToggle={(v) =>
-          setFilters({ ...filters, priorities: toggle(filters.priorities, v) })
-        }
-      />
-      <MultiSelect
-        label="Source"
-        options={SOURCES}
-        selected={filters.sources}
-        onToggle={(v) => setFilters({ ...filters, sources: toggle(filters.sources, v) })}
-      />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        <MultiSelect
+          label="Agent"
+          options={AGENT_FILTER_OPTIONS}
+          selected={filters.agents}
+          onToggle={(v) => setFilters({ ...filters, agents: toggle(filters.agents, v) })}
+        />
+        <MultiSelect
+          label="Type"
+          options={WORK_TYPES}
+          selected={filters.workTypes}
+          onToggle={(v) => setFilters({ ...filters, workTypes: toggle(filters.workTypes, v) })}
+        />
+        <MultiSelect
+          label="Priority"
+          options={PRIORITIES}
+          selected={filters.priorities}
+          onToggle={(v) =>
+            setFilters({ ...filters, priorities: toggle(filters.priorities, v) })
+          }
+        />
+        <MultiSelect
+          label="Source"
+          options={SOURCES}
+          selected={filters.sources}
+          onToggle={(v) => setFilters({ ...filters, sources: toggle(filters.sources, v) })}
+        />
+        <SprintMultiSelect
+          label="Sprint #"
+          options={availableSprints}
+          selected={filters.sprints}
+          onToggle={(v) => setFilters({ ...filters, sprints: toggle(filters.sprints, v) })}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ItemTypeToggle({
+  value,
+  onChange,
+}: {
+  value: ItemTypeFilter;
+  onChange: (v: ItemTypeFilter) => void;
+}) {
+  return (
+    <div className="inline-flex items-center gap-1 rounded border border-brand-border bg-white p-0.5">
+      {ITEM_TYPE_FILTERS.map((opt) => {
+        const active = value === opt;
+        return (
+          <button
+            key={opt}
+            onClick={() => onChange(opt)}
+            className={clsx(
+              "text-xs px-3 py-1 rounded capitalize transition-colors",
+              active
+                ? "bg-brand-orange text-white"
+                : "text-brand-muted hover:bg-brand-cream",
+            )}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SprintMultiSelect({
+  label,
+  options,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  options: number[];
+  selected: Set<number>;
+  onToggle: (v: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const summary =
+    selected.size === 0
+      ? "All"
+      : selected.size === 1
+        ? `Sprint ${Array.from(selected)[0]}`
+        : `${selected.size} selected`;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full rounded border border-brand-border bg-white text-xs px-2 py-1 text-left hover:bg-brand-cream flex items-center justify-between"
+      >
+        <span>
+          <span className="text-brand-muted">{label}:</span>{" "}
+          <span className="text-brand-black">{summary}</span>
+        </span>
+        <span className="text-brand-muted">▾</span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute z-20 mt-1 w-full bg-white border border-brand-border rounded shadow-md max-h-60 overflow-y-auto">
+            {options.length === 0 ? (
+              <div className="px-3 py-1.5 text-xs text-brand-muted">No sprints yet</div>
+            ) : (
+              options.map((n) => (
+                <label
+                  key={n}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-brand-offwhite cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(n)}
+                    onChange={() => onToggle(n)}
+                  />
+                  <span className="text-brand-black">Sprint {n}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -536,13 +730,29 @@ function NewItemModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const [description, setDescription] = useState("");
   const [workType, setWorkType] = useState<WorkType>("operations");
   const [priority, setPriority] = useState<TaskPriority>("medium");
+  const [source, setSource] = useState<WorkItemSource>("manual");
+  const [sprintNumber, setSprintNumber] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const requiresSprintNumber = source === "sprint" || source === "sprint_plan";
+
   async function save() {
     if (!title.trim()) return;
-    setSaving(true);
     setErr(null);
+
+    // Sprint-tagged items must have a positive integer sprint_number.
+    let sprintNumberParsed: number | null = null;
+    if (requiresSprintNumber) {
+      const n = parseInt(sprintNumber.trim(), 10);
+      if (!Number.isInteger(n) || n <= 0) {
+        setErr("Sprint # is required and must be a positive integer.");
+        return;
+      }
+      sprintNumberParsed = n;
+    }
+
+    setSaving(true);
     try {
       const res = await fetch("/api/work", {
         method: "POST",
@@ -553,6 +763,8 @@ function NewItemModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           work_type: workType,
           priority,
           status: "inbox",
+          source,
+          ...(sprintNumberParsed !== null && { sprint_number: sprintNumberParsed }),
         }),
       });
       if (!res.ok) {
@@ -611,6 +823,32 @@ function NewItemModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
                 {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
+            <div>
+              <div className="text-[10px] uppercase text-brand-muted mb-1">Source</div>
+              <select
+                value={source}
+                onChange={(e) => setSource(e.target.value as WorkItemSource)}
+                className="w-full rounded border border-brand-border px-2 py-1 text-xs"
+              >
+                {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            {requiresSprintNumber && (
+              <div>
+                <div className="text-[10px] uppercase text-brand-muted mb-1">
+                  Sprint # <span className="text-red-600">*</span>
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={sprintNumber}
+                  onChange={(e) => setSprintNumber(e.target.value)}
+                  placeholder="e.g. 3"
+                  className="w-full rounded border border-brand-border px-2 py-1 text-xs"
+                />
+              </div>
+            )}
           </div>
           {err && <div className="text-xs text-red-700">{err}</div>}
         </div>
