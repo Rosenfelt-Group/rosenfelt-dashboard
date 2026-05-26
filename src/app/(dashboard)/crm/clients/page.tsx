@@ -2,7 +2,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CRMClient, CRMBusiness, CRMContact, CRMServiceTier, CRMBillingStatus } from "@/types";
+import { CRMClient, CRMBusiness, CRMContact } from "@/types";
 import clsx from "clsx";
 import { AgentBadge } from "@/components/AgentBadge";
 import { Agent } from "@/types";
@@ -32,26 +32,19 @@ const TIER_LABELS: Record<string, string> = {
   full_stack: "Full Stack",
 };
 
-const SERVICE_TIERS: { value: CRMServiceTier; label: string }[] = [
-  { value: "newsroom",      label: "Newsroom" },
-  { value: "operations",   label: "Operations" },
-  { value: "finance_ops",  label: "Finance Ops" },
-  { value: "growth_stack", label: "Growth Stack" },
-  { value: "full_stack",   label: "Full Stack" },
-];
-
 const STATUS_COLORS: Record<string, string> = {
   active: "badge-success",
   paused: "badge-warning",
   cancelled: "badge-error",
 };
 
+// Note: service_tier + monthly_value columns were dropped from crm.clients in
+// the 2026-05-26 migration. Services + billing are now managed per-row in
+// crm.client_services and surfaced via /crm/clients/[id]. Don't reintroduce
+// those fields here.
 const BLANK_FORM = {
   businessId: "",
   contactId: "",
-  serviceTier: "newsroom" as CRMServiceTier,
-  billingStatus: "active" as CRMBillingStatus,
-  monthlyValue: "",
   contractStart: "",
 };
 
@@ -75,6 +68,7 @@ function ClientsPageInner() {
   const [availableContacts, setAvailableContacts] = useState<CRMContact[]>([]);
   const [form, setForm] = useState(BLANK_FORM);
   const [saving, setSaving] = useState(false);
+  const [createErr, setCreateErr] = useState<string | null>(null);
   const [paymentLink, setPaymentLink] = useState<{ url: string; businessName: string } | null>(null);
   const [generatingLinkFor, setGeneratingLinkFor] = useState<string | null>(null);
 
@@ -130,22 +124,35 @@ function ClientsPageInner() {
   async function createClient() {
     if (!form.businessId) return;
     setSaving(true);
-    const r = await fetch("/api/crm/clients", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        business_id: form.businessId,
-        contact_id: form.contactId || undefined,
-        service_tier: form.serviceTier,
-        billing_status: form.billingStatus,
-        monthly_value: form.monthlyValue ? parseFloat(form.monthlyValue) : undefined,
-        contract_start: form.contractStart || undefined,
-      }),
-    });
-    const client = await r.json();
-    setClients(prev => [client, ...prev]);
-    setShowCreate(false);
-    setSaving(false);
+    setCreateErr(null);
+    try {
+      const r = await fetch("/api/crm/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          business_id: form.businessId,
+          contact_id: form.contactId || undefined,
+          // billing_status defaults to 'cancelled' until a client_service activates;
+          // the crm.update_client_billing_status() trigger rolls it up automatically.
+          billing_status: "cancelled",
+          contract_start: form.contractStart || undefined,
+        }),
+      });
+      if (!r.ok) {
+        const body = await r.text().catch(() => "");
+        throw new Error(`HTTP ${r.status}: ${body.slice(0, 200)}`);
+      }
+      const client = await r.json();
+      setShowCreate(false);
+      // Take the user to the new client's detail page where they can add services.
+      // (Brand-new clients don't appear under the default 'Active' filter — they
+      // have no client_services rows yet.)
+      router.push(`/crm/clients/${client.id}`);
+    } catch (e) {
+      setCreateErr(e instanceof Error ? e.message : "Create failed");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -185,8 +192,22 @@ function ClientsPageInner() {
         <div className="card animate-pulse h-40" />
       ) : clients.length === 0 ? (
         <div className="card text-center py-12">
-          <p className="text-brand-muted text-sm">No clients yet.</p>
-          <p className="text-xs text-brand-muted mt-1">Convert a won lead or use the New client button above.</p>
+          {statusFilter === "active" ? (
+            <>
+              <p className="text-brand-muted text-sm">No active clients.</p>
+              <p className="text-xs text-brand-muted mt-1">
+                Brand-new clients land here only after at least one of their services flips to <strong>active</strong>.{" "}
+                <button onClick={() => setStatusFilter("all")} className="text-brand-orange hover:underline">
+                  Show all clients
+                </button> to see clients still in setup.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-brand-muted text-sm">No clients yet.</p>
+              <p className="text-xs text-brand-muted mt-1">Convert a won lead or use the New client button above.</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -328,53 +349,23 @@ function ClientsPageInner() {
                   ))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-brand-muted mb-1 block">Service tier</label>
-                  <select
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                    value={form.serviceTier}
-                    onChange={e => setForm(p => ({ ...p, serviceTier: e.target.value as CRMServiceTier }))}
-                  >
-                    {SERVICE_TIERS.map(t => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-brand-muted mb-1 block">Billing status</label>
-                  <select
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                    value={form.billingStatus}
-                    onChange={e => setForm(p => ({ ...p, billingStatus: e.target.value as CRMBillingStatus }))}
-                  >
-                    <option value="active">Active</option>
-                    <option value="paused">Paused</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </div>
+              <div>
+                <label className="text-xs text-brand-muted mb-1 block">Contract start (optional)</label>
+                <input
+                  type="date"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                  value={form.contractStart}
+                  onChange={e => setForm(p => ({ ...p, contractStart: e.target.value }))}
+                />
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-brand-muted mb-1 block">Monthly value ($)</label>
-                  <input
-                    type="number"
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                    value={form.monthlyValue}
-                    onChange={e => setForm(p => ({ ...p, monthlyValue: e.target.value }))}
-                    placeholder="2500"
-                  />
+              <p className="text-[11px] text-brand-muted">
+                Services + billing are configured per-client on the detail page. After save you&apos;ll be taken there.
+              </p>
+              {createErr && (
+                <div className="text-xs text-red-700 bg-red-50 border border-red-100 rounded px-3 py-2">
+                  {createErr}
                 </div>
-                <div>
-                  <label className="text-xs text-brand-muted mb-1 block">Contract start</label>
-                  <input
-                    type="date"
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                    value={form.contractStart}
-                    onChange={e => setForm(p => ({ ...p, contractStart: e.target.value }))}
-                  />
-                </div>
-              </div>
+              )}
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={() => setShowCreate(false)} className="btn-ghost flex-1">Cancel</button>
