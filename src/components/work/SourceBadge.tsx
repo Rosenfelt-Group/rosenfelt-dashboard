@@ -3,6 +3,7 @@ import type { WorkItemSource } from "@/types";
 
 type Props = {
   source: WorkItemSource | null | undefined;
+  sprintNumber?: number | null;
   className?: string;
 };
 
@@ -11,7 +12,8 @@ const SOURCE_META: Record<
   { label: string; icon: string; pill: string }
 > = {
   casey_audit:      { label: "Audit",     icon: "🛡️", pill: "bg-rose-100 text-rose-700" },
-  sprint_plan:      { label: "Sprint",    icon: "📅", pill: "bg-blue-100 text-blue-700" },
+  sprint_plan:      { label: "Sprint Plan", icon: "📅", pill: "bg-blue-100 text-blue-700" },
+  sprint:           { label: "Sprint",    icon: "🏃", pill: "bg-blue-100 text-blue-700" },
   agent_suggestion: { label: "Suggested", icon: "💡", pill: "bg-purple-100 text-purple-700" },
   backlog_migration:{ label: "Migrated",  icon: "",   pill: "bg-gray-100 text-gray-600" },
   typeform:         { label: "Typeform",  icon: "📝", pill: "bg-teal-100 text-teal-700" },
@@ -19,7 +21,7 @@ const SOURCE_META: Record<
 };
 
 // 'manual' renders nothing — most items are manual and a badge would be noise.
-export function SourceBadge({ source, className }: Props) {
+export function SourceBadge({ source, sprintNumber, className }: Props) {
   if (!source || source === "manual") return null;
   // Defensive fallback: if the DB has a source the UI doesn't know about
   // (e.g. a future CHECK constraint extension that ships before this code),
@@ -29,6 +31,14 @@ export function SourceBadge({ source, className }: Props) {
     icon: "",
     pill: "bg-gray-100 text-gray-600",
   };
+
+  // Sprint-tagged items get the sprint number inlined when present.
+  // For source='sprint' with no number, keep the bare "Sprint" label as a graceful fallback.
+  let label = meta.label;
+  if ((source === "sprint" || source === "sprint_plan") && typeof sprintNumber === "number") {
+    label = `Sprint ${sprintNumber}`;
+  }
+
   return (
     <span
       className={clsx(
@@ -36,10 +46,10 @@ export function SourceBadge({ source, className }: Props) {
         meta.pill,
         className,
       )}
-      title={`Source: ${meta.label}`}
+      title={`Source: ${label}`}
     >
       {meta.icon && <span>{meta.icon}</span>}
-      <span>{meta.label}</span>
+      <span>{label}</span>
     </span>
   );
 }

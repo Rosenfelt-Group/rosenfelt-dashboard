@@ -104,10 +104,13 @@ export type WorkItemSource =
   | "manual"
   | "casey_audit"
   | "sprint_plan"
+  | "sprint"
   | "agent_suggestion"
   | "backlog_migration"
   | "typeform"
   | "stripe";
+
+export type WorkItemType = "internal" | "client";
 
 export type AgentName = "riley" | "jordan" | "avery" | "casey" | "brian";
 
@@ -135,6 +138,12 @@ export interface WorkItem {
   archived_at: string | null;
   legacy_task_id: string | null;
   legacy_backlog_id: number | null;
+  // Added 2026-05-26 (migration: work_items_sprint_client_extensions)
+  sprint_number?: number | null;
+  work_item_type: WorkItemType;
+  client_id?: string | null;
+  billable_hours?: number | null;
+  client_visible_notes?: string | null;
   // Populated by /api/work GET via DISTINCT ON join (Phase 6); absent on raw inserts.
   last_log?: WorkItemLog | null;
 }

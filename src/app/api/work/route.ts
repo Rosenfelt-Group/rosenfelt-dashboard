@@ -10,6 +10,8 @@ export async function GET(req: NextRequest) {
     const assignedAgent = searchParams.get("assigned_agent");
     const priority = searchParams.get("priority");
     const archived = searchParams.get("archived");
+    // itemType: undefined or "internal" → internal only (default), "client" → client only, "all" → no filter
+    const itemType = searchParams.get("itemType");
 
     let q = supabaseAdmin.from("work_items").select("*");
 
@@ -19,6 +21,8 @@ export async function GET(req: NextRequest) {
     if (priority) q = q.eq("priority", priority);
     if (archived === "true") q = q.eq("archived", true);
     else if (archived === "false") q = q.eq("archived", false);
+    if (itemType === "client") q = q.eq("work_item_type", "client");
+    else if (itemType !== "all") q = q.eq("work_item_type", "internal");
 
     q = q.order("updated_at", { ascending: false }).limit(500);
 
@@ -63,6 +67,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "title and work_type are required" }, { status: 400 });
     }
 
+    // Default due date: 30 days from creation, formatted as YYYY-MM-DD
+    const defaultDueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+
     const insert = {
       title: body.title,
       description: body.description ?? null,
@@ -70,11 +79,16 @@ export async function POST(req: NextRequest) {
       work_type: body.work_type,
       priority: body.priority ?? "medium",
       status: body.status ?? "inbox",
-      assigned_agent: body.assigned_agent ?? null,
+      assigned_agent: body.assigned_agent ?? "riley",
       suggested_by: body.suggested_by ?? null,
       prompt: body.prompt ?? null,
       arch_notes: body.arch_notes ?? null,
-      due_date: body.due_date ?? null,
+      due_date: body.due_date ?? defaultDueDate,
+      // 2026-05-26: client work item support
+      work_item_type: body.work_item_type ?? "internal",
+      sprint_number: body.sprint_number ?? null,
+      client_id: body.client_id ?? null,
+      source: body.source ?? "manual",
     };
 
     const { data, error } = await supabaseAdmin
