@@ -41,6 +41,7 @@ const NAV: NavItem[] = [
 
   // Sales & Marketing
   { label: "CRM",          href: "/crm",                 icon: "users",      module: "salesMarketing" },
+  { label: "Services",     href: "/crm/admin/services",  icon: "package",    module: "salesMarketing", requiredPermission: "manage_users" },
   { label: "Content",      href: "/content",             icon: "edit",       module: "salesMarketing" },
   { label: "Keywords",     href: "/content/keywords",    icon: "trendingUp", module: "salesMarketing" },
   { label: "Analytics",    href: "/analytics",           icon: "barChart",   module: "salesMarketing" },
@@ -94,6 +95,7 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     x:            <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
     database:     <><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></>,
     kanban:       <><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="4" height="8" rx="1"/></>,
+    package:      <><path d="M16.5 9.4l-9-5.19"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></>,
     logOut:       <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
   };
   return (

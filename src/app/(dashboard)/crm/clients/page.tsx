@@ -1,10 +1,20 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CRMClient, CRMBusiness, CRMContact, CRMServiceTier, CRMBillingStatus } from "@/types";
 import clsx from "clsx";
 import { AgentBadge } from "@/components/AgentBadge";
 import { Agent } from "@/types";
 import { CRMNav } from "@/components/CRMNav";
+
+type StatusFilter = "active" | "inactive" | "all";
+const STATUS_FILTERS: StatusFilter[] = ["active", "inactive", "all"];
+
+function parseStatusFilter(raw: string | null): StatusFilter {
+  if (raw === "inactive" || raw === "all") return raw;
+  return "active";
+}
 
 const STRIPE_STATUS_STYLES: Record<string, string> = {
   active:   "badge-success",
@@ -46,6 +56,18 @@ const BLANK_FORM = {
 };
 
 export default function ClientsPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-brand-muted">Loading…</div>}>
+      <ClientsPageInner />
+    </Suspense>
+  );
+}
+
+function ClientsPageInner() {
+  const router = useRouter();
+  const sp = useSearchParams();
+  const statusFilter: StatusFilter = parseStatusFilter(sp.get("status"));
+
   const [clients, setClients] = useState<CRMClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -56,11 +78,20 @@ export default function ClientsPage() {
   const [paymentLink, setPaymentLink] = useState<{ url: string; businessName: string } | null>(null);
   const [generatingLinkFor, setGeneratingLinkFor] = useState<string | null>(null);
 
+  const setStatusFilter = useCallback((next: StatusFilter) => {
+    const params = new URLSearchParams(Array.from(sp.entries()));
+    if (next === "active") params.delete("status");
+    else params.set("status", next);
+    const qs = params.toString();
+    router.replace(qs ? `/crm/clients?${qs}` : "/crm/clients", { scroll: false });
+  }, [router, sp]);
+
   useEffect(() => {
-    fetch("/api/crm/clients")
+    setLoading(true);
+    fetch(`/api/crm/clients?status=${statusFilter}`)
       .then(r => r.json())
       .then(d => { setClients(Array.isArray(d) ? d : []); setLoading(false); });
-  }, []);
+  }, [statusFilter]);
 
   async function openCreate() {
     if (availableBusinesses.length === 0) {
@@ -120,14 +151,34 @@ export default function ClientsPage() {
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
       <CRMNav />
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-semibold text-brand-black">Clients</h1>
-          <p className="text-sm text-brand-muted mt-0.5">{clients.length} active retainers</p>
+          <p className="text-sm text-brand-muted mt-0.5">
+            {clients.length} {statusFilter === "all" ? "total" : statusFilter}
+          </p>
         </div>
         <button onClick={openCreate} className="btn-primary text-xs px-3 py-1.5">
           + New client
         </button>
+      </div>
+
+      <div className="inline-flex items-center gap-1 rounded border border-brand-border bg-white p-0.5 mb-6">
+        {STATUS_FILTERS.map((opt) => {
+          const active = statusFilter === opt;
+          return (
+            <button
+              key={opt}
+              onClick={() => setStatusFilter(opt)}
+              className={clsx(
+                "text-xs px-3 py-1 rounded capitalize transition-colors",
+                active ? "bg-brand-orange text-white" : "text-brand-muted hover:bg-brand-cream",
+              )}
+            >
+              {opt}
+            </button>
+          );
+        })}
       </div>
 
       {loading ? (
@@ -143,7 +194,12 @@ export default function ClientsPage() {
             <div key={client.id} className="card">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
-                  <p className="text-sm font-medium text-brand-black">{client.business?.name ?? "—"}</p>
+                  <Link
+                    href={`/crm/clients/${client.id}`}
+                    className="text-sm font-medium text-brand-black hover:text-brand-orange hover:underline"
+                  >
+                    {client.business?.name ?? "—"}
+                  </Link>
                   {client.contact && (
                     <p className="text-xs text-brand-muted mt-0.5">
                       {client.contact.first_name}{client.contact.last_name ? " " + client.contact.last_name : ""}
