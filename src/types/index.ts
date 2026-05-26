@@ -173,6 +173,10 @@ export interface CRMBusiness {
   industry?: string;
   size?: "1-10" | "11-50" | "51-200" | "200+";
   website?: string;
+  // Added 2026-05-26 (migration: crm_businesses_add_contact_fields)
+  address?: string;
+  phone?: string;
+  email?: string;
   source?: CRMSource;
   notes?: string;
   created_at: string;

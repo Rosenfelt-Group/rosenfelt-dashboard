@@ -4,15 +4,45 @@ import { CRMBusiness } from "@/types";
 import { CRMNav } from "@/components/CRMNav";
 
 const SIZE_OPTIONS = ["1-10", "11-50", "51-200", "200+"] as const;
-const BLANK_FORM = { name: "", industry: "", size: "", website: "" };
+
+type Form = {
+  name: string;
+  industry: string;
+  size: string;
+  website: string;
+  address: string;
+  phone: string;
+  email: string;
+  notes: string;
+};
+const BLANK_FORM: Form = {
+  name: "", industry: "", size: "", website: "", address: "", phone: "", email: "", notes: "",
+};
+
+function formFromBusiness(b: CRMBusiness): Form {
+  return {
+    name: b.name,
+    industry: b.industry ?? "",
+    size: b.size ?? "",
+    website: b.website ?? "",
+    address: b.address ?? "",
+    phone: b.phone ?? "",
+    email: b.email ?? "",
+    notes: b.notes ?? "",
+  };
+}
 
 export default function BusinessesPage() {
   const [businesses, setBusinesses] = useState<CRMBusiness[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState(BLANK_FORM);
+  // editingId === null + showModal === true → create mode
+  // editingId === '<uuid>' → edit mode
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState<Form>(BLANK_FORM);
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/crm/businesses")
@@ -20,24 +50,57 @@ export default function BusinessesPage() {
       .then(d => { setBusinesses(Array.isArray(d) ? d : []); setLoading(false); });
   }, []);
 
-  async function createBusiness() {
+  function openCreate() {
+    setEditingId(null);
+    setForm(BLANK_FORM);
+    setErr(null);
+    setShowModal(true);
+  }
+
+  function openEdit(b: CRMBusiness) {
+    setEditingId(b.id);
+    setForm(formFromBusiness(b));
+    setErr(null);
+    setShowModal(true);
+  }
+
+  async function saveBusiness() {
     if (!form.name.trim()) return;
     setSaving(true);
-    const r = await fetch("/api/crm/businesses", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    setErr(null);
+    try {
+      const payload = {
         name: form.name.trim(),
-        industry: form.industry.trim() || undefined,
-        size: form.size || undefined,
-        website: form.website.trim() || undefined,
-      }),
-    });
-    const biz = await r.json();
-    setBusinesses(prev => [biz, ...prev]);
-    setShowCreate(false);
-    setForm(BLANK_FORM);
-    setSaving(false);
+        industry: form.industry.trim() || null,
+        size: form.size || null,
+        website: form.website.trim() || null,
+        address: form.address.trim() || null,
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        notes: form.notes.trim() || null,
+      };
+      const url = editingId ? `/api/crm/businesses/${editingId}` : "/api/crm/businesses";
+      const method = editingId ? "PATCH" : "POST";
+      const r = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const t = await r.text().catch(() => "");
+        throw new Error(`HTTP ${r.status}: ${t.slice(0, 200)}`);
+      }
+      const biz = await r.json();
+      setBusinesses(prev => editingId
+        ? prev.map(b => b.id === biz.id ? biz : b)
+        : [biz, ...prev],
+      );
+      setShowModal(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const filtered = businesses.filter(b =>
@@ -52,7 +115,7 @@ export default function BusinessesPage() {
           <h1 className="text-xl font-semibold text-brand-black">Businesses</h1>
           <p className="text-sm text-brand-muted mt-0.5">{businesses.length} total</p>
         </div>
-        <button onClick={() => { setForm(BLANK_FORM); setShowCreate(true); }} className="btn-primary text-xs px-3 py-1.5">
+        <button onClick={openCreate} className="btn-primary text-xs px-3 py-1.5">
           + New business
         </button>
       </div>
@@ -75,14 +138,21 @@ export default function BusinessesPage() {
       ) : (
         <div className="card divide-y divide-brand-border">
           {filtered.map(biz => (
-            <div key={biz.id} className="py-3 flex items-center justify-between gap-4">
-              <div className="min-w-0">
+            <div key={biz.id} className="py-3 flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-brand-black">{biz.name}</p>
                 {biz.industry && <p className="text-xs text-brand-muted">{biz.industry}</p>}
-                {biz.website && (
-                  <a href={biz.website} target="_blank" rel="noopener noreferrer"
-                    className="text-xs text-brand-orange hover:underline">{biz.website}</a>
-                )}
+                <div className="text-xs text-brand-muted mt-1 space-y-0.5">
+                  {biz.website && (
+                    <div>
+                      <a href={biz.website} target="_blank" rel="noopener noreferrer"
+                         className="text-brand-orange hover:underline">{biz.website}</a>
+                    </div>
+                  )}
+                  {biz.email && <div>{biz.email}</div>}
+                  {biz.phone && <div>{biz.phone}</div>}
+                  {biz.address && <div className="whitespace-pre-line">{biz.address}</div>}
+                </div>
               </div>
               <div className="text-right shrink-0 space-y-1">
                 {biz.size && <p className="text-xs text-brand-muted">{biz.size} employees</p>}
@@ -91,18 +161,26 @@ export default function BusinessesPage() {
                     {biz.source.replace("_", " ")}
                   </span>
                 )}
+                <button
+                  onClick={() => openEdit(biz)}
+                  className="text-xs px-2 py-1 rounded border border-brand-border hover:bg-brand-cream block ml-auto"
+                >
+                  Edit
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {showCreate && (
+      {showModal && (
         <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-semibold text-brand-black">New business</h2>
-              <button onClick={() => setShowCreate(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
+              <h2 className="text-base font-semibold text-brand-black">
+                {editingId ? "Edit business" : "New business"}
+              </h2>
+              <button onClick={() => setShowModal(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
             </div>
             <div className="space-y-3">
               <div>
@@ -148,15 +226,57 @@ export default function BusinessesPage() {
                   />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-brand-muted mb-1 block">Email</label>
+                  <input
+                    type="email"
+                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                    value={form.email}
+                    onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                    placeholder="hello@acme.com"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-brand-muted mb-1 block">Phone</label>
+                  <input
+                    type="tel"
+                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                    value={form.phone}
+                    onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
+                    placeholder="+1 555 555 5555"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-brand-muted mb-1 block">Address</label>
+                <textarea
+                  rows={2}
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                  value={form.address}
+                  onChange={e => setForm(p => ({ ...p, address: e.target.value }))}
+                  placeholder="123 Main St, City, State ZIP"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-brand-muted mb-1 block">Notes</label>
+                <textarea
+                  rows={2}
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                  value={form.notes}
+                  onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+                />
+              </div>
+              {err && <div className="text-xs text-red-700">{err}</div>}
             </div>
             <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowCreate(false)} className="btn-ghost flex-1">Cancel</button>
+              <button onClick={() => setShowModal(false)} className="btn-ghost flex-1">Cancel</button>
               <button
-                onClick={createBusiness}
+                onClick={saveBusiness}
                 disabled={saving || !form.name.trim()}
                 className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? "Creating…" : "Create business"}
+                {saving ? "Saving…" : editingId ? "Save changes" : "Create business"}
               </button>
             </div>
           </div>

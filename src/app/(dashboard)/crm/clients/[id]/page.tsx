@@ -39,6 +39,8 @@ export default function ClientDetailPage() {
   // Modals
   const [showAddService, setShowAddService] = useState(false);
   const [activatingService, setActivatingService] = useState<ClientService | null>(null);
+  const [editingService, setEditingService] = useState<ClientService | null>(null);
+  const [cancellingService, setCancellingService] = useState<ClientService | null>(null);
   const [showLogHours, setShowLogHours] = useState(false);
 
   const loadClient = useCallback(async () => {
@@ -173,6 +175,8 @@ export default function ClientDetailPage() {
               services={services}
               onAdd={() => setShowAddService(true)}
               onActivate={(s) => setActivatingService(s)}
+              onEdit={(s) => setEditingService(s)}
+              onCancel={(s) => setCancellingService(s)}
               onInvoice={async (s) => {
                 if (!confirm(`Generate one-time invoice for ${s.service_template?.name}?`)) return;
                 const desc = prompt("Invoice description:");
@@ -244,6 +248,22 @@ export default function ClientDetailPage() {
           onLogged={() => { setShowLogHours(false); loadTmEntries(); }}
         />
       )}
+
+      {editingService && (
+        <EditServiceModal
+          service={editingService}
+          onClose={() => setEditingService(null)}
+          onSaved={() => { setEditingService(null); loadServices(); }}
+        />
+      )}
+
+      {cancellingService && (
+        <CancelServiceModal
+          service={cancellingService}
+          onClose={() => setCancellingService(null)}
+          onCancelled={() => { setCancellingService(null); loadServices(); }}
+        />
+      )}
     </div>
   );
 }
@@ -270,11 +290,15 @@ function ServicesTab({
   services,
   onAdd,
   onActivate,
+  onEdit,
+  onCancel,
   onInvoice,
 }: {
   services: ClientService[];
   onAdd: () => void;
   onActivate: (s: ClientService) => void;
+  onEdit: (s: ClientService) => void;
+  onCancel: (s: ClientService) => void;
   onInvoice: (s: ClientService) => void;
 }) {
   return (
@@ -326,6 +350,20 @@ function ServicesTab({
                     {s.status === "active" && tmpl?.billing_type === "tm" && (
                       <button onClick={() => onInvoice(s)} className="text-xs px-3 py-1.5 rounded border border-brand-border hover:bg-brand-cream">
                         Invoice now
+                      </button>
+                    )}
+                    <button
+                      onClick={() => onEdit(s)}
+                      className="text-xs px-3 py-1.5 rounded border border-brand-border hover:bg-brand-cream"
+                    >
+                      Edit
+                    </button>
+                    {s.status !== "cancelled" && (
+                      <button
+                        onClick={() => onCancel(s)}
+                        className="text-xs px-3 py-1.5 rounded border border-brand-border hover:bg-red-50 hover:border-red-200 hover:text-red-700"
+                      >
+                        Cancel
                       </button>
                     )}
                   </div>
@@ -841,6 +879,227 @@ function LogHoursModal({
               {saving ? "Logging…" : "Log hours"}
             </button>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditServiceModal({
+  service,
+  onClose,
+  onSaved,
+}: {
+  service: ClientService;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const billingType = service.service_template?.billing_type;
+  const initialRate =
+    service.monthly_rate ?? service.project_rate ?? service.hourly_rate ?? "";
+  const rateLabel =
+    billingType === "tm" ? "Hourly rate" : billingType === "one_time" ? "Project price" : "Monthly rate";
+  const rateField = (billingType ?? "recurring") === "recurring"
+    ? "monthly_rate" : billingType === "tm" ? "hourly_rate" : "project_rate";
+
+  const [rate, setRate] = useState<string>(String(initialRate ?? ""));
+  const [billingStartDate, setBillingStartDate] = useState<string>(service.billing_start_date ?? "");
+  const [billingEndDate, setBillingEndDate] = useState<string>(service.billing_end_date ?? "");
+  const [notes, setNotes] = useState<string>(service.notes ?? "");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save() {
+    setSaving(true);
+    setErr(null);
+    try {
+      const rateNum = rate === "" ? null : Number(rate);
+      if (rateNum !== null && (!Number.isFinite(rateNum) || rateNum < 0)) {
+        throw new Error("Rate must be a non-negative number");
+      }
+      const body: Record<string, unknown> = {
+        [rateField]: rateNum,
+        billing_start_date: billingStartDate || null,
+        billing_end_date: billingEndDate || null,
+        notes: notes.trim() || null,
+      };
+      const r = await fetch(`/api/crm/client-services/${service.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const t = await r.text().catch(() => "");
+        throw new Error(`HTTP ${r.status}: ${t.slice(0, 200)}`);
+      }
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg w-full max-w-md shadow-xl">
+        <div className="px-4 py-3 border-b border-brand-border flex items-center justify-between">
+          <h3 className="font-semibold text-brand-black text-sm">
+            Edit service — {service.service_template?.name ?? ""}
+          </h3>
+          <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg leading-none">×</button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div>
+            <div className="text-[10px] uppercase text-brand-muted mb-1">{rateLabel} (USD)</div>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={rate}
+              onChange={(e) => setRate(e.target.value)}
+              className="w-full rounded border border-brand-border px-2 py-1.5 text-sm"
+            />
+            {service.stripe_subscription_id && billingType === "recurring" && (
+              <p className="text-[11px] text-amber-700 mt-1">
+                Note: changing the rate here does <strong>not</strong> update the Stripe subscription price.
+                Cancel and re-activate to change the live subscription rate.
+              </p>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="text-[10px] uppercase text-brand-muted mb-1">Billing start</div>
+              <input
+                type="date"
+                value={billingStartDate}
+                onChange={(e) => setBillingStartDate(e.target.value)}
+                className="w-full rounded border border-brand-border px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <div className="text-[10px] uppercase text-brand-muted mb-1">Billing end</div>
+              <input
+                type="date"
+                value={billingEndDate}
+                onChange={(e) => setBillingEndDate(e.target.value)}
+                className="w-full rounded border border-brand-border px-2 py-1.5 text-sm"
+              />
+            </div>
+          </div>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            placeholder="Notes (optional)"
+            className="w-full rounded border border-brand-border px-2 py-1.5 text-xs"
+          />
+          {err && <div className="text-xs text-red-700">{err}</div>}
+        </div>
+        <div className="px-4 py-3 border-t border-brand-border flex justify-end gap-2">
+          <button onClick={onClose} className="text-xs px-3 py-1 hover:bg-brand-cream rounded">Cancel</button>
+          <button
+            onClick={save}
+            disabled={saving}
+            className={clsx("btn-primary text-xs px-3 py-1.5", saving && "opacity-60")}
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CancelServiceModal({
+  service,
+  onClose,
+  onCancelled,
+}: {
+  service: ClientService;
+  onClose: () => void;
+  onCancelled: () => void;
+}) {
+  const [effectiveDate, setEffectiveDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Determine immediate vs scheduled for the warning copy.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const immediate = effectiveDate <= todayIso;
+  const hasStripeSub = Boolean(service.stripe_subscription_id);
+
+  async function submit() {
+    setSaving(true);
+    setErr(null);
+    try {
+      const r = await fetch(`/api/crm/client-services/${service.id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ effective_date: effectiveDate }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error ?? `HTTP ${r.status}`);
+      onCancelled();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Cancellation failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg w-full max-w-md shadow-xl">
+        <div className="px-4 py-3 border-b border-brand-border flex items-center justify-between">
+          <h3 className="font-semibold text-brand-black text-sm">
+            Cancel service — {service.service_template?.name ?? ""}
+          </h3>
+          <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg leading-none">×</button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div>
+            <div className="text-[10px] uppercase text-brand-muted mb-1">Effective date</div>
+            <input
+              type="date"
+              value={effectiveDate}
+              onChange={(e) => setEffectiveDate(e.target.value)}
+              className="w-full rounded border border-brand-border px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div className="text-xs text-brand-muted leading-relaxed">
+            {immediate ? (
+              <>
+                <strong className="text-red-700">Immediate cancellation.</strong> Service flips to{" "}
+                <code className="text-[11px] bg-brand-cream px-1 rounded">cancelled</code> now
+                {hasStripeSub && ", and the Stripe subscription is cancelled immediately (no further charges)"}.
+              </>
+            ) : (
+              <>
+                <strong className="text-amber-800">Scheduled cancellation.</strong> Service stays{" "}
+                <code className="text-[11px] bg-brand-cream px-1 rounded">active</code> until{" "}
+                <strong>{effectiveDate}</strong>
+                {hasStripeSub
+                  ? ", then the Stripe subscription ends and the webhook flips status to cancelled."
+                  : ". (No Stripe subscription — the row stays active until the date passes, with billing_end_date set.)"}
+              </>
+            )}
+          </div>
+          {err && <div className="text-xs text-red-700">{err}</div>}
+        </div>
+        <div className="px-4 py-3 border-t border-brand-border flex justify-end gap-2">
+          <button onClick={onClose} className="text-xs px-3 py-1 hover:bg-brand-cream rounded">Back</button>
+          <button
+            onClick={submit}
+            disabled={saving}
+            className={clsx(
+              "text-xs px-3 py-1.5 rounded text-white",
+              immediate ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700",
+              saving && "opacity-60",
+            )}
+          >
+            {saving ? "Cancelling…" : immediate ? "Cancel now" : "Schedule cancellation"}
+          </button>
         </div>
       </div>
     </div>
