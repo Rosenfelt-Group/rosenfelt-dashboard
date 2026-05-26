@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getStripe } from "@/lib/stripe";
 
-// POST /api/crm/client-services/[id]/activate
+// POST /api/crm/client-services/[id]/activate?mode=live|test
 // Body: { billing_start_date: 'YYYY-MM-DD', confirmed_rate: number (dollars) }
 //
 // Per service billing_type:
@@ -11,11 +11,17 @@ import { getStripe } from "@/lib/stripe";
 //               client renders Stripe Elements and finalizes via /activate/confirm.
 //   one_time  → create a Checkout session; return { redirect_url }.
 //   tm        → no Stripe action; row goes straight to active.
+//
+// mode=test: uses STRIPE_SECRET_KEY_TEST + skips all crm.* writebacks so the live
+// data stays clean. Test customers, prices, SetupIntents land in Stripe test mode;
+// the CRM row stays in 'pending_activation'.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const { searchParams } = new URL(req.url);
+  const isTest = searchParams.get("mode") === "test";
 
   let body: { billing_start_date?: string; confirmed_rate?: number };
   try {
@@ -69,11 +75,13 @@ export async function POST(
     );
   }
 
-  const stripe = getStripe();
+  const stripe = getStripe(isTest ? "test" : "live");
 
-  // Ensure the client has a Stripe customer. If not, create one inline using
-  // Stripe directly (mirrors what Jordan's stripe_create_customer does).
-  let stripeCustomerId = client?.stripe_customer_id;
+  // Ensure the client has a Stripe customer. In test mode, always create a
+  // fresh test customer — don't read or write client.stripe_customer_id, since
+  // test/live customer IDs are mutually exclusive in Stripe and overwriting a
+  // live ID with a test one would brick subsequent live operations.
+  let stripeCustomerId = isTest ? undefined : client?.stripe_customer_id;
   if (!stripeCustomerId) {
     const business = Array.isArray(client?.business) ? client.business[0] : client?.business;
     const contact = Array.isArray(client?.contact) ? client.contact[0] : client?.contact;
@@ -83,16 +91,21 @@ export async function POST(
     const customerEmail = contact?.email ?? undefined;
     try {
       const customer = await stripe.customers.create({
-        name: customerName,
+        name: isTest ? `[TEST] ${customerName}` : customerName,
         email: customerEmail,
-        metadata: { client_id: service.client_id },
+        metadata: {
+          client_id: service.client_id,
+          ...(isTest ? { test_mode: "true" } : {}),
+        },
       });
       stripeCustomerId = customer.id;
-      await supabaseAdmin
-        .schema("crm")
-        .from("clients")
-        .update({ stripe_customer_id: stripeCustomerId })
-        .eq("id", service.client_id);
+      if (!isTest) {
+        await supabaseAdmin
+          .schema("crm")
+          .from("clients")
+          .update({ stripe_customer_id: stripeCustomerId })
+          .eq("id", service.client_id);
+      }
     } catch (e) {
       console.error("Stripe customer create failed:", e);
       return NextResponse.json({ error: "Stripe customer create failed" }, { status: 500 });
@@ -118,17 +131,24 @@ export async function POST(
         customer: stripeCustomerId,
         payment_method_types: ["card"],
         usage: "off_session",
-        metadata: { client_service_id: id, stripe_price_id: price.id },
+        metadata: {
+          client_service_id: id,
+          stripe_price_id: price.id,
+          ...(isTest ? { test_mode: "true" } : {}),
+        },
       });
-      // Persist start date + rate now; the subscription comes through in /confirm
-      await supabaseAdmin
-        .schema("crm")
-        .from("client_services")
-        .update({
-          monthly_rate: body.confirmed_rate,
-          billing_start_date: body.billing_start_date,
-        })
-        .eq("id", id);
+      // Persist start date + rate now; the subscription comes through in /confirm.
+      // In test mode, skip writebacks — the row stays in pending_activation.
+      if (!isTest) {
+        await supabaseAdmin
+          .schema("crm")
+          .from("client_services")
+          .update({
+            monthly_rate: body.confirmed_rate,
+            billing_start_date: body.billing_start_date,
+          })
+          .eq("id", id);
+      }
       return NextResponse.json({
         requires_payment_method: true,
         client_secret: setupIntent.client_secret,
@@ -137,6 +157,7 @@ export async function POST(
         stripe_customer_id: stripeCustomerId,
         client_service_id: id,
         amount: body.confirmed_rate,
+        test_mode: isTest,
       });
     } catch (e) {
       console.error("Stripe recurring activation failed:", e);
@@ -159,12 +180,16 @@ export async function POST(
         line_items: [{ price: price.id, quantity: 1 }],
         success_url: `${baseUrl}/crm/clients/${service.client_id}?activated=${id}`,
         cancel_url: `${baseUrl}/crm/clients/${service.client_id}?cancelled=${id}`,
-        metadata: { client_service_id: id },
+        metadata: {
+          client_service_id: id,
+          ...(isTest ? { test_mode: "true" } : {}),
+        },
       });
       return NextResponse.json({
         redirect_url: checkout.url,
         stripe_price_id: price.id,
         checkout_session_id: checkout.id,
+        test_mode: isTest,
       });
     } catch (e) {
       console.error("Stripe one_time activation failed:", e);
@@ -174,6 +199,11 @@ export async function POST(
 
   // ─── tm ──────────────────────────────────────────────────────────────────
   if (billingType === "tm") {
+    if (isTest) {
+      // T&M doesn't make a Stripe call at activate time — in test mode there's
+      // literally nothing to verify, so just acknowledge without touching the row.
+      return NextResponse.json({ activated: true, test_mode: true, note: "test mode: no DB writeback" });
+    }
     const { error: actErr } = await supabaseAdmin
       .schema("crm")
       .from("client_services")

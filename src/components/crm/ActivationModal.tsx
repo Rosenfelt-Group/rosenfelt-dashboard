@@ -1,12 +1,13 @@
 "use client";
 import { useMemo, useState } from "react";
-import { loadStripe } from "@stripe/stripe-js";
+import { loadStripe, type Stripe as StripeJs } from "@stripe/stripe-js";
 import {
   Elements,
   CardElement,
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
+import clsx from "clsx";
 import type { ClientService } from "@/types";
 
 type Props = {
@@ -17,17 +18,21 @@ type Props = {
 
 // Returns null if the env var is missing — the modal renders a clear message
 // instead of crashing.
-function makeStripePromise() {
-  const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+function makeStripePromise(testMode: boolean): Promise<StripeJs | null> | null {
+  const key = testMode
+    ? process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST
+    : process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
   if (!key) return null;
   return loadStripe(key);
 }
 
 export function ActivationModal({ service, onClose, onActivated }: Props) {
-  const stripePromise = useMemo(makeStripePromise, []);
   const billingType = service.service_template?.billing_type;
   const defaultRate = service.monthly_rate ?? service.project_rate ?? service.hourly_rate ?? "";
 
+  const [testMode, setTestMode] = useState(false);
+  // Stripe promise is keyed on testMode so flipping the checkbox swaps clients.
+  const stripePromise = useMemo(() => makeStripePromise(testMode), [testMode]);
   const [billingStartDate, setBillingStartDate] = useState<string>(
     service.billing_start_date ?? new Date().toISOString().slice(0, 10),
   );
@@ -37,8 +42,11 @@ export function ActivationModal({ service, onClose, onActivated }: Props) {
     client_secret: string;
     setup_intent_id: string;
     stripe_price_id: string;
+    stripe_customer_id: string;
   } | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  const apiModeSuffix = testMode ? "?mode=test" : "";
 
   async function handleActivate() {
     const rate = Number(confirmedRate);
@@ -53,7 +61,7 @@ export function ActivationModal({ service, onClose, onActivated }: Props) {
     setErr(null);
     setStep("submitting");
     try {
-      const r = await fetch(`/api/crm/client-services/${service.id}/activate`, {
+      const r = await fetch(`/api/crm/client-services/${service.id}/activate${apiModeSuffix}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ billing_start_date: billingStartDate, confirmed_rate: rate }),
@@ -78,6 +86,7 @@ export function ActivationModal({ service, onClose, onActivated }: Props) {
           client_secret: data.client_secret,
           setup_intent_id: data.setup_intent_id,
           stripe_price_id: data.stripe_price_id,
+          stripe_customer_id: data.stripe_customer_id,
         });
         setStep("card");
         return;
@@ -99,6 +108,27 @@ export function ActivationModal({ service, onClose, onActivated }: Props) {
           <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg leading-none">×</button>
         </div>
         <div className="p-4 space-y-3">
+          {/* Test mode toggle: only meaningful before card capture starts.
+              Once we hit step==='card' the Stripe Elements instance is already
+              keyed to the chosen mode, so the checkbox locks. */}
+          {(step === "form" || step === "submitting") && (
+            <label className={clsx(
+              "flex items-center gap-2 text-xs px-2 py-1.5 rounded border",
+              testMode ? "border-amber-300 bg-amber-50 text-amber-900" : "border-brand-border text-brand-muted",
+            )}>
+              <input
+                type="checkbox"
+                checked={testMode}
+                onChange={(e) => { setTestMode(e.target.checked); setErr(null); }}
+              />
+              <span>🧪 Test mode (uses Stripe test keys — no real charges, no DB writeback)</span>
+            </label>
+          )}
+          {step === "card" && testMode && (
+            <div className="text-xs px-2 py-1.5 rounded border border-amber-300 bg-amber-50 text-amber-900">
+              🧪 Test mode — use card <code className="font-mono">4242 4242 4242 4242</code>, any future exp, any CVC.
+            </div>
+          )}
           {step === "form" || step === "submitting" ? (
             <>
               <div>
@@ -146,14 +176,16 @@ export function ActivationModal({ service, onClose, onActivated }: Props) {
                 <CardForm
                   service={service}
                   activatePayload={activatePayload}
+                  testMode={testMode}
                   onSuccess={() => { setStep("done"); onActivated(); }}
                   onErr={(m) => { setErr(m); }}
                 />
               </Elements>
             ) : (
               <div className="text-xs text-red-700">
-                NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set in this environment.
-                Set it in Vercel before activating recurring services.
+                {testMode
+                  ? "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST is not set in this environment. Set it in Vercel before running the test-mode flow."
+                  : "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set in this environment. Set it in Vercel before activating recurring services."}
               </div>
             )
           ) : (
@@ -182,11 +214,13 @@ export function ActivationModal({ service, onClose, onActivated }: Props) {
 function CardForm({
   service,
   activatePayload,
+  testMode,
   onSuccess,
   onErr,
 }: {
   service: ClientService;
-  activatePayload: { client_secret: string; setup_intent_id: string; stripe_price_id: string };
+  activatePayload: { client_secret: string; setup_intent_id: string; stripe_price_id: string; stripe_customer_id: string };
+  testMode: boolean;
   onSuccess: () => void;
   onErr: (m: string) => void;
 }) {
@@ -221,15 +255,21 @@ function CardForm({
         ? setupIntent.payment_method
         : setupIntent.payment_method.id;
 
-      const r = await fetch(`/api/crm/client-services/${service.id}/activate/confirm`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          payment_method_id: pmId,
-          setup_intent_id: activatePayload.setup_intent_id,
-          stripe_price_id: activatePayload.stripe_price_id,
-        }),
-      });
+      const r = await fetch(
+        `/api/crm/client-services/${service.id}/activate/confirm${testMode ? "?mode=test" : ""}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            payment_method_id: pmId,
+            setup_intent_id: activatePayload.setup_intent_id,
+            stripe_price_id: activatePayload.stripe_price_id,
+            // In test mode the server doesn't read stripe_customer_id from DB,
+            // so we have to pass back the test customer ID we got from /activate.
+            ...(testMode ? { stripe_customer_id: activatePayload.stripe_customer_id } : {}),
+          }),
+        },
+      );
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error ?? `HTTP ${r.status}`);
       onSuccess();
