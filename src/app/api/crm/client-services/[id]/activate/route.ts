@@ -68,7 +68,10 @@ export async function POST(
   if (!tmpl) {
     return NextResponse.json({ error: "Service template missing" }, { status: 500 });
   }
-  if (!tmpl.stripe_product_id) {
+  // Live mode requires a persisted Stripe product. Test mode creates an inline
+  // product per activation (Stripe test mode is a separate object space from
+  // live, so the live stripe_product_id wouldn't resolve there anyway).
+  if (!isTest && !tmpl.stripe_product_id) {
     return NextResponse.json(
       { error: "Service template has no stripe_product_id — admin must set one first" },
       { status: 422 },
@@ -76,6 +79,14 @@ export async function POST(
   }
 
   const stripe = getStripe(isTest ? "test" : "live");
+
+  // In test mode: build the price's product inline via Stripe's product_data so
+  // we don't depend on any test-mode product catalog. In live mode: reference
+  // the persisted product by ID.
+  // `priceProductRef` is spread into both prices.create() calls below.
+  const priceProductRef = isTest
+    ? { product_data: { name: `[TEST] ${tmpl.name}` } }
+    : { product: tmpl.stripe_product_id as string };
 
   // Ensure the client has a Stripe customer. In test mode, always create a
   // fresh test customer — don't read or write client.stripe_customer_id, since
@@ -122,7 +133,7 @@ export async function POST(
     const intervalCount = interval === "quarter" ? 3 : 1;
     try {
       const price = await stripe.prices.create({
-        product: tmpl.stripe_product_id,
+        ...priceProductRef,
         unit_amount: amountCents,
         currency: "usd",
         recurring: { interval: stripeInterval, interval_count: intervalCount },
@@ -169,7 +180,7 @@ export async function POST(
   if (billingType === "one_time") {
     try {
       const price = await stripe.prices.create({
-        product: tmpl.stripe_product_id,
+        ...priceProductRef,
         unit_amount: amountCents,
         currency: "usd",
       });
