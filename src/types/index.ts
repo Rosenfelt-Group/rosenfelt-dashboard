@@ -228,20 +228,84 @@ export interface CRMClient {
   lead_id?: string;
   business_id: string;
   contact_id?: string;
-  service_tier?: CRMServiceTier;
   contract_start?: string;
   contract_end?: string;
   billing_status: CRMBillingStatus;
-  monthly_value?: number;
   assigned_agents?: string[];
   notes?: string;
   stripe_customer_id?: string;
-  stripe_subscription_id?: string;
-  stripe_subscription_status?: string;
   created_at: string;
   updated_at: string;
   business?: CRMBusiness;
   contact?: CRMContact;
+  // Optional rollups populated by some endpoints
+  services?: ClientService[];
+  // Deprecated 2026-05-26 — columns were dropped from crm.clients in the
+  // work_items_sprint_client_extensions migration. Existing /crm/clients and
+  // lead-convert flows still reference these; they're kept here as optional
+  // so the legacy code compiles. New code should use ClientService instead.
+  service_tier?: CRMServiceTier;
+  monthly_value?: number;
+  stripe_subscription_id?: string;
+  stripe_subscription_status?: string;
+}
+
+// ─── Service catalog + per-client services + T&M billing (added 2026-05-26) ──
+
+export type ServiceBillingType = "recurring" | "one_time" | "tm";
+export type ServiceBillingInterval = "month" | "quarter" | "year";
+export type ClientServiceStatus = "pending_activation" | "active" | "paused" | "cancelled";
+
+export interface ServiceTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  billing_type: ServiceBillingType;
+  billing_interval: ServiceBillingInterval | null;
+  is_taxable: boolean;
+  is_active: boolean;
+  stripe_product_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClientService {
+  id: string;
+  client_id: string;
+  service_template_id: string;
+  monthly_rate: number | null;
+  project_rate: number | null;
+  hourly_rate: number | null;
+  billing_start_date: string | null;
+  billing_end_date: string | null;
+  status: ClientServiceStatus;
+  stripe_subscription_id: string | null;
+  stripe_subscription_status: string | null;
+  stripe_price_id: string | null;
+  billing_activated_at: string | null;
+  billing_activated_by: string | null;
+  last_billed_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  // Optional joined data
+  service_template?: ServiceTemplate;
+  client?: CRMClient;
+}
+
+export interface TmBillingEntry {
+  id: string;
+  client_service_id: string;
+  work_item_id: string | null;
+  entry_date: string;
+  hours: number;
+  description: string;
+  logged_by: string;
+  billed: boolean;
+  stripe_invoice_id: string | null;
+  created_at: string;
+  // Optional joined data
+  client_service?: ClientService;
 }
 
 export interface CRMAssessmentResult {
