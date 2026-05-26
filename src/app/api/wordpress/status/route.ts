@@ -212,6 +212,20 @@ export async function GET() {
   // from "right value, stale credential at WP" without leaking the secret.
   errors.push(authDiag(wpAuth));
 
+  // Probe /users/me?context=edit — tells us what WP thinks of our auth from inside Vercel
+  try {
+    const probeRes = await fetch(`${wpUrl}/wp-json/wp/v2/users/me?context=edit`, {
+      headers: { Authorization: `Basic ${wpAuth}`, Accept: "application/json" },
+      cache: "no-store",
+    });
+    const probeBody = await probeRes.text();
+    let parsed: { roles?: string[]; code?: string; id?: number; slug?: string } = {};
+    try { parsed = JSON.parse(probeBody); } catch { /* not JSON */ }
+    errors.push(`probe /users/me?context=edit: HTTP ${probeRes.status} id=${parsed.id ?? "?"} slug=${parsed.slug ?? "?"} roles=${parsed.roles?.join(",") ?? "?"} code=${parsed.code ?? "-"}`);
+  } catch (e) {
+    errors.push(`probe failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
   const [pendingPosts, draftPosts, futurePosts, plugins, themes, currentWPVersion, latestWPVersion] = await Promise.all([
     fetchWP<WPPost[]>(`${wpUrl}/wp-json/wp/v2/posts?status=pending&per_page=20&context=edit&_fields=id,title,status,date,modified,link,author`, wpAuth, errors),
     fetchWP<WPPost[]>(`${wpUrl}/wp-json/wp/v2/posts?status=draft&per_page=20&context=edit&_fields=id,title,status,date,modified,link,author`, wpAuth, errors),
