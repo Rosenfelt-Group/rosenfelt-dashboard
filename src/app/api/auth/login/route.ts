@@ -48,7 +48,11 @@ export async function POST(req: NextRequest) {
   res.cookies.set(COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    // `lax` (not `strict`) so the session cookie survives top-level redirects
+    // back from external origins like Stripe Checkout. `strict` would drop the
+    // cookie on the redirect and bounce the user through /login → /overview.
+    // `lax` still blocks cross-site POST/iframe/subresource use.
+    sameSite: "lax",
     maxAge: SESSION_MAX_AGE,
     path: "/",
   });
