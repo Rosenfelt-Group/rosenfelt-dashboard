@@ -3,6 +3,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { supabase } from "@/lib/supabase";
+import { AgentBadge } from "@/components/AgentBadge";
 import { KanbanColumn } from "@/components/work/KanbanColumn";
 import { ConfigureColumnsMenu } from "@/components/work/ConfigureColumnsMenu";
 import type {
@@ -105,7 +106,15 @@ type Filters = {
   sprints: Set<number>;
   // Server-side filter (passed to /api/work?itemType=) — single value, defaults to "internal"
   itemType: ItemTypeFilter;
+  // Free-text search (server-side). Empty string = no search active.
+  q: string;
+  // When true, search spans every status; otherwise terminal statuses are hidden.
+  searchAll: boolean;
 };
+
+// Terminal statuses hidden from the default search scope. The "all statuses"
+// toggle (and the API's searchAll=1) lifts this restriction.
+const CLOSED_STATUSES: WorkStatus[] = ["done", "cancelled", "rejected"];
 
 function parseSetParam<T extends string>(
   raw: string | null,
@@ -141,6 +150,8 @@ function buildFilters(sp: URLSearchParams): Filters {
     sources: parseSetParam<WorkItemSource>(sp.get("source"), SOURCES),
     sprints: parseSprints(sp.get("sprint")),
     itemType: parseItemType(sp.get("itemType")),
+    q: (sp.get("q") ?? "").trim(),
+    searchAll: sp.get("searchAll") === "1",
   };
 }
 
@@ -153,6 +164,8 @@ function filtersToQuery(f: Filters): string {
   if (f.sprints.size) sp.set("sprint", Array.from(f.sprints).sort((a, b) => a - b).join(","));
   // Only persist itemType when it's not the default ("internal")
   if (f.itemType !== "internal") sp.set("itemType", f.itemType);
+  if (f.q) sp.set("q", f.q);
+  if (f.searchAll) sp.set("searchAll", "1");
   return sp.toString();
 }
 
@@ -230,6 +243,67 @@ function WorkPageInner() {
   const [newItemOpen, setNewItemOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [availableSprints, setAvailableSprints] = useState<number[]>([]);
+
+  // ─── Search ────────────────────────────────────────────────────────────────
+  const searchActive = filters.q.length > 0;
+  const [searchItems, setSearchItems] = useState<WorkItem[]>([]);
+  const [searching, setSearching] = useState(false);
+  // Local mirror of the search box, debounce-committed to the URL `q` param.
+  const [searchInput, setSearchInput] = useState(filters.q);
+
+  // Keep the box in sync when `q` changes from outside (e.g. back navigation).
+  useEffect(() => {
+    setSearchInput(filters.q);
+  }, [filters.q]);
+
+  // Debounce-commit the typed value into the URL. Reads from `sp` so all other
+  // query params are preserved.
+  useEffect(() => {
+    const trimmed = searchInput.trim();
+    if (trimmed === (sp.get("q") ?? "")) return;
+    const t = setTimeout(() => {
+      const next = new URLSearchParams(sp.toString());
+      if (trimmed) next.set("q", trimmed);
+      else next.delete("q");
+      const qs = next.toString();
+      router.replace(qs ? `/work?${qs}` : "/work", { scroll: false });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput, sp, router]);
+
+  // Fetch matching items server-side (covers items beyond the kanban's 500-row
+  // window, including closed ones when searchAll is on).
+  useEffect(() => {
+    if (!searchActive) {
+      setSearchItems([]);
+      setSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setSearching(true);
+    const params = new URLSearchParams({
+      // The "all statuses" flag also reaches archived history, where ~all closed
+      // items live; the default scope stays on active, non-archived items.
+      archived: filters.searchAll ? "all" : "false",
+      itemType: filters.itemType,
+      q: filters.q,
+      searchAll: filters.searchAll ? "1" : "0",
+    });
+    fetch(`/api/work?${params.toString()}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setSearchItems(Array.isArray(d) ? d : []);
+      })
+      .catch(() => {
+        if (!cancelled) setSearchItems([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSearching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchActive, filters.q, filters.searchAll, filters.itemType]);
 
   // Persist filter snapshot for back-from-detail navigation.
   useEffect(() => {
@@ -338,6 +412,13 @@ function WorkPageInner() {
     return byStatus;
   }, [items, filters]);
 
+  // Apply the remaining client-side filters (agent/type/priority/source/sprint)
+  // to the server search results so search honours the active filter bar too.
+  const searchResults = useMemo(
+    () => searchItems.filter((i) => matchesFilters(i, filters)).sort(sortByPriorityThenUpdated),
+    [searchItems, filters],
+  );
+
   const visibleColumns = columnCfg.order.filter((s) => columnCfg.visible.includes(s));
 
   // itemType always has a value; only count it as "active" when it differs from the default.
@@ -370,6 +451,14 @@ function WorkPageInner() {
           </button>
         </div>
       </div>
+
+      {/* Search */}
+      <SearchBar
+        value={searchInput}
+        onChange={setSearchInput}
+        searchAll={filters.searchAll}
+        onToggleSearchAll={() => setFilters({ ...filters, searchAll: !filters.searchAll })}
+      />
 
       {/* Filter bar */}
       <FilterBar filters={filters} setFilters={setFilters} availableSprints={availableSprints} />
@@ -449,6 +538,8 @@ function WorkPageInner() {
                 sources: new Set(),
                 sprints: new Set(),
                 itemType: "internal",
+                q: filters.q,
+                searchAll: filters.searchAll,
               })
             }
             className="text-xs text-brand-orange hover:underline"
@@ -464,8 +555,17 @@ function WorkPageInner() {
         </div>
       )}
 
-      {/* Board */}
-      {loading ? (
+      {/* Search results replace the board while a query is active */}
+      {searchActive ? (
+        <SearchResults
+          results={searchResults}
+          searching={searching}
+          query={filters.q}
+          searchAll={filters.searchAll}
+          statusPill={(s) => STATUS_PILL[s]}
+          statusLabel={(s) => STATUS_LABEL[s]}
+        />
+      ) : loading ? (
         <div className="text-sm text-brand-muted">Loading…</div>
       ) : visibleColumns.length === 0 ? (
         <div className="text-sm text-brand-muted">
@@ -720,6 +820,132 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
         ×
       </button>
     </span>
+  );
+}
+
+// ─── Search ───────────────────────────────────────────────────────────────────
+
+function SearchBar({
+  value,
+  onChange,
+  searchAll,
+  onToggleSearchAll,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  searchAll: boolean;
+  onToggleSearchAll: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 flex-wrap">
+      <div className="relative flex-1 min-w-[220px] max-w-md">
+        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-brand-muted text-sm pointer-events-none">
+          ⌕
+        </span>
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Search work items…"
+          className="w-full rounded border border-brand-border bg-white pl-7 pr-7 py-1.5 text-sm focus:outline-none focus:border-brand-orange"
+        />
+        {value && (
+          <button
+            onClick={() => onChange("")}
+            aria-label="Clear search"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-black text-base leading-none"
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <label
+        className="inline-flex items-center gap-1.5 text-xs text-brand-muted cursor-pointer select-none"
+        title="Search every status, including done/cancelled/rejected and archived items"
+      >
+        <input type="checkbox" checked={searchAll} onChange={onToggleSearchAll} />
+        <span>Include closed &amp; archived</span>
+      </label>
+    </div>
+  );
+}
+
+function SearchResults({
+  results,
+  searching,
+  query,
+  searchAll,
+  statusPill,
+  statusLabel,
+}: {
+  results: WorkItem[];
+  searching: boolean;
+  query: string;
+  searchAll: boolean;
+  statusPill: (s: WorkStatus) => string;
+  statusLabel: (s: WorkStatus) => string;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="text-xs text-brand-muted">
+        {searching
+          ? "Searching…"
+          : `${results.length} result${results.length === 1 ? "" : "s"} for “${query}”`}
+        {!searchAll && <span className="ml-1">· closed &amp; archived hidden</span>}
+      </div>
+      {!searching && results.length === 0 ? (
+        <div className="text-sm text-brand-muted border border-dashed border-brand-border rounded p-6 text-center">
+          No matching work items.
+          {!searchAll && " Try “Include closed & archived”."}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {results.map((item) => (
+            <SearchResultRow
+              key={item.id}
+              item={item}
+              statusPill={statusPill}
+              statusLabel={statusLabel}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SearchResultRow({
+  item,
+  statusPill,
+  statusLabel,
+}: {
+  item: WorkItem;
+  statusPill: (s: WorkStatus) => string;
+  statusLabel: (s: WorkStatus) => string;
+}) {
+  const router = useRouter();
+  const isClosed = CLOSED_STATUSES.includes(item.status);
+  return (
+    <button
+      onClick={() => router.push(`/work/${item.id}`)}
+      className={clsx(
+        "w-full text-left bg-white rounded border border-brand-border px-3 py-2 transition flex items-center gap-3 hover:border-brand-orange/40 hover:shadow-sm",
+        isClosed && "opacity-75",
+      )}
+    >
+      <span
+        className={clsx(
+          "shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium",
+          statusPill(item.status),
+        )}
+      >
+        {statusLabel(item.status)}
+      </span>
+      <span className="flex-1 min-w-0 truncate text-sm text-brand-black">{item.title}</span>
+      <span className="shrink-0 hidden sm:inline text-[10px] text-brand-muted capitalize">
+        {item.work_type}
+      </span>
+      {item.assigned_agent && <AgentBadge agent={item.assigned_agent as AgentName} size="sm" />}
+    </button>
   );
 }
 

@@ -12,6 +12,10 @@ export async function GET(req: NextRequest) {
     const archived = searchParams.get("archived");
     // itemType: undefined or "internal" → internal only (default), "client" → client only, "all" → no filter
     const itemType = searchParams.get("itemType");
+    // Free-text search across title/description/summary. When present, the default
+    // scope excludes closed/cancelled statuses; searchAll=1 includes every status.
+    const search = (searchParams.get("q") ?? "").trim();
+    const searchAll = searchParams.get("searchAll") === "1";
 
     let q = supabaseAdmin.from("work_items").select("*");
 
@@ -23,6 +27,22 @@ export async function GET(req: NextRequest) {
     else if (archived === "false") q = q.eq("archived", false);
     if (itemType === "client") q = q.eq("work_item_type", "client");
     else if (itemType !== "all") q = q.eq("work_item_type", "internal");
+
+    if (search) {
+      // Sanitize: strip characters that have meaning in PostgREST's or()/ilike
+      // filter grammar so a stray comma or paren can't break the query.
+      const safe = search.replace(/[(),%*]/g, " ").replace(/\s+/g, " ").trim();
+      if (safe) {
+        const pattern = `%${safe}%`;
+        q = q.or(
+          `title.ilike.${pattern},description.ilike.${pattern},summary.ilike.${pattern}`,
+        );
+      }
+      // Default search hides terminal statuses; the all-statuses flag lifts that.
+      if (!searchAll) {
+        q = q.not("status", "in", "(done,cancelled,rejected)");
+      }
+    }
 
     q = q.order("updated_at", { ascending: false }).limit(500);
 
