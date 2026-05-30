@@ -84,6 +84,12 @@ export function WorkLogPanel({ workItemId, currentUser, workItemStatus }: Props)
     }
   }, [logs.length]);
 
+  // The Realtime subscription only fires on INSERT, so edits (PATCH) won't
+  // arrive that way — patch the local row in place from the PATCH response.
+  function applyEdit(updated: WorkItemLog) {
+    setLogs((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+  }
+
   function handleMessageChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const value = e.target.value;
     setMessage(value);
@@ -177,7 +183,12 @@ export function WorkLogPanel({ workItemId, currentUser, workItemStatus }: Props)
 
       {/* Log entries */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 bg-white">
-        <LogStream logs={logs} workItemStatus={workItemStatus} />
+        <LogStream
+          logs={logs}
+          workItemStatus={workItemStatus}
+          workItemId={workItemId}
+          onEdited={applyEdit}
+        />
       </div>
     </div>
   );
@@ -186,9 +197,13 @@ export function WorkLogPanel({ workItemId, currentUser, workItemStatus }: Props)
 function LogStream({
   logs,
   workItemStatus,
+  workItemId,
+  onEdited,
 }: {
   logs: WorkItemLog[];
   workItemStatus?: WorkStatus;
+  workItemId: string;
+  onEdited: (log: WorkItemLog) => void;
 }) {
   const { questions, others } = useMemo(() => {
     const q: WorkItemLog[] = [];
@@ -230,21 +245,127 @@ function LogStream({
       {questions.length > 0 && (
         <div className="space-y-3">
           {questions.map((log) => (
-            <LogEntry key={log.id} log={log} pinned />
+            <LogEntry
+              key={log.id}
+              log={log}
+              pinned
+              workItemId={workItemId}
+              onEdited={onEdited}
+            />
           ))}
         </div>
       )}
       {others.map((log) => (
-        <LogEntry key={log.id} log={log} />
+        <LogEntry
+          key={log.id}
+          log={log}
+          workItemId={workItemId}
+          onEdited={onEdited}
+        />
       ))}
     </>
   );
 }
 
-function LogEntry({ log, pinned = false }: { log: WorkItemLog; pinned?: boolean }) {
+function LogEntry({
+  log,
+  pinned = false,
+  workItemId,
+  onEdited,
+}: {
+  log: WorkItemLog;
+  pinned?: boolean;
+  workItemId: string;
+  onEdited: (log: WorkItemLog) => void;
+}) {
   const isQuestion = log.entry_type === "question";
+  const [editing, setEditing] = useState(false);
+  const [draftMessage, setDraftMessage] = useState(log.message);
+  const [draftType, setDraftType] = useState<WorkItemLogEntryType>(log.entry_type);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function startEdit() {
+    setDraftMessage(log.message);
+    setDraftType(log.entry_type);
+    setError(null);
+    setEditing(true);
+  }
+
+  async function save() {
+    if (!draftMessage.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/work/${workItemId}/logs/${log.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: draftMessage, entry_type: draftType }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onEdited(data.log);
+        setEditing(false);
+      } else {
+        setError((await res.json().catch(() => null))?.error ?? "Failed to save");
+      }
+    } catch {
+      setError("Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className={`pl-3 py-1 ${entryTypeStyles[draftType]}`}>
+        <div className="flex items-center gap-2 mb-1">
+          <select
+            value={draftType}
+            onChange={(e) => setDraftType(e.target.value as WorkItemLogEntryType)}
+            className="rounded border border-brand-border px-2 py-1 text-xs bg-white"
+          >
+            {ENTRY_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+        <textarea
+          value={draftMessage}
+          onChange={(e) => setDraftMessage(e.target.value)}
+          rows={3}
+          autoFocus
+          className="w-full rounded border border-brand-border px-2 py-1 text-xs resize-none focus:outline-none focus:border-brand-orange"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              save();
+            }
+            if (e.key === "Escape") setEditing(false);
+          }}
+        />
+        {error && <div className="text-[10px] text-red-600 mt-1">{error}</div>}
+        <div className="flex gap-2 mt-1">
+          <button
+            onClick={save}
+            disabled={!draftMessage.trim() || saving}
+            className="rounded bg-brand-orange text-white px-3 py-1 text-xs disabled:opacity-50"
+          >
+            {saving ? "..." : "Save"}
+          </button>
+          <button
+            onClick={() => setEditing(false)}
+            className="rounded border border-brand-border px-3 py-1 text-xs"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`pl-3 py-1 ${entryTypeStyles[log.entry_type]}`}>
+    <div className={`group pl-3 py-1 ${entryTypeStyles[log.entry_type]}`}>
       <div className="flex items-center gap-2 text-xs text-brand-muted">
         <span className="font-semibold text-brand-black">
           {capitalizeAuthor(log.author)}
@@ -263,6 +384,13 @@ function LogEntry({ log, pinned = false }: { log: WorkItemLog; pinned?: boolean 
           </span>
         )}
         <span>{new Date(log.created_at).toLocaleString()}</span>
+        <button
+          onClick={startEdit}
+          title="Edit entry"
+          className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-brand-muted hover:text-brand-orange"
+        >
+          ✎ Edit
+        </button>
       </div>
       <div className="text-xs mt-1 whitespace-pre-wrap text-brand-black">
         {isQuestion && <span className="mr-1">❓</span>}
