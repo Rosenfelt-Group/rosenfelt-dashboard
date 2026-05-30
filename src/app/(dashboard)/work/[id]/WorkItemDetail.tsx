@@ -69,6 +69,12 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
   const [resendPending, setResendPending] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
 
+  // Inline edit of the work item's core text (title / summary / description).
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(initial.title);
+  const [draftSummary, setDraftSummary] = useState(initial.summary ?? "");
+  const [draftDescription, setDraftDescription] = useState(initial.description ?? "");
+
   const isClientDeliverable =
     item.work_type === "deliverable" &&
     (item.source === "typeform" || item.source === "stripe");
@@ -150,7 +156,7 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
   }, [statusCheckPending, item.id]);
 
   const patch = useCallback(
-    async (updates: Partial<WorkItem> & { dispatch?: boolean }) => {
+    async (updates: Partial<WorkItem> & { dispatch?: boolean }): Promise<boolean> => {
       setBusy(true);
       setError(null);
       try {
@@ -165,14 +171,37 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
         }
         const data = (await res.json()) as WorkItem;
         setItem(data);
+        return true;
       } catch (e) {
         setError(e instanceof Error ? e.message : "Update failed");
+        return false;
       } finally {
         setBusy(false);
       }
     },
     [item.id],
   );
+
+  function startEditDetails() {
+    setDraftTitle(item.title);
+    setDraftSummary(item.summary ?? "");
+    setDraftDescription(item.description ?? "");
+    setError(null);
+    setEditingDetails(true);
+  }
+
+  async function saveDetails() {
+    if (!draftTitle.trim()) {
+      setError("Title cannot be empty");
+      return;
+    }
+    const ok = await patch({
+      title: draftTitle.trim(),
+      summary: draftSummary.trim() || null,
+      description: draftDescription.trim() || null,
+    });
+    if (ok) setEditingDetails(false);
+  }
 
   const requestStatus = useCallback(async () => {
     if (!item.assigned_agent || item.assigned_agent === "brian") return;
@@ -253,6 +282,32 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
                 {resendPending ? "Resending…" : "Resend audit"}
               </button>
             )}
+            {editingDetails ? (
+              <>
+                <button
+                  onClick={saveDetails}
+                  disabled={busy || !draftTitle.trim()}
+                  className="rounded-full px-3 py-1 text-xs font-medium bg-brand-orange text-white hover:opacity-90 disabled:opacity-50"
+                >
+                  {busy ? "Saving…" : "Save"}
+                </button>
+                <button
+                  onClick={() => setEditingDetails(false)}
+                  disabled={busy}
+                  className="rounded-full px-3 py-1 text-xs font-medium border border-brand-border text-brand-muted hover:bg-brand-cream disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={startEditDetails}
+                title="Edit title, summary & description"
+                className="rounded-full px-3 py-1 text-xs font-medium border border-brand-border text-brand-muted hover:bg-brand-cream"
+              >
+                ✎ Edit
+              </button>
+            )}
             <span
               className={clsx(
                 "rounded-full px-3 py-1 text-xs font-medium",
@@ -263,9 +318,19 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
             </span>
           </div>
         </div>
-        <h1 className="text-xl font-semibold text-brand-black mt-2">
-          {item.title}
-        </h1>
+        {editingDetails ? (
+          <input
+            value={draftTitle}
+            onChange={(e) => setDraftTitle(e.target.value)}
+            placeholder="Title"
+            autoFocus
+            className="w-full text-xl font-semibold text-brand-black mt-2 rounded border border-brand-border px-2 py-1 focus:outline-none focus:border-brand-orange"
+          />
+        ) : (
+          <h1 className="text-xl font-semibold text-brand-black mt-2">
+            {item.title}
+          </h1>
+        )}
         <div className="flex items-center gap-2 mt-1 text-xs text-brand-muted">
           <SourceBadge source={item.source} sprintNumber={item.sprint_number} />
           <span className="capitalize">{item.work_type}</span>
@@ -301,19 +366,48 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
         {/* Left: 60% */}
         <div className="flex-[3] p-4 sm:p-6 space-y-5 min-w-0">
           {/* Description / Summary */}
-          {(item.description || item.summary) && (
-            <div className="bg-white rounded border border-brand-border p-4">
-              {item.summary && (
-                <p className="text-sm text-brand-black font-medium mb-2">
-                  {item.summary}
-                </p>
-              )}
-              {item.description && (
-                <p className="text-sm text-brand-black whitespace-pre-wrap">
-                  {item.description}
-                </p>
-              )}
+          {editingDetails ? (
+            <div className="bg-white rounded border border-brand-border p-4 space-y-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-brand-muted mb-1">
+                  Summary
+                </div>
+                <textarea
+                  value={draftSummary}
+                  onChange={(e) => setDraftSummary(e.target.value)}
+                  rows={2}
+                  placeholder="One-line summary…"
+                  className="w-full rounded border border-brand-border px-2 py-1 text-sm resize-y focus:outline-none focus:border-brand-orange"
+                />
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-brand-muted mb-1">
+                  Description
+                </div>
+                <textarea
+                  value={draftDescription}
+                  onChange={(e) => setDraftDescription(e.target.value)}
+                  rows={6}
+                  placeholder="Full description…"
+                  className="w-full rounded border border-brand-border px-2 py-1 text-sm resize-y focus:outline-none focus:border-brand-orange"
+                />
+              </div>
             </div>
+          ) : (
+            (item.description || item.summary) && (
+              <div className="bg-white rounded border border-brand-border p-4">
+                {item.summary && (
+                  <p className="text-sm text-brand-black font-medium mb-2">
+                    {item.summary}
+                  </p>
+                )}
+                {item.description && (
+                  <p className="text-sm text-brand-black whitespace-pre-wrap">
+                    {item.description}
+                  </p>
+                )}
+              </div>
+            )
           )}
 
           {/* Metadata grid */}
