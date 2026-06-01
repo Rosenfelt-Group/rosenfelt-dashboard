@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { AgentBadge } from "@/components/AgentBadge";
 import type { AgentName, WorkItem, WorkStatus } from "@/types";
@@ -82,7 +82,6 @@ function DrawerMultiSelect({
 type SearchResponse = { items: WorkItem[]; total: number; offset: number; limit: number };
 
 export function AdvancedSearchDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const router = useRouter();
   const sp = useSearchParams();
 
   const [q, setQ] = useState("");
@@ -106,10 +105,14 @@ export function AdvancedSearchDrawer({ open, onClose }: { open: boolean; onClose
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [origin, setOrigin] = useState("");
 
-  // Ensures the URL→state hydration + auto-run happens once per open, not on
-  // every render (syncUrl mutates sp, which would otherwise re-trigger it).
+  // Ensures the URL→state hydration + auto-run happens once per open.
   const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -191,15 +194,25 @@ export function AdvancedSearchDrawer({ open, onClose }: { open: boolean; onClose
     return next;
   }
 
+  // Full shareable URL for the current form state (shown in the drawer + copied).
+  function shareUrl(): string {
+    return `${origin}/work?${shareParams().toString()}`;
+  }
+
+  // Reflect the search in the address bar without a Next navigation — updates the
+  // bar immediately and doesn't re-render the board behind the drawer.
   function syncUrl() {
-    router.replace(`/work?${shareParams().toString()}`, { scroll: false });
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", `/work?${shareParams().toString()}`);
+    }
   }
 
   function clearUrl() {
+    if (typeof window === "undefined") return;
     const next = new URLSearchParams(sp.toString());
     AS_KEYS.forEach((k) => next.delete(k));
     const qs = next.toString();
-    router.replace(qs ? `/work?${qs}` : "/work", { scroll: false });
+    window.history.replaceState(null, "", qs ? `/work?${qs}` : "/work");
   }
 
   async function fetchPage(apiQs: string, nextOffset: number) {
@@ -226,14 +239,13 @@ export function AdvancedSearchDrawer({ open, onClose }: { open: boolean; onClose
   }
 
   async function copyLink() {
-    const params = shareParams();
-    router.replace(`/work?${params.toString()}`, { scroll: false });
+    syncUrl();
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/work?${params.toString()}`);
+      await navigator.clipboard.writeText(shareUrl());
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // clipboard may be unavailable (insecure context) — the URL bar still reflects state
+      // clipboard may be unavailable (insecure context) — the URL field still shows the link
     }
   }
 
@@ -388,15 +400,27 @@ export function AdvancedSearchDrawer({ open, onClose }: { open: boolean; onClose
             >
               {loading && offset === 0 ? "Searching…" : "Search"}
             </button>
-            <button
-              onClick={copyLink}
-              disabled={!searched}
-              title={searched ? "Copy a shareable link to this search" : "Run a search first"}
-              className="rounded border border-brand-border text-xs px-3 py-1.5 text-brand-black hover:bg-brand-cream disabled:opacity-50"
-            >
-              {copied ? "Copied!" : "Copy link"}
-            </button>
             <button onClick={reset} className="text-xs text-brand-muted hover:text-brand-black">Reset</button>
+          </div>
+
+          {/* Shareable link — reflects the current filters; opening it re-runs the search */}
+          <div>
+            <div className="text-[11px] text-brand-muted mb-1">Shareable link</div>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={shareUrl()}
+                onFocus={(e) => e.currentTarget.select()}
+                className="flex-1 min-w-0 rounded border border-brand-border bg-brand-offwhite text-[11px] px-2 py-1.5 text-brand-muted"
+              />
+              <button
+                onClick={copyLink}
+                title="Copy a shareable link to this search"
+                className="shrink-0 rounded border border-brand-border text-xs px-3 py-1.5 text-brand-black hover:bg-brand-cream"
+              >
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
           </div>
         </div>
 
