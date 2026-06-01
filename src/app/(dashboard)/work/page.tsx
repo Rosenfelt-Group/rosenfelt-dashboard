@@ -951,28 +951,39 @@ function SearchResultRow({
 
 // ─── New item modal ──────────────────────────────────────────────────────────
 
+// Phase 0.7: sources offered for manual creation. System-generated sources
+// (backlog_migration / typeform / stripe) are intentionally omitted — they're
+// only written by automated paths, never chosen by hand. Both build-plan
+// origins collapse to one "From Plan Doc" choice writing source='sprint_plan'.
+const CREATE_SOURCE_OPTIONS: { value: WorkItemSource; label: string }[] = [
+  { value: "manual", label: "Manual" },
+  { value: "sprint_plan", label: "From Plan Doc" },
+  { value: "agent_suggestion", label: "Suggested" },
+  { value: "casey_audit", label: "Audit" },
+];
+
 function NewItemModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [workType, setWorkType] = useState<WorkType>("operations");
   const [priority, setPriority] = useState<TaskPriority>("medium");
   const [source, setSource] = useState<WorkItemSource>("manual");
+  // Phase 0.7: phase (sprint_number) is optional on ANY source, decoupled from it.
   const [sprintNumber, setSprintNumber] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  const requiresSprintNumber = source === "sprint" || source === "sprint_plan";
 
   async function save() {
     if (!title.trim()) return;
     setErr(null);
 
-    // Sprint-tagged items must have a positive integer sprint_number.
+    // Phase is optional. If supplied it must be a positive integer.
     let sprintNumberParsed: number | null = null;
-    if (requiresSprintNumber) {
-      const n = parseInt(sprintNumber.trim(), 10);
+    const sprintRaw = sprintNumber.trim();
+    if (sprintRaw) {
+      const n = parseInt(sprintRaw, 10);
       if (!Number.isInteger(n) || n <= 0) {
-        setErr("Sprint # is required and must be a positive integer.");
+        setErr("Phase must be a positive integer (or left blank).");
         return;
       }
       sprintNumberParsed = n;
@@ -1056,25 +1067,25 @@ function NewItemModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
                 onChange={(e) => setSource(e.target.value as WorkItemSource)}
                 className="w-full rounded border border-brand-border px-2 py-1 text-xs"
               >
-                {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+                {CREATE_SOURCE_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
               </select>
             </div>
-            {requiresSprintNumber && (
-              <div>
-                <div className="text-[10px] uppercase text-brand-muted mb-1">
-                  Sprint # <span className="text-red-600">*</span>
-                </div>
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={sprintNumber}
-                  onChange={(e) => setSprintNumber(e.target.value)}
-                  placeholder="e.g. 3"
-                  className="w-full rounded border border-brand-border px-2 py-1 text-xs"
-                />
+            <div>
+              <div className="text-[10px] uppercase text-brand-muted mb-1">
+                Phase <span className="text-brand-muted normal-case">(optional)</span>
               </div>
-            )}
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={sprintNumber}
+                onChange={(e) => setSprintNumber(e.target.value)}
+                placeholder="e.g. 1"
+                className="w-full rounded border border-brand-border px-2 py-1 text-xs"
+              />
+            </div>
           </div>
           {err && <div className="text-xs text-red-700">{err}</div>}
         </div>

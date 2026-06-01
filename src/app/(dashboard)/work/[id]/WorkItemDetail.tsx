@@ -74,6 +74,9 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
   const [draftTitle, setDraftTitle] = useState(initial.title);
   const [draftSummary, setDraftSummary] = useState(initial.summary ?? "");
   const [draftDescription, setDraftDescription] = useState(initial.description ?? "");
+  // Phase 0.7: phase (sprint_number) is a quick set/clear, committed on blur —
+  // independent of source and of the title/summary/description edit bundle.
+  const [phase, setPhase] = useState(initial.sprint_number?.toString() ?? "");
 
   const isClientDeliverable =
     item.work_type === "deliverable" &&
@@ -112,7 +115,12 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
           filter: `id=eq.${item.id}`,
         },
         (payload) => {
-          setItem((prev) => ({ ...prev, ...(payload.new as Partial<WorkItem>) }));
+          const next = payload.new as Partial<WorkItem>;
+          setItem((prev) => ({ ...prev, ...next }));
+          // Keep the Phase input in sync when the value changes elsewhere.
+          if ("sprint_number" in next) {
+            setPhase(next.sprint_number?.toString() ?? "");
+          }
         },
       )
       .subscribe();
@@ -248,6 +256,17 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
       setWritePromptPending(false);
     }
   }, [item.prompt, writePromptPending]);
+
+  // Phase 0.7: commit the phase. Blank/0/negative clears it (removes from
+  // phase); a positive integer sets it. No-op when unchanged so blur doesn't
+  // fire a redundant PATCH.
+  const commitPhase = useCallback(() => {
+    const raw = phase.trim();
+    const parsed = raw ? parseInt(raw, 10) : null;
+    const normalized = Number.isInteger(parsed) && (parsed as number) > 0 ? parsed : null;
+    if (normalized === (item.sprint_number ?? null)) return;
+    patch({ sprint_number: normalized });
+  }, [phase, item.sprint_number, patch]);
 
   const canDispatchToAgent = useMemo(
     () => Boolean(item.assigned_agent) && item.assigned_agent !== "brian",
@@ -475,6 +494,37 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
                     <span className="text-xs text-brand-muted">Manual</span>
                   ) : (
                     <SourceBadge source={item.source} sprintNumber={item.sprint_number} />
+                  )}
+                </div>
+              </Field>
+              <Field label="Phase">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={phase}
+                    onChange={(e) => setPhase(e.target.value)}
+                    onBlur={commitPhase}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
+                    disabled={busy}
+                    placeholder="—"
+                    className="w-full rounded border border-brand-border px-2 py-1 text-sm bg-white"
+                  />
+                  {item.sprint_number != null && (
+                    <button
+                      onClick={() => {
+                        setPhase("");
+                        patch({ sprint_number: null });
+                      }}
+                      disabled={busy}
+                      className="shrink-0 text-[11px] text-brand-muted hover:text-red-600"
+                      title="Remove from phase"
+                    >
+                      Clear
+                    </button>
                   )}
                 </div>
               </Field>

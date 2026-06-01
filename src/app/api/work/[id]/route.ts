@@ -5,6 +5,10 @@ const EDITABLE_FIELDS = new Set([
   "title", "description", "summary", "work_type", "priority", "status",
   "assigned_agent", "suggested_by", "prompt", "arch_notes",
   "due_date", "archived",
+  // Phase 0.7: sprint_number is phase membership (freely editable on any item,
+  // independent of source); source is origin/provenance. Both were previously
+  // dropped on every PATCH, which is why items couldn't be moved between phases.
+  "sprint_number", "source",
 ]);
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -31,6 +35,18 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const updates: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(body)) {
       if (EDITABLE_FIELDS.has(k)) updates[k] = v;
+    }
+
+    // Phase 0.7: normalize sprint_number. Empty string / 0 / negative → null
+    // (i.e. "remove from phase"); otherwise coerce to a positive integer.
+    if ("sprint_number" in updates) {
+      const raw = updates.sprint_number;
+      if (raw === null || raw === "" || raw === undefined) {
+        updates.sprint_number = null;
+      } else {
+        const n = typeof raw === "number" ? raw : parseInt(String(raw), 10);
+        updates.sprint_number = Number.isInteger(n) && n > 0 ? n : null;
+      }
     }
 
     if (typeof updates.status === "string") {
