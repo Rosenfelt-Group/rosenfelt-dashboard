@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { AgentBadge } from "@/components/AgentBadge";
 import { KanbanColumn } from "@/components/work/KanbanColumn";
 import { ConfigureColumnsMenu } from "@/components/work/ConfigureColumnsMenu";
+import { AdvancedSearchDrawer } from "@/components/work/AdvancedSearchDrawer";
 import {
   WORK_TYPES,
   AGENT_FILTER_OPTIONS,
@@ -233,6 +234,7 @@ function WorkPageInner() {
   const [loading, setLoading] = useState(true);
   const [columnCfg, setColumnCfg] = useState<ColumnConfig>(() => loadColumnConfig());
   const [newItemOpen, setNewItemOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [availableSprints, setAvailableSprints] = useState<number[]>([]);
 
@@ -428,6 +430,12 @@ function WorkPageInner() {
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-brand-black">Work items</h1>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAdvancedOpen(true)}
+            className="rounded border border-brand-border bg-white text-xs px-3 py-1.5 text-brand-black hover:bg-brand-cream"
+          >
+            ⌕ Advanced Search
+          </button>
           <ConfigureColumnsMenu
             allStatuses={ALL_STATUSES}
             visible={columnCfg.visible}
@@ -593,6 +601,8 @@ function WorkPageInner() {
           }}
         />
       )}
+
+      <AdvancedSearchDrawer open={advancedOpen} onClose={() => setAdvancedOpen(false)} />
     </div>
   );
 }
