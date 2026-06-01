@@ -982,7 +982,7 @@ function SearchResultRow({
   const isClosed = CLOSED_STATUSES.includes(item.status);
   return (
     <button
-      onClick={() => router.push(`/work/${item.id}`)}
+      onClick={() => router.push(`/work/${item.ref}`)}
       className={clsx(
         "w-full text-left bg-white rounded border border-brand-border px-3 py-2 transition flex items-center gap-3 hover:border-brand-orange/40 hover:shadow-sm",
         isClosed && "opacity-75",
@@ -996,7 +996,10 @@ function SearchResultRow({
       >
         {statusLabel(item.status)}
       </span>
-      <span className="flex-1 min-w-0 truncate text-sm text-brand-black">{item.title}</span>
+      <span className="flex-1 min-w-0 truncate text-sm text-brand-black">
+        <span className="text-brand-muted mr-1">#{item.ref}</span>
+        {item.title}
+      </span>
       <span className="shrink-0 hidden sm:inline text-[10px] text-brand-muted capitalize">
         {item.work_type}
       </span>

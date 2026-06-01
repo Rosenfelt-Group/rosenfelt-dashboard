@@ -374,6 +374,7 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
           />
         ) : (
           <h1 className="text-xl font-semibold text-brand-black mt-2">
+            <span className="text-brand-muted font-normal mr-2">#{item.ref}</span>
             {item.title}
           </h1>
         )}

@@ -64,7 +64,7 @@ export function KanbanCard({ item, onMove, allowedTargets, statusLabel }: Props)
 
   return (
     <div
-      onClick={() => router.push(`/work/${item.id}`)}
+      onClick={() => router.push(`/work/${item.ref}`)}
       className="bg-white rounded border border-brand-border p-3 hover:shadow-sm hover:border-brand-orange/40 cursor-pointer transition relative"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -114,6 +114,7 @@ export function KanbanCard({ item, onMove, allowedTargets, statusLabel }: Props)
       </div>
 
       <div className="text-sm font-medium text-brand-black mb-2 line-clamp-2">
+        <span className="text-brand-muted font-normal mr-1">#{item.ref}</span>
         {item.title}
       </div>
 
