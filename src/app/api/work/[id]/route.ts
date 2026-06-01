@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { workItemIdFilter } from "@/lib/work-item-id";
 
 const EDITABLE_FIELDS = new Set([
   "title", "description", "summary", "work_type", "priority", "status",
@@ -14,10 +15,11 @@ const EDITABLE_FIELDS = new Set([
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
+    const { column, value } = workItemIdFilter(id);
     const { data, error } = await supabaseAdmin
       .from("work_items")
       .select("*")
-      .eq("id", id)
+      .eq(column, value)
       .single();
     if (error) throw error;
     return NextResponse.json(data);
@@ -30,6 +32,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
+    const { column, value } = workItemIdFilter(id);
     const body = await req.json();
 
     const updates: Record<string, unknown> = {};
@@ -55,7 +58,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       const { data: current } = await supabaseAdmin
         .from("work_items")
         .select("status, approved_at, prompt_ready_at, completed_at")
-        .eq("id", id)
+        .eq(column, value)
         .single();
 
       if (updates.status === "approved" && !current?.approved_at) {
@@ -76,7 +79,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const { data, error } = await supabaseAdmin
       .from("work_items")
       .update(updates)
-      .eq("id", id)
+      .eq(column, value)
       .select()
       .single();
 

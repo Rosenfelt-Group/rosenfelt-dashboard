@@ -116,6 +116,8 @@ export type AgentName = "riley" | "jordan" | "avery" | "casey" | "brian";
 
 export interface WorkItem {
   id: string;
+  /** Friendly, human-facing sequential id (from 1000). Used in /work/<ref> URLs and the UI. */
+  ref: number;
   created_at: string;
   updated_at: string;
   title: string;
