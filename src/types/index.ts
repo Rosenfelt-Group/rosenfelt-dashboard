@@ -142,6 +142,10 @@ export interface WorkItem {
   legacy_backlog_id: number | null;
   // Added 2026-05-26 (migration: work_items_sprint_client_extensions)
   sprint_number?: number | null;
+  // Phase sub-step (text, e.g. "1.0", "1.6", "1.10"). sprint_number is the
+  // integer phase for roll-up grouping; phase_step identifies the sub-item
+  // within that phase and drives display + sort order.
+  phase_step?: string | null;
   work_item_type: WorkItemType;
   client_id?: string | null;
   billable_hours?: number | null;

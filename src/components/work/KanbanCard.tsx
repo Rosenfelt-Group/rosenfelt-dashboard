@@ -69,7 +69,11 @@ export function KanbanCard({ item, onMove, allowedTargets, statusLabel }: Props)
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <SourceBadge source={item.source} sprintNumber={item.sprint_number} />
+          <SourceBadge
+            source={item.source}
+            sprintNumber={item.sprint_number}
+            phaseStep={item.phase_step}
+          />
           <span
             className={clsx("w-2 h-2 rounded-full inline-block", PRIORITY_DOT[item.priority])}
             title={`Priority: ${item.priority}`}

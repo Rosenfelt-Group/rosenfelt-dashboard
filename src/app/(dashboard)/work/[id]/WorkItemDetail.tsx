@@ -96,6 +96,8 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
   // Phase 0.7: phase (sprint_number) is a quick set/clear, committed on blur —
   // independent of source and of the title/summary/description edit bundle.
   const [phase, setPhase] = useState(initial.sprint_number?.toString() ?? "");
+  // Phase sub-step (text, e.g. "1.6") — committed on blur, independent of phase.
+  const [phaseStep, setPhaseStep] = useState(initial.phase_step ?? "");
 
   const isClientDeliverable =
     item.work_type === "deliverable" &&
@@ -146,6 +148,9 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
           // Keep the Phase input in sync when the value changes elsewhere.
           if ("sprint_number" in next) {
             setPhase(next.sprint_number?.toString() ?? "");
+          }
+          if ("phase_step" in next) {
+            setPhaseStep(next.phase_step ?? "");
           }
         },
       )
@@ -295,6 +300,13 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
     patch({ sprint_number: normalized });
   }, [phase, item.sprint_number, patch]);
 
+  // Commit the phase sub-step (free text). Blank clears it. No-op when unchanged.
+  const commitPhaseStep = useCallback(() => {
+    const normalized = phaseStep.trim() || null;
+    if (normalized === (item.phase_step ?? null)) return;
+    patch({ phase_step: normalized });
+  }, [phaseStep, item.phase_step, patch]);
+
   const canDispatchToAgent = useMemo(
     () => Boolean(item.assigned_agent) && item.assigned_agent !== "brian",
     [item.assigned_agent],
@@ -379,7 +391,11 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
           </h1>
         )}
         <div className="flex items-center gap-2 mt-1 text-xs text-brand-muted">
-          <SourceBadge source={item.source} sprintNumber={item.sprint_number} />
+          <SourceBadge
+            source={item.source}
+            sprintNumber={item.sprint_number}
+            phaseStep={item.phase_step}
+          />
           <span className="capitalize">{item.work_type}</span>
           {item.assigned_agent && (
             <>
@@ -558,6 +574,20 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
                     </button>
                   )}
                 </div>
+              </Field>
+              <Field label="Step">
+                <input
+                  type="text"
+                  value={phaseStep}
+                  onChange={(e) => setPhaseStep(e.target.value)}
+                  onBlur={commitPhaseStep}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
+                  disabled={busy}
+                  placeholder="e.g. 1.6"
+                  className="w-full rounded border border-brand-border px-2 py-1 text-sm bg-white"
+                />
               </Field>
               <Field label="Due date">
                 <input

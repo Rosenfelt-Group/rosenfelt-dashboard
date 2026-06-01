@@ -56,6 +56,43 @@ function sortByPriorityThenUpdated(a: WorkItem, b: WorkItem) {
   return b.updated_at.localeCompare(a.updated_at);
 }
 
+// Natural compare for phase_step text ("1.6" < "1.10" < "2.0"). Splits on "."
+// and compares each segment numerically so 1.10 sorts after 1.9 (a plain string
+// or numeric compare would get this wrong). Nulls sort last.
+function comparePhaseStep(a: string | null | undefined, b: string | null | undefined): number {
+  const sa = typeof a === "string" && a.trim() ? a.trim() : null;
+  const sb = typeof b === "string" && b.trim() ? b.trim() : null;
+  if (sa === null && sb === null) return 0;
+  if (sa === null) return 1;
+  if (sb === null) return -1;
+  const pa = sa.split(".");
+  const pb = sb.split(".");
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const na = parseInt(pa[i] ?? "0", 10);
+    const nb = parseInt(pb[i] ?? "0", 10);
+    if (Number.isNaN(na) || Number.isNaN(nb)) return sa.localeCompare(sb);
+    if (na !== nb) return na - nb;
+  }
+  return 0;
+}
+
+// Board sort: roll items up by integer phase (sprint_number floor) ascending —
+// phased items group together and come before un-phased ones — then by phase_step
+// ascending within a phase, then fall back to the priority/recency ordering.
+function sortByPhaseThenPriority(a: WorkItem, b: WorkItem) {
+  const ba = a.sprint_number == null ? null : phaseBucket(a.sprint_number);
+  const bb = b.sprint_number == null ? null : phaseBucket(b.sprint_number);
+  if (ba !== bb) {
+    if (ba === null) return 1; // un-phased sorts after phased
+    if (bb === null) return -1;
+    return ba - bb;
+  }
+  const stepCmp = comparePhaseStep(a.phase_step, b.phase_step);
+  if (stepCmp !== 0) return stepCmp;
+  return sortByPriorityThenUpdated(a, b);
+}
+
 // ─── Filter helpers ──────────────────────────────────────────────────────────
 
 type Filters = {
@@ -403,14 +440,14 @@ function WorkPageInner() {
       const bucket = byStatus.get(item.status);
       if (bucket) bucket.push(item);
     }
-    for (const list of byStatus.values()) list.sort(sortByPriorityThenUpdated);
+    for (const list of byStatus.values()) list.sort(sortByPhaseThenPriority);
     return byStatus;
   }, [items, filters]);
 
   // Apply the remaining client-side filters (agent/type/priority/source/sprint)
   // to the server search results so search honours the active filter bar too.
   const searchResults = useMemo(
-    () => searchItems.filter((i) => matchesFilters(i, filters)).sort(sortByPriorityThenUpdated),
+    () => searchItems.filter((i) => matchesFilters(i, filters)).sort(sortByPhaseThenPriority),
     [searchItems, filters],
   );
 
@@ -999,6 +1036,8 @@ function NewItemModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const [source, setSource] = useState<WorkItemSource>("manual");
   // Phase 0.7: phase (sprint_number) is optional on ANY source, decoupled from it.
   const [sprintNumber, setSprintNumber] = useState<string>("");
+  // Phase sub-step (text, e.g. "1.6") — optional, free text.
+  const [phaseStep, setPhaseStep] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -1032,6 +1071,7 @@ function NewItemModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           status: "inbox",
           source,
           ...(sprintNumberParsed !== null && { sprint_number: sprintNumberParsed }),
+          ...(phaseStep.trim() && { phase_step: phaseStep.trim() }),
         }),
       });
       if (!res.ok) {
@@ -1109,10 +1149,22 @@ function NewItemModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
               <input
                 type="number"
                 min={0}
-                step="0.1"
+                step="1"
                 value={sprintNumber}
                 onChange={(e) => setSprintNumber(e.target.value)}
-                placeholder="e.g. 0.7"
+                placeholder="e.g. 1"
+                className="w-full rounded border border-brand-border px-2 py-1 text-xs"
+              />
+            </div>
+            <div>
+              <div className="text-[10px] uppercase text-brand-muted mb-1">
+                Step <span className="text-brand-muted normal-case">(optional)</span>
+              </div>
+              <input
+                type="text"
+                value={phaseStep}
+                onChange={(e) => setPhaseStep(e.target.value)}
+                placeholder="e.g. 1.6"
                 className="w-full rounded border border-brand-border px-2 py-1 text-xs"
               />
             </div>

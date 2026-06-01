@@ -4,6 +4,8 @@ import type { WorkItemSource } from "@/types";
 type Props = {
   source: WorkItemSource | null | undefined;
   sprintNumber?: number | null;
+  /** Phase sub-step (text, e.g. "1.6"). Preferred over sprintNumber in the chip. */
+  phaseStep?: string | null;
   className?: string;
 };
 
@@ -26,9 +28,12 @@ const SOURCE_META: Record<
 // Renders up to two chips: a provenance chip (omitted for 'manual') and a Phase
 // chip (whenever sprint_number is set, regardless of source — Phase 0.7 decoupled
 // phase membership from source). Returns null only when there's nothing to show.
-export function SourceBadge({ source, sprintNumber, className }: Props) {
+export function SourceBadge({ source, sprintNumber, phaseStep, className }: Props) {
   const showSource = !!source && source !== "manual";
-  const showPhase = typeof sprintNumber === "number";
+  const stepLabel = typeof phaseStep === "string" && phaseStep.trim() ? phaseStep.trim() : null;
+  const showPhase = typeof sprintNumber === "number" || stepLabel !== null;
+  // Prefer the text sub-step ("1.6") over the bare integer phase ("1") when set.
+  const phaseLabel = stepLabel ?? (typeof sprintNumber === "number" ? String(sprintNumber) : null);
   if (!showSource && !showPhase) return null;
 
   // Defensive fallback: if the DB has a source the UI doesn't know about
@@ -57,16 +62,16 @@ export function SourceBadge({ source, sprintNumber, className }: Props) {
           <span>{meta.label}</span>
         </span>
       )}
-      {showPhase && (
+      {showPhase && phaseLabel !== null && (
         <span
           className={clsx(
             "inline-flex items-center gap-1 rounded-full text-xs px-2 py-0.5 font-medium",
             "bg-emerald-100 text-emerald-700",
             className,
           )}
-          title={`Phase ${sprintNumber}`}
+          title={`Phase ${phaseLabel}`}
         >
-          <span>Phase {sprintNumber}</span>
+          <span>Phase {phaseLabel}</span>
         </span>
       )}
     </>

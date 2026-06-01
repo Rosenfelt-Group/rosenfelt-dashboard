@@ -10,6 +10,8 @@ const EDITABLE_FIELDS = new Set([
   // independent of source); source is origin/provenance. Both were previously
   // dropped on every PATCH, which is why items couldn't be moved between phases.
   "sprint_number", "source",
+  // phase_step: text sub-step within a phase (e.g. "1.6"). Display + sort only.
+  "phase_step",
 ]);
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -51,6 +53,13 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         const n = typeof raw === "number" ? raw : parseFloat(String(raw));
         updates.sprint_number = Number.isFinite(n) && n > 0 ? n : null;
       }
+    }
+
+    // phase_step is free text; trim and treat empty as null ("no sub-step").
+    if ("phase_step" in updates) {
+      const raw = updates.phase_step;
+      const trimmed = raw == null ? "" : String(raw).trim();
+      updates.phase_step = trimmed === "" ? null : trimmed;
     }
 
     if (typeof updates.status === "string") {

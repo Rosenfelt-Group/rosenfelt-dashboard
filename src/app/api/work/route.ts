@@ -107,6 +107,9 @@ export async function POST(req: NextRequest) {
       // 2026-05-26: client work item support
       work_item_type: body.work_item_type ?? "internal",
       sprint_number: body.sprint_number ?? null,
+      phase_step: typeof body.phase_step === "string" && body.phase_step.trim()
+        ? body.phase_step.trim()
+        : null,
       client_id: body.client_id ?? null,
       source: body.source ?? "manual",
     };
