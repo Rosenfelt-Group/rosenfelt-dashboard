@@ -234,7 +234,8 @@ function WorkPageInner() {
   const [loading, setLoading] = useState(true);
   const [columnCfg, setColumnCfg] = useState<ColumnConfig>(() => loadColumnConfig());
   const [newItemOpen, setNewItemOpen] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Auto-open the Advanced Search drawer when arriving on a shared `?as=1` link.
+  const [advancedOpen, setAdvancedOpen] = useState(sp.get("as") === "1");
   const [error, setError] = useState<string | null>(null);
   const [availableSprints, setAvailableSprints] = useState<number[]>([]);
 
