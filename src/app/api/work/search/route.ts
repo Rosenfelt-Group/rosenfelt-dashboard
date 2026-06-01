@@ -1,11 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import {
+  WORK_TYPES,
+  AGENT_FILTER_OPTIONS,
+  PRIORITIES,
+  SOURCES,
+  ALL_STATUSES,
+} from "@/components/work/work-constants";
 
 const PAGE_SIZE = 50;
 const DATE_FIELDS = new Set(["created_at", "updated_at", "due_date"]);
 
+// Allowlists — any param value not in its known set is dropped before it can
+// reach a filter. This hardens the hand-built or() string (agents) against
+// PostgREST filter injection and is defense-in-depth for the .in() filters.
+const ALLOWED_AGENTS = new Set<string>(AGENT_FILTER_OPTIONS as readonly string[]);
+const ALLOWED_TYPES = new Set<string>(WORK_TYPES as readonly string[]);
+const ALLOWED_PRIORITIES = new Set<string>(PRIORITIES as readonly string[]);
+const ALLOWED_SOURCES = new Set<string>(SOURCES as readonly string[]);
+const ALLOWED_STATUSES = new Set<string>(ALL_STATUSES as readonly string[]);
+
 function csv(v: string | null): string[] {
   return (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+// Keep only values present in the allowlist.
+function known(values: string[], allowed: Set<string>): string[] {
+  return values.filter((v) => allowed.has(v));
 }
 
 // GET /api/work/search — full-table work_items search for the Advanced Search
@@ -15,11 +36,11 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
 
     const q = (searchParams.get("q") ?? "").trim();
-    const agents = csv(searchParams.get("agent"));
-    const types = csv(searchParams.get("type"));
-    const priorities = csv(searchParams.get("priority"));
-    const sources = csv(searchParams.get("source"));
-    const statuses = csv(searchParams.get("status"));
+    const agents = known(csv(searchParams.get("agent")), ALLOWED_AGENTS);
+    const types = known(csv(searchParams.get("type")), ALLOWED_TYPES);
+    const priorities = known(csv(searchParams.get("priority")), ALLOWED_PRIORITIES);
+    const sources = known(csv(searchParams.get("source")), ALLOWED_SOURCES);
+    const statuses = known(csv(searchParams.get("status")), ALLOWED_STATUSES);
     const phases = csv(searchParams.get("phase"));
     const itemType = searchParams.get("itemType");
     const dateFieldRaw = searchParams.get("dateField") ?? "updated_at";
