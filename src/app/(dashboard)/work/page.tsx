@@ -129,26 +129,32 @@ function parseSetParam<T extends string>(
   );
 }
 
-// Sentinel for "no phase assigned" in the phase filter. Phase numbers are
-// positive integers; PHASE_NONE matches items where sprint_number IS NULL.
+// Sentinel for "no phase assigned" in the phase filter. PHASE_NONE matches
+// items where sprint_number IS NULL.
 const PHASE_NONE = "none" as const;
 
-// Phase filter parsing. Defaults to {none} when the param is absent so a fresh
-// load of /work shows only un-phased items (the triage view). "all" = every
-// phase (empty set = no restriction).
+// Phases are grouped by the INTEGER FLOOR of sprint_number: "Phase 1" covers
+// every item with sprint_number in [1, 2) — 1.0, 1.2, 1.6, etc. So the filter
+// always works in whole-number phase buckets (0, 1, 2, …).
+function phaseBucket(sprintNumber: number): number {
+  return Math.floor(sprintNumber);
+}
+
+// Phase filter parsing. An absent param (or "all") means no restriction —
+// a fresh /work load shows every item. Otherwise each token is floored to its
+// integer phase bucket; PHASE_NONE keeps un-phased items.
 function parsePhases(raw: string | null): Set<number | "none"> {
-  if (raw === null) return new Set([PHASE_NONE]);
-  if (raw === "all") return new Set();
+  if (raw === null || raw === "all") return new Set();
   const out = new Set<number | "none">();
   for (const part of raw.split(",")) {
     const t = part.trim();
     if (t === PHASE_NONE) out.add(PHASE_NONE);
     else {
       const n = parseFloat(t);
-      if (Number.isFinite(n) && n > 0) out.add(n);
+      if (Number.isFinite(n) && n >= 0) out.add(phaseBucket(n));
     }
   }
-  return out.size ? out : new Set([PHASE_NONE]);
+  return out;
 }
 
 function parseItemType(raw: string | null): ItemTypeFilter {
@@ -203,7 +209,8 @@ function matchesFilters(item: WorkItem, f: Filters): boolean {
   if (f.priorities.size && !f.priorities.has(item.priority)) return false;
   if (f.sources.size && !f.sources.has(item.source)) return false;
   if (f.phases.size) {
-    const key: number | "none" = item.sprint_number == null ? PHASE_NONE : item.sprint_number;
+    const key: number | "none" =
+      item.sprint_number == null ? PHASE_NONE : phaseBucket(item.sprint_number);
     if (!f.phases.has(key)) return false;
   }
   // itemType is enforced server-side via /api/work?itemType=, but defensively re-check
@@ -566,7 +573,7 @@ function WorkPageInner() {
                 workTypes: new Set(),
                 priorities: new Set(),
                 sources: new Set(),
-                phases: new Set([PHASE_NONE]),
+                phases: new Set(),
                 itemType: "internal",
                 q: filters.q,
                 searchAll: filters.searchAll,
