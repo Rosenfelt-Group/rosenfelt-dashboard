@@ -288,8 +288,9 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
   // fire a redundant PATCH.
   const commitPhase = useCallback(() => {
     const raw = phase.trim();
-    const parsed = raw ? parseInt(raw, 10) : null;
-    const normalized = Number.isInteger(parsed) && (parsed as number) > 0 ? parsed : null;
+    const parsed = raw ? parseFloat(raw) : null;
+    const normalized =
+      parsed !== null && Number.isFinite(parsed) && parsed > 0 ? parsed : null;
     if (normalized === (item.sprint_number ?? null)) return;
     patch({ sprint_number: normalized });
   }, [phase, item.sprint_number, patch]);
@@ -530,8 +531,8 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    min={1}
-                    step={1}
+                    min={0}
+                    step="0.1"
                     value={phase}
                     onChange={(e) => setPhase(e.target.value)}
                     onBlur={commitPhase}

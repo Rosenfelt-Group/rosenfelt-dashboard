@@ -37,15 +37,16 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       if (EDITABLE_FIELDS.has(k)) updates[k] = v;
     }
 
-    // Phase 0.7: normalize sprint_number. Empty string / 0 / negative → null
-    // (i.e. "remove from phase"); otherwise coerce to a positive integer.
+    // Phase 0.7: normalize sprint_number (phase). Empty / 0 / negative → null
+    // ("remove from phase"); otherwise a positive decimal (phases are decimal,
+    // e.g. 0.7, 1.0, 1.6 — column is numeric).
     if ("sprint_number" in updates) {
       const raw = updates.sprint_number;
       if (raw === null || raw === "" || raw === undefined) {
         updates.sprint_number = null;
       } else {
-        const n = typeof raw === "number" ? raw : parseInt(String(raw), 10);
-        updates.sprint_number = Number.isInteger(n) && n > 0 ? n : null;
+        const n = typeof raw === "number" ? raw : parseFloat(String(raw));
+        updates.sprint_number = Number.isFinite(n) && n > 0 ? n : null;
       }
     }
 

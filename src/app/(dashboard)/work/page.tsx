@@ -144,8 +144,8 @@ function parsePhases(raw: string | null): Set<number | "none"> {
     const t = part.trim();
     if (t === PHASE_NONE) out.add(PHASE_NONE);
     else {
-      const n = parseInt(t, 10);
-      if (Number.isInteger(n) && n > 0) out.add(n);
+      const n = parseFloat(t);
+      if (Number.isFinite(n) && n > 0) out.add(n);
     }
   }
   return out.size ? out : new Set([PHASE_NONE]);
@@ -1026,13 +1026,14 @@ function NewItemModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
     if (!title.trim()) return;
     setErr(null);
 
-    // Phase is optional. If supplied it must be a positive integer.
+    // Phase is optional. If supplied it must be a positive number (decimals
+    // allowed, e.g. 0.7, 1.0, 1.6 — matches the build plan's numbering).
     let sprintNumberParsed: number | null = null;
     const sprintRaw = sprintNumber.trim();
     if (sprintRaw) {
-      const n = parseInt(sprintRaw, 10);
-      if (!Number.isInteger(n) || n <= 0) {
-        setErr("Phase must be a positive integer (or left blank).");
+      const n = parseFloat(sprintRaw);
+      if (!Number.isFinite(n) || n <= 0) {
+        setErr("Phase must be a positive number (e.g. 0.7, 1.0), or left blank.");
         return;
       }
       sprintNumberParsed = n;
@@ -1127,11 +1128,11 @@ function NewItemModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
               </div>
               <input
                 type="number"
-                min={1}
-                step={1}
+                min={0}
+                step="0.1"
                 value={sprintNumber}
                 onChange={(e) => setSprintNumber(e.target.value)}
-                placeholder="e.g. 1"
+                placeholder="e.g. 0.7"
                 className="w-full rounded border border-brand-border px-2 py-1 text-xs"
               />
             </div>
