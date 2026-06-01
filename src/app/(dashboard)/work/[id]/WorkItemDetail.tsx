@@ -12,6 +12,7 @@ import type {
   AgentName,
   TaskPriority,
   WorkItem,
+  WorkItemSource,
   WorkStatus,
   WorkType,
 } from "@/types";
@@ -56,6 +57,24 @@ const WORK_TYPE_OPTIONS: WorkType[] = [
   "website", "operations", "business", "workflow",
 ];
 
+// Phase 0.7: source is editable. Friendly labels match SourceBadge; both
+// build-plan origins read "From Plan Doc". System-only origins (migrated/
+// typeform/stripe) aren't offered for manual selection but are shown if the
+// item already carries one.
+const SOURCE_LABELS: Record<WorkItemSource, string> = {
+  manual: "Manual",
+  sprint_plan: "From Plan Doc",
+  sprint: "From Plan Doc",
+  agent_suggestion: "Suggested",
+  casey_audit: "Audit",
+  backlog_migration: "Migrated",
+  typeform: "Typeform",
+  stripe: "Stripe",
+};
+const EDITABLE_SOURCE_OPTIONS: WorkItemSource[] = [
+  "manual", "sprint_plan", "agent_suggestion", "casey_audit",
+];
+
 export function WorkItemDetail({ initial }: { initial: WorkItem }) {
   const [item, setItem] = useState<WorkItem>(initial);
   const [tab, setTab] = useState<"log" | "docs">("log");
@@ -81,6 +100,13 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
   const isClientDeliverable =
     item.work_type === "deliverable" &&
     (item.source === "typeform" || item.source === "stripe");
+
+  // Source select options: the human-pickable set, plus the item's current
+  // value if it's a system-only origin (so the select never misrepresents it).
+  const currentSource = (item.source ?? "manual") as WorkItemSource;
+  const sourceOptions = EDITABLE_SOURCE_OPTIONS.includes(currentSource)
+    ? EDITABLE_SOURCE_OPTIONS
+    : [...EDITABLE_SOURCE_OPTIONS, currentSource];
 
   async function resendAudit() {
     if (!confirm("Resend the Stack Audit PDF to the client?")) return;
@@ -489,13 +515,16 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
                 </select>
               </Field>
               <Field label="Source">
-                <div className="flex items-center h-7">
-                  {item.source === "manual" ? (
-                    <span className="text-xs text-brand-muted">Manual</span>
-                  ) : (
-                    <SourceBadge source={item.source} sprintNumber={item.sprint_number} />
-                  )}
-                </div>
+                <select
+                  value={currentSource}
+                  onChange={(e) => patch({ source: e.target.value as WorkItemSource })}
+                  disabled={busy}
+                  className="w-full rounded border border-brand-border px-2 py-1 text-sm bg-white"
+                >
+                  {sourceOptions.map((s) => (
+                    <option key={s} value={s}>{SOURCE_LABELS[s] ?? s}</option>
+                  ))}
+                </select>
               </Field>
               <Field label="Phase">
                 <div className="flex items-center gap-2">

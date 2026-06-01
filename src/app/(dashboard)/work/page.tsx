@@ -103,7 +103,9 @@ type Filters = {
   workTypes: Set<WorkType>;
   priorities: Set<TaskPriority>;
   sources: Set<WorkItemSource>;
-  sprints: Set<number>;
+  // Phase 0.7 cleanup: phase membership filter. Holds phase numbers and/or the
+  // "none" sentinel (items with no phase). Empty set = show all phases.
+  phases: Set<number | "none">;
   // Server-side filter (passed to /api/work?itemType=) — single value, defaults to "internal"
   itemType: ItemTypeFilter;
   // Free-text search (server-side). Empty string = no search active.
@@ -127,14 +129,26 @@ function parseSetParam<T extends string>(
   );
 }
 
-function parseSprints(raw: string | null): Set<number> {
-  if (!raw) return new Set();
-  const out = new Set<number>();
+// Sentinel for "no phase assigned" in the phase filter. Phase numbers are
+// positive integers; PHASE_NONE matches items where sprint_number IS NULL.
+const PHASE_NONE = "none" as const;
+
+// Phase filter parsing. Defaults to {none} when the param is absent so a fresh
+// load of /work shows only un-phased items (the triage view). "all" = every
+// phase (empty set = no restriction).
+function parsePhases(raw: string | null): Set<number | "none"> {
+  if (raw === null) return new Set([PHASE_NONE]);
+  if (raw === "all") return new Set();
+  const out = new Set<number | "none">();
   for (const part of raw.split(",")) {
-    const n = parseInt(part.trim(), 10);
-    if (Number.isInteger(n) && n >= 0) out.add(n);
+    const t = part.trim();
+    if (t === PHASE_NONE) out.add(PHASE_NONE);
+    else {
+      const n = parseInt(t, 10);
+      if (Number.isInteger(n) && n > 0) out.add(n);
+    }
   }
-  return out;
+  return out.size ? out : new Set([PHASE_NONE]);
 }
 
 function parseItemType(raw: string | null): ItemTypeFilter {
@@ -148,7 +162,7 @@ function buildFilters(sp: URLSearchParams): Filters {
     workTypes: parseSetParam<WorkType>(sp.get("type"), WORK_TYPES),
     priorities: parseSetParam<TaskPriority>(sp.get("priority"), PRIORITIES),
     sources: parseSetParam<WorkItemSource>(sp.get("source"), SOURCES),
-    sprints: parseSprints(sp.get("sprint")),
+    phases: parsePhases(sp.get("phase")),
     itemType: parseItemType(sp.get("itemType")),
     q: (sp.get("q") ?? "").trim(),
     searchAll: sp.get("searchAll") === "1",
@@ -161,7 +175,18 @@ function filtersToQuery(f: Filters): string {
   if (f.workTypes.size) sp.set("type", Array.from(f.workTypes).join(","));
   if (f.priorities.size) sp.set("priority", Array.from(f.priorities).join(","));
   if (f.sources.size) sp.set("source", Array.from(f.sources).join(","));
-  if (f.sprints.size) sp.set("sprint", Array.from(f.sprints).sort((a, b) => a - b).join(","));
+  // Phase is always serialized so the URL round-trips: empty = "all", otherwise
+  // the selected phases (the "none" sentinel sorted first).
+  if (f.phases.size === 0) {
+    sp.set("phase", "all");
+  } else {
+    const vals = Array.from(f.phases).sort((a, b) => {
+      if (a === PHASE_NONE) return -1;
+      if (b === PHASE_NONE) return 1;
+      return (a as number) - (b as number);
+    });
+    sp.set("phase", vals.join(","));
+  }
   // Only persist itemType when it's not the default ("internal")
   if (f.itemType !== "internal") sp.set("itemType", f.itemType);
   if (f.q) sp.set("q", f.q);
@@ -177,8 +202,9 @@ function matchesFilters(item: WorkItem, f: Filters): boolean {
   if (f.workTypes.size && !f.workTypes.has(item.work_type)) return false;
   if (f.priorities.size && !f.priorities.has(item.priority)) return false;
   if (f.sources.size && !f.sources.has(item.source)) return false;
-  if (f.sprints.size) {
-    if (item.sprint_number == null || !f.sprints.has(item.sprint_number)) return false;
+  if (f.phases.size) {
+    const key: number | "none" = item.sprint_number == null ? PHASE_NONE : item.sprint_number;
+    if (!f.phases.has(key)) return false;
   }
   // itemType is enforced server-side via /api/work?itemType=, but defensively re-check
   // here so a stale fetch doesn't leak across toggle states.
@@ -427,7 +453,7 @@ function WorkPageInner() {
     filters.workTypes.size +
     filters.priorities.size +
     filters.sources.size +
-    filters.sprints.size +
+    filters.phases.size +
     (filters.itemType === "internal" ? 0 : 1);
 
   return (
@@ -510,16 +536,20 @@ function WorkPageInner() {
               }}
             />
           ))}
-          {Array.from(filters.sprints)
-            .sort((a, b) => a - b)
-            .map((n) => (
+          {Array.from(filters.phases)
+            .sort((a, b) => {
+              if (a === PHASE_NONE) return -1;
+              if (b === PHASE_NONE) return 1;
+              return (a as number) - (b as number);
+            })
+            .map((v) => (
               <FilterChip
-                key={`sp-${n}`}
-                label={`Sprint ${n}`}
+                key={`ph-${v}`}
+                label={v === PHASE_NONE ? "Phase: None" : `Phase ${v}`}
                 onRemove={() => {
-                  const next = new Set(filters.sprints);
-                  next.delete(n);
-                  setFilters({ ...filters, sprints: next });
+                  const next = new Set(filters.phases);
+                  next.delete(v);
+                  setFilters({ ...filters, phases: next });
                 }}
               />
             ))}
@@ -536,7 +566,7 @@ function WorkPageInner() {
                 workTypes: new Set(),
                 priorities: new Set(),
                 sources: new Set(),
-                sprints: new Set(),
+                phases: new Set([PHASE_NONE]),
                 itemType: "internal",
                 q: filters.q,
                 searchAll: filters.searchAll,
@@ -653,11 +683,10 @@ function FilterBar({
           selected={filters.sources}
           onToggle={(v) => setFilters({ ...filters, sources: toggle(filters.sources, v) })}
         />
-        <SprintMultiSelect
-          label="Sprint #"
+        <PhaseMultiSelect
           options={availableSprints}
-          selected={filters.sprints}
-          onToggle={(v) => setFilters({ ...filters, sprints: toggle(filters.sprints, v) })}
+          selected={filters.phases}
+          onChange={(next) => setFilters({ ...filters, phases: next })}
         />
       </div>
     </div>
@@ -694,24 +723,31 @@ function ItemTypeToggle({
   );
 }
 
-function SprintMultiSelect({
-  label,
+function PhaseMultiSelect({
   options,
   selected,
-  onToggle,
+  onChange,
 }: {
-  label: string;
   options: number[];
-  selected: Set<number>;
-  onToggle: (v: number) => void;
+  selected: Set<number | "none">;
+  onChange: (next: Set<number | "none">) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const summary =
-    selected.size === 0
-      ? "All"
-      : selected.size === 1
-        ? `Sprint ${Array.from(selected)[0]}`
-        : `${selected.size} selected`;
+  const isAll = selected.size === 0;
+  const summary = isAll
+    ? "All"
+    : selected.size === 1
+      ? selected.has(PHASE_NONE)
+        ? "None"
+        : `Phase ${Array.from(selected)[0]}`
+      : `${selected.size} selected`;
+
+  function toggle(v: number | "none") {
+    const next = new Set(selected);
+    if (next.has(v)) next.delete(v);
+    else next.add(v);
+    onChange(next);
+  }
 
   return (
     <div className="relative">
@@ -720,7 +756,7 @@ function SprintMultiSelect({
         className="w-full rounded border border-brand-border bg-white text-xs px-2 py-1 text-left hover:bg-brand-cream flex items-center justify-between"
       >
         <span>
-          <span className="text-brand-muted">{label}:</span>{" "}
+          <span className="text-brand-muted">Phase:</span>{" "}
           <span className="text-brand-black">{summary}</span>
         </span>
         <span className="text-brand-muted">▾</span>
@@ -729,23 +765,36 @@ function SprintMultiSelect({
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute z-20 mt-1 w-full bg-white border border-brand-border rounded shadow-md max-h-60 overflow-y-auto">
-            {options.length === 0 ? (
-              <div className="px-3 py-1.5 text-xs text-brand-muted">No sprints yet</div>
-            ) : (
-              options.map((n) => (
-                <label
-                  key={n}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-brand-offwhite cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected.has(n)}
-                    onChange={() => onToggle(n)}
-                  />
-                  <span className="text-brand-black">Sprint {n}</span>
-                </label>
-              ))
-            )}
+            {/* "All phases" clears the restriction (empty set). */}
+            <button
+              onClick={() => onChange(new Set())}
+              className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:bg-brand-offwhite text-left"
+            >
+              <span className={clsx("w-3", isAll ? "text-brand-orange" : "text-transparent")}>✓</span>
+              <span className="text-brand-black">All phases</span>
+            </button>
+            {/* None is always present — items with no phase assigned. */}
+            <label className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-brand-offwhite cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selected.has(PHASE_NONE)}
+                onChange={() => toggle(PHASE_NONE)}
+              />
+              <span className="text-brand-black">None (no phase)</span>
+            </label>
+            {options.map((n) => (
+              <label
+                key={n}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-brand-offwhite cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.has(n)}
+                  onChange={() => toggle(n)}
+                />
+                <span className="text-brand-black">Phase {n}</span>
+              </label>
+            ))}
           </div>
         </>
       )}
