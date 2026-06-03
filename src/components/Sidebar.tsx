@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import clsx from "clsx";
+import NotificationBell from "./NotificationBell";
 import { can } from "@/lib/permissions";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -272,8 +273,18 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         })}
       </nav>
 
-      {/* Sign out */}
+      {/* Bell + Sign out */}
       <div className={clsx("border-t border-brand-border py-2", collapsed ? "px-1.5" : "px-2")}>
+        {!collapsed && (
+          <div className="px-3 py-1">
+            <NotificationBell />
+          </div>
+        )}
+        {collapsed && (
+          <div className="flex justify-center py-1">
+            <NotificationBell />
+          </div>
+        )}
         <button
           onClick={handleLogout}
           title={collapsed ? "Sign out" : undefined}
@@ -309,13 +320,16 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
             <p className="text-sm font-semibold text-brand-black">Rosably</p>
           </div>
         </div>
-        <button
-          onClick={handleLogout}
-          aria-label="Sign out"
-          className="p-1.5 -mr-1.5 rounded-md text-brand-muted hover:bg-brand-offwhite transition-colors"
-        >
-          <Icon name="logOut" />
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <button
+            onClick={handleLogout}
+            aria-label="Sign out"
+            className="p-1.5 -mr-1.5 rounded-md text-brand-muted hover:bg-brand-offwhite transition-colors"
+          >
+            <Icon name="logOut" />
+          </button>
+        </div>
       </header>
 
       {/* Backdrop */}
