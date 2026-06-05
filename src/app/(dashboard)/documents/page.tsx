@@ -1,6 +1,7 @@
 "use client";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { docTypeLabel } from "@/lib/doc-types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import clsx from "clsx";
@@ -34,7 +35,7 @@ interface DocEntry {
   name:              string;
   path:              string;
   description?:      string;
-  category?:         string;
+  doc_type?:         string;
   updated_at?:       string;
   headings?:         string[];
   last_indexed_at?:  string;
@@ -46,7 +47,7 @@ interface DocEntry {
 interface SearchResult {
   doc_path: string;
   doc_name: string;
-  category: string;
+  doc_type: string;
   heading:  string | null;
   excerpt:  string;
   rank:     number;
@@ -144,15 +145,15 @@ function DocRow({ doc, selected, onSelect }: {
   );
 }
 
-function DocListPanel({ docs, selected, category, onSelect }: {
+function DocListPanel({ docs, selected, doc_type, onSelect }: {
   docs: DocEntry[];
   selected: DocEntry | null;
-  category: string;
+  doc_type: string;
   onSelect: (doc: DocEntry) => void;
 }) {
-  const filtered = category ? docs.filter(d => d.category === category) : docs;
+  const filtered = doc_type ? docs.filter(d => d.doc_type === doc_type) : docs;
   const categories = useMemo(
-    () => Array.from(new Set(filtered.map(d => d.category).filter(Boolean))).sort() as string[],
+    () => Array.from(new Set(filtered.map(d => d.doc_type).filter(Boolean))).sort() as string[],
     [filtered]
   );
 
@@ -164,12 +165,12 @@ function DocListPanel({ docs, selected, category, onSelect }: {
     <>
       {categories.length > 0
         ? categories.map(cat => {
-            const catDocs = filtered.filter(d => d.category === cat);
+            const catDocs = filtered.filter(d => d.doc_type === cat);
             if (!catDocs.length) return null;
             return (
               <div key={cat}>
                 <div className="px-3 pt-3 pb-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-muted">{cat}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-muted">{docTypeLabel(cat)}</p>
                 </div>
                 {catDocs.map(doc => <DocRow key={doc.id} doc={doc} selected={selected} onSelect={onSelect} />)}
               </div>
@@ -291,7 +292,7 @@ function DocumentsPageInner() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const initialPath  = searchParams.get("path");
-  const initialCat   = searchParams.get("category") ?? "";
+  const initialCat   = searchParams.get("doc_type") ?? "";
   const reindex      = useReindex();
 
   const [docs,          setDocs]          = useState<DocEntry[]>([]);
@@ -304,7 +305,7 @@ function DocumentsPageInner() {
   const [q,             setQ]             = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [category,      setCategory]      = useState(initialCat);
+  const [docType,       setDocType]       = useState(initialCat);
   const [listOpen,      setListOpen]      = useState(true);
 
   const contentRef  = useRef<HTMLDivElement>(null);
@@ -345,7 +346,7 @@ function DocumentsPageInner() {
     const timer = setTimeout(async () => {
       try {
         const params = new URLSearchParams({ q });
-        if (category) params.set("category", category);
+        if (docType) params.set("doc_type", docType);
         const res  = await fetch(`/api/docs/search?${params}`);
         const data = await res.json();
         setSearchResults(Array.isArray(data) ? data : []);
@@ -356,7 +357,7 @@ function DocumentsPageInner() {
       }
     }, 350);
     return () => clearTimeout(timer);
-  }, [q, category]);
+  }, [q, docType]);
 
   // Scroll to pending heading after content renders
   useEffect(() => {
@@ -406,15 +407,15 @@ function DocumentsPageInner() {
   }
 
   function handleCategoryChange(cat: string) {
-    setCategory(cat);
+    setDocType(cat);
     const params = new URLSearchParams(searchParams.toString());
-    if (cat) params.set("category", cat);
-    else params.delete("category");
+    if (cat) params.set("doc_type", cat);
+    else params.delete("doc_type");
     router.replace(`/documents?${params}`);
   }
 
   const allCategories = useMemo(
-    () => Array.from(new Set(docs.map(d => d.category).filter(Boolean))).sort() as string[],
+    () => Array.from(new Set(docs.map(d => d.doc_type).filter(Boolean))).sort() as string[],
     [docs]
   );
 
@@ -439,13 +440,13 @@ function DocumentsPageInner() {
           <div className="flex items-center gap-2 flex-wrap">
             {allCategories.length > 0 && (
               <select
-                value={category}
+                value={docType}
                 onChange={e => handleCategoryChange(e.target.value)}
                 className="text-sm px-3 py-1.5 border border-brand-border rounded-lg bg-white
                            text-brand-black focus:outline-none focus:border-brand-orange"
               >
-                <option value="">All categories</option>
-                {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                <option value="">All Types</option>
+                {allCategories.map(c => <option key={c} value={c}>{docTypeLabel(c)}</option>)}
               </select>
             )}
             <button
@@ -511,7 +512,7 @@ function DocumentsPageInner() {
                 <DocListPanel
                   docs={docs}
                   selected={selected}
-                  category={category}
+                  doc_type={docType}
                   onSelect={openDoc}
                 />
               )}
