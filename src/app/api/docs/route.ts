@@ -1,26 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
-const JORDAN_API_URL = process.env.JORDAN_API_URL ?? "";
-const JORDAN_WEBHOOK_SECRET = process.env.JORDAN_WEBHOOK_SECRET ?? "";
-
+// Serves a single doc body from the unified content store (doc_registry.content,
+// populated by the SP1 indexer). Replaces the former proxy to Jordan's GET /docs.
 export async function GET(req: NextRequest) {
-  if (!JORDAN_API_URL) {
-    return NextResponse.json({ error: "JORDAN_API_URL not configured" }, { status: 503 });
-  }
   const path = req.nextUrl.searchParams.get("path");
   if (!path) {
     return NextResponse.json({ error: "path query parameter required" }, { status: 400 });
   }
-  try {
-    const url = new URL(`${JORDAN_API_URL}/docs`);
-    url.searchParams.set("path", path);
-    const res = await fetch(url.toString(), {
-      headers: { "X-Webhook-Secret": JORDAN_WEBHOOK_SECRET },
-      cache: "no-store",
-    });
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
-  } catch {
-    return NextResponse.json({ error: "Failed to reach Jordan" }, { status: 502 });
+  const { data, error } = await supabaseAdmin
+    .from("doc_registry")
+    .select("path, content")
+    .eq("path", path)
+    .maybeSingle();
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  if (!data || data.content == null) {
+    return NextResponse.json({ error: "Document not found" }, { status: 404 });
+  }
+  return NextResponse.json({ path: data.path, content: data.content });
 }
