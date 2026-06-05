@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { WorkItemDoc } from "@/types";
+import { docTypeLabel } from "@/lib/doc-types";
 import { VpsBrowserModal } from "./VpsBrowserModal";
 import { DocumentPicker } from "./DocumentPicker";
 
@@ -113,9 +114,9 @@ export function WorkDocsPanel({ workItemId }: Props) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <NameTag {...nameProps}>{d.name}</NameTag>
-                    {d.category && (
+                    {d.doc_type && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
-                        {d.category}
+                        {docTypeLabel(d.doc_type)}
                       </span>
                     )}
                   </div>

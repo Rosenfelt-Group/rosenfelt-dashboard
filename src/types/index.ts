@@ -394,7 +394,7 @@ export interface WorkItemDoc {
   name: string;
   path: string;
   description: string | null;
-  category: string;
+  doc_type: string | null;
   google_doc_url: string | null;
   audience: string | null;
   updated_at: string | null;

@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
+import { docTypeLabel } from "@/lib/doc-types";
 
 type DocEntry = {
   id: number;
   name: string;
   path: string;
-  category: string | null;
+  doc_type: string | null;
   description: string | null;
   google_doc_url: string | null;
   work_item_id: string | null;
@@ -72,7 +73,7 @@ export function DocumentPicker({ workItemId, onClose, onAttached }: Props) {
 
     const byCategory = new Map<string, DocEntry[]>();
     for (const d of filtered) {
-      const cat = d.category || "Uncategorized";
+      const cat = d.doc_type || "Uncategorized";
       const list = byCategory.get(cat);
       if (list) list.push(d);
       else byCategory.set(cat, [d]);
@@ -154,7 +155,7 @@ export function DocumentPicker({ workItemId, onClose, onAttached }: Props) {
           {grouped.map(([category, list]) => (
             <div key={category} className="mb-3">
               <div className="text-[10px] uppercase tracking-wide font-semibold text-brand-muted px-2 py-1">
-                {category}
+                {docTypeLabel(category)}
               </div>
               <div className="space-y-0.5">
                 {list.map((d) => (
