@@ -26,7 +26,7 @@ export async function POST(
   // 2. Linked docs (via doc_registry.work_item_id FK)
   const { data: linkedDocs } = await supabaseAdmin
     .from("doc_registry")
-    .select("name, path, description, google_doc_url, category")
+    .select("name, path, description")
     .eq("work_item_id", id);
 
   // 3. Recent log entries (last 5, newest first)

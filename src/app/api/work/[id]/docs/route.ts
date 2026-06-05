@@ -9,7 +9,7 @@ export async function GET(
   const { data, error } = await supabaseAdmin
     .from("doc_registry")
     .select(
-      "id, name, path, description, doc_type, google_doc_url, audience, updated_at, work_item_id",
+      "id, name, path, description, doc_type, audience, updated_at, work_item_id",
     )
     .eq("work_item_id", id)
     .order("updated_at", { ascending: false });
@@ -26,7 +26,6 @@ export async function POST(
   const name = String(body.name || "").trim();
   const path = String(body.path || "").trim();
   const description = body.description ? String(body.description) : null;
-  const googleDocUrl = body.google_doc_url ? String(body.google_doc_url) : null;
   const audience = body.audience === "client-facing" ? "client-facing" : "internal";
 
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
@@ -57,7 +56,6 @@ export async function POST(
       name,
       path,
       description,
-      google_doc_url: googleDocUrl,
       audience,
       doc_type: "client_deliverable",
       work_item_id: id,

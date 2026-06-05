@@ -10,7 +10,6 @@ type DocEntry = {
   path: string;
   doc_type: string | null;
   description: string | null;
-  google_doc_url: string | null;
   work_item_id: string | null;
   work_item_title: string | null;
 };
@@ -95,7 +94,6 @@ export function DocumentPicker({ workItemId, onClose, onAttached }: Props) {
           name: doc.name,
           path: doc.path,
           description: doc.description,
-          google_doc_url: doc.google_doc_url,
         }),
       });
       if (!res.ok) {
@@ -174,11 +172,6 @@ export function DocumentPicker({ workItemId, onClose, onAttached }: Props) {
                         <span className="text-sm font-medium text-brand-black truncate">
                           {d.name}
                         </span>
-                        {d.google_doc_url && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
-                            Drive
-                          </span>
-                        )}
                       </div>
                       {d.description && (
                         <div className="text-xs text-brand-muted truncate">

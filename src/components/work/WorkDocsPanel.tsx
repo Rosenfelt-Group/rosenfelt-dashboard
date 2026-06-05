@@ -17,9 +17,6 @@ export function WorkDocsPanel({ workItemId }: Props) {
   const [docs, setDocs] = useState<WorkItemDoc[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [showBrowser, setShowBrowser] = useState(false);
-  const [showGoogleDocModal, setShowGoogleDocModal] = useState(false);
-  const [googleDocUrl, setGoogleDocUrl] = useState("");
-  const [googleDocName, setGoogleDocName] = useState("");
 
   async function loadDocs() {
     const res = await fetch(`/api/work/${workItemId}/docs`);
@@ -39,25 +36,6 @@ export function WorkDocsPanel({ workItemId }: Props) {
       method: "DELETE",
     });
     if (res.ok) await loadDocs();
-  }
-
-  async function linkGoogleDoc() {
-    if (!googleDocUrl.trim() || !googleDocName.trim()) return;
-    const res = await fetch(`/api/work/${workItemId}/docs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: googleDocName,
-        path: googleDocUrl,
-        google_doc_url: googleDocUrl,
-      }),
-    });
-    if (res.ok) {
-      setShowGoogleDocModal(false);
-      setGoogleDocName("");
-      setGoogleDocUrl("");
-      await loadDocs();
-    }
   }
 
   async function attachVpsFile(filePath: string) {
@@ -137,16 +115,6 @@ export function WorkDocsPanel({ workItemId }: Props) {
                   ×
                 </button>
               </div>
-              {d.google_doc_url && (
-                <a
-                  href={d.google_doc_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-brand-orange hover:underline inline-block mt-1"
-                >
-                  Open in Drive →
-                </a>
-              )}
             </div>
           );
         })}
@@ -162,12 +130,6 @@ export function WorkDocsPanel({ workItemId }: Props) {
           className="rounded border border-brand-border px-2 py-1 hover:bg-brand-cream"
         >
           + Browse VPS
-        </button>
-        <button
-          onClick={() => setShowGoogleDocModal(true)}
-          className="rounded border border-brand-border px-2 py-1 hover:bg-brand-cream"
-        >
-          + Link Google Doc
         </button>
       </div>
 
@@ -189,39 +151,6 @@ export function WorkDocsPanel({ workItemId }: Props) {
         />
       )}
 
-      {showGoogleDocModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded p-4 w-96 space-y-3 shadow-xl">
-            <h3 className="font-semibold text-brand-black text-sm">Link Google Doc</h3>
-            <input
-              value={googleDocName}
-              onChange={(e) => setGoogleDocName(e.target.value)}
-              placeholder="Document name"
-              className="w-full rounded border border-brand-border px-2 py-1 text-xs"
-            />
-            <input
-              value={googleDocUrl}
-              onChange={(e) => setGoogleDocUrl(e.target.value)}
-              placeholder="Google Drive URL"
-              className="w-full rounded border border-brand-border px-2 py-1 text-xs"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowGoogleDocModal(false)}
-                className="px-3 py-1 text-xs hover:bg-brand-cream rounded"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={linkGoogleDoc}
-                className="rounded bg-brand-orange text-white px-3 py-1 text-xs"
-              >
-                Link
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

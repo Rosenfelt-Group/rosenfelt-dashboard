@@ -119,14 +119,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (typeof updates.assigned_agent === "string" && updates.assigned_agent) {
       const { data: linkedDocs } = await supabaseAdmin
         .from("doc_registry")
-        .select("name, path, google_doc_url")
+        .select("name, path")
         .eq("work_item_id", id);
 
       if (linkedDocs && linkedDocs.length > 0) {
-        const lines = linkedDocs.map((d) => {
-          const drive = d.google_doc_url ? ` | Drive: ${d.google_doc_url}` : "";
-          return `• ${d.name} — ${d.path}${drive}`;
-        });
+        const lines = linkedDocs.map((d) => `• ${d.name} — ${d.path}`);
         await supabaseAdmin.from("work_item_logs").insert({
           work_item_id: id,
           author: "brian",
