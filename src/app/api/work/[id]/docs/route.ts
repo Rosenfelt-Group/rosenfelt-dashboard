@@ -9,7 +9,7 @@ export async function GET(
   const { data, error } = await supabaseAdmin
     .from("doc_registry")
     .select(
-      "id, name, path, description, category, google_doc_url, audience, updated_at, work_item_id",
+      "id, name, path, description, doc_type, google_doc_url, audience, updated_at, work_item_id",
     )
     .eq("work_item_id", id)
     .order("updated_at", { ascending: false });
@@ -59,7 +59,7 @@ export async function POST(
       description,
       google_doc_url: googleDocUrl,
       audience,
-      category: "Work Output",
+      doc_type: "client_deliverable",
       work_item_id: id,
     })
     .select()
