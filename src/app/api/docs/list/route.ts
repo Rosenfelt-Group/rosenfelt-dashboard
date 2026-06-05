@@ -18,9 +18,9 @@ export async function GET() {
   const { data, error } = await supabaseAdmin
     .from("doc_registry")
     .select(
-      "id, name, path, description, category, updated_at, headings, last_indexed_at, chunk_count, work_item_id, work_items(title)"
+      "id, name, path, description, doc_type, updated_at, headings, last_indexed_at, chunk_count, work_item_id, work_items(title)"
     )
-    .order("category", { ascending: true })
+    .order("doc_type", { ascending: true })
     .order("name", { ascending: true });
 
   if (error) {

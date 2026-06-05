@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
-  const category = req.nextUrl.searchParams.get("category") ?? null;
+  const doc_type = req.nextUrl.searchParams.get("doc_type") ?? null;
 
   if (!q) {
     return NextResponse.json({ error: "q is required" }, { status: 400 });
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin.rpc("search_doc_chunks", {
     query: q,
-    p_category: category,
+    p_doc_type: doc_type,
   });
 
   if (error) {
