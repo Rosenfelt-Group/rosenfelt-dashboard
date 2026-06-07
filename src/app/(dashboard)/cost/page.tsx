@@ -26,6 +26,14 @@ interface DailyRow {
   cost_usd: number;
 }
 
+interface AgentConfig {
+  agent: Agent;
+  sonnet_max_tokens: number;
+  haiku_max_tokens: number;
+  research_max_searches: number;
+  iteration_cap: number | null;
+}
+
 function getETDateString(d: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(d);
 }
@@ -117,6 +125,73 @@ function BudgetInput({ agent, current, onSave }: { agent: Agent; current: number
   );
 }
 
+// Build plan Phase 2.4 — per-agent output-token caps (agent_config). Bounds
+// mirror the DB CHECK constraints. S = Sonnet tier, H = Haiku tier.
+function TokenCapsInput({
+  sonnet,
+  haiku,
+  onSave,
+}: {
+  sonnet: number;
+  haiku: number;
+  onSave: (sonnet: number, haiku: number) => Promise<void>;
+}) {
+  const [s, setS] = useState(String(sonnet));
+  const [hk, setHk] = useState(String(haiku));
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => { setS(String(sonnet)); setHk(String(haiku)); }, [sonnet, haiku]);
+
+  const dirty = s !== String(sonnet) || hk !== String(haiku);
+
+  async function handleSave() {
+    const ps = parseInt(s, 10);
+    const ph = parseInt(hk, 10);
+    if (isNaN(ps) || ps < 1024 || ps > 64000) return;
+    if (isNaN(ph) || ph < 256 || ph > 64000) return;
+    setSaving(true);
+    await onSave(ps, ph);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 mt-2">
+      <span className="text-xs text-brand-muted whitespace-nowrap">Max tokens</span>
+      <label className="flex items-center gap-1 text-[10px] text-brand-muted" title="Sonnet tier output cap">
+        S
+        <input
+          type="number" min={1024} max={64000} step={1024} value={s}
+          onChange={e => setS(e.target.value)}
+          className="w-16 px-1.5 py-1 text-xs text-brand-black border border-brand-border rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange"
+        />
+      </label>
+      <label className="flex items-center gap-1 text-[10px] text-brand-muted" title="Haiku tier output cap">
+        H
+        <input
+          type="number" min={256} max={64000} step={256} value={hk}
+          onChange={e => setHk(e.target.value)}
+          className="w-16 px-1.5 py-1 text-xs text-brand-black border border-brand-border rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange"
+        />
+      </label>
+      <button
+        onClick={handleSave}
+        disabled={saving || !dirty}
+        className={clsx(
+          "text-xs px-2.5 py-1 rounded-lg font-medium transition-colors",
+          saved
+            ? "bg-green-100 text-green-700"
+            : "bg-brand-orange text-white hover:bg-brand-orange/90 disabled:opacity-40"
+        )}
+      >
+        {saved ? "✓" : saving ? "…" : "Save"}
+      </button>
+    </div>
+  );
+}
+
 export default function CostPage() {
   const todayET = getETDateString();
 
@@ -124,6 +199,7 @@ export default function CostPage() {
   const selectedDateRef = useRef<string>(todayET);
   const [agents,  setAgents]  = useState<AgentSummary[]>([]);
   const [daily,   setDaily]   = useState<DailyRow[]>([]);
+  const [configs, setConfigs] = useState<Record<string, AgentConfig>>({});
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
   const seenIds = useRef<Set<string>>(new Set());
@@ -134,12 +210,19 @@ export default function CostPage() {
 
   const load = useCallback(async () => {
     try {
-      const res  = await fetch(`/api/usage?date=${selectedDate}`);
+      const [res, cfgRes] = await Promise.all([
+        fetch(`/api/usage?date=${selectedDate}`),
+        fetch(`/api/agent-config`),
+      ]);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       seenIds.current.clear();
       setAgents(data.agents ?? []);
       setDaily(data.daily ?? []);
+      const cfgs = await cfgRes.json();
+      if (Array.isArray(cfgs)) {
+        setConfigs(Object.fromEntries(cfgs.map((c: AgentConfig) => [c.agent, c])));
+      }
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -233,6 +316,18 @@ export default function CostPage() {
     setAgents(prev =>
       prev.map(a => a.agent === agent ? { ...a, dailyBudget: value } : a)
     );
+  }
+
+  async function updateAgentConfig(agent: Agent, sonnet_max_tokens: number, haiku_max_tokens: number) {
+    await fetch("/api/agent-config", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent, sonnet_max_tokens, haiku_max_tokens }),
+    });
+    setConfigs(prev => ({
+      ...prev,
+      [agent]: { ...prev[agent], agent, sonnet_max_tokens, haiku_max_tokens },
+    }));
   }
 
   const totalWeekCost  = agents.reduce((s, a) => s + a.weekCost, 0);
@@ -338,6 +433,13 @@ export default function CostPage() {
 
                 <SpendBar spend={a.todayCost} budget={a.dailyBudget} />
                 <BudgetInput agent={a.agent} current={a.dailyBudget} onSave={v => updateBudget(a.agent, v)} />
+                {configs[a.agent] && (
+                  <TokenCapsInput
+                    sonnet={configs[a.agent].sonnet_max_tokens}
+                    haiku={configs[a.agent].haiku_max_tokens}
+                    onSave={(s, h) => updateAgentConfig(a.agent, s, h)}
+                  />
+                )}
               </div>
             ))}
           </div>
