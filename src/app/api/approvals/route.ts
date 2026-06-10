@@ -3,6 +3,14 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const maxDuration = 60;
 
+// Sam action routing table — keyed by action_type
+const SAM_ROUTES: Record<string, string> = {
+  sam_send_invoice:       "/execute/send_invoice",
+  sam_send_email:         "/execute/send_email",
+  sam_record_transaction: "/execute/record_transaction",
+  sam_issue_refund:       "/execute/issue_refund",
+};
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -136,6 +144,56 @@ export async function PATCH(req: NextRequest) {
           body: JSON.stringify({ idea_id: ideaId, post_id: postId, revision_notes }),
         }).catch(err => console.error("Avery /revise call failed:", err));
       }
+    }
+
+    // ── SAM approved actions ─────────────────────────────────────────────────
+    if (status === "approved" && approval?.agent === "sam") {
+      const samEndpoint = SAM_ROUTES[approval.action_type ?? ""];
+      const samUrl = process.env.SAM_AGENT_URL;
+      const samSecret = process.env.SAM_WEBHOOK_SECRET || process.env.JORDAN_WEBHOOK_SECRET;
+
+      if (!samEndpoint || !samUrl || !samSecret) {
+        await supabaseAdmin.from("workflow_logs").insert({
+          workflow_name: "Dashboard Sam Gate",
+          agent: "sam",
+          trigger_text: approval.title ?? `approval ${id}`,
+          status: "error",
+          error_message: !samUrl
+            ? "SAM_AGENT_URL not configured"
+            : !samEndpoint
+            ? `unknown action_type: ${approval.action_type}`
+            : "SAM_WEBHOOK_SECRET not configured",
+        });
+        return NextResponse.json({ success: true, execute: { ok: false, detail: "config missing" } });
+      }
+
+      let executeResult: { ok: boolean; detail: string };
+      try {
+        const res = await fetch(`${samUrl}${samEndpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Webhook-Secret": samSecret },
+          body: JSON.stringify({ approval_id: id }),
+        });
+        const resBody = await res.json().catch(() => ({}));
+        executeResult = {
+          ok: res.ok,
+          detail: res.ok
+            ? (resBody.detail ?? `executed by ${reviewer}`)
+            : `sam returned HTTP ${res.status}: ${resBody.detail ?? ""}`,
+        };
+      } catch (e) {
+        executeResult = { ok: false, detail: e instanceof Error ? e.message : "execute call failed" };
+      }
+
+      await supabaseAdmin.from("workflow_logs").insert({
+        workflow_name: "Dashboard Sam Gate",
+        agent: "sam",
+        trigger_text: approval.title ?? `approval ${id}`,
+        status: executeResult.ok ? "success" : "error",
+        ...(executeResult.ok ? {} : { error_message: executeResult.detail }),
+      });
+
+      return NextResponse.json({ success: true, execute: executeResult });
     }
 
     return NextResponse.json({ success: true });
