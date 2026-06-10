@@ -30,6 +30,11 @@ const AGENT_CONFIG: Record<string, AgentConfig> = {
     secretEnv: "CASEY_WEBHOOK_SECRET",
     path: "/chat",
   },
+  sam: {
+    urlEnv: "SAM_AGENT_URL",
+    secretEnv: "SAM_WEBHOOK_SECRET",
+    path: "/chat",
+  },
 };
 
 export async function POST(req: NextRequest) {
