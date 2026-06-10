@@ -19,6 +19,14 @@ function stripTags(html: string): string {
   return html.replace(/<[^>]*>/g, "");
 }
 
+/** Accept only a single-leading-slash internal path; reject absolute/protocol-relative URLs. */
+function safeInternalPath(u: string | null): string | null {
+  if (!u) return null;
+  if (!u.startsWith("/") || u.startsWith("//")) return null;
+  if (/[\\\x00-\x1f]/.test(u)) return null;
+  return u;
+}
+
 const PANEL_W = 320; // w-80
 const PANEL_MAX_H = 384; // max-h-96
 const GAP = 8;
@@ -95,7 +103,7 @@ export default function NotificationBell() {
   const markRead = async (id: string, work_item_id: string | null, link_url: string | null) => {
     await fetch(`/api/notifications/${id}`, { method: "PATCH" });
     load();
-    const dest = work_item_id ? `/work/${work_item_id}` : link_url;
+    const dest = work_item_id ? `/work/${work_item_id}` : safeInternalPath(link_url);
     if (dest) {
       setOpen(false);
       router.push(dest);
