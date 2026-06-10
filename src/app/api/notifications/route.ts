@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   }
   const { data, error } = await supabaseAdmin
     .from("notifications")
-    .select("id, created_at, agent, message, urgency, read_at, work_item_id")
+    .select("id, created_at, agent, message, urgency, read_at, work_item_id, link_url")
     .eq("recipient", session.username)
     .order("created_at", { ascending: false })
     .limit(50);

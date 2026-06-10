@@ -11,6 +11,7 @@ type Note = {
   urgency: string;
   read_at: string | null;
   work_item_id: string | null;
+  link_url: string | null;
 };
 
 /** Strip all HTML tags so agent messages render as plain text. */
@@ -91,12 +92,13 @@ export default function NotificationBell() {
     };
   }, [open, computePos]);
 
-  const markRead = async (id: string, work_item_id: string | null) => {
+  const markRead = async (id: string, work_item_id: string | null, link_url: string | null) => {
     await fetch(`/api/notifications/${id}`, { method: "PATCH" });
     load();
-    if (work_item_id) {
+    const dest = work_item_id ? `/work/${work_item_id}` : link_url;
+    if (dest) {
       setOpen(false);
-      router.push(`/work/${work_item_id}`);
+      router.push(dest);
     }
   };
 
@@ -122,7 +124,7 @@ export default function NotificationBell() {
           {notes.map((n) => (
             <div
               key={n.id}
-              onClick={() => n.read_at === null && markRead(n.id, n.work_item_id)}
+              onClick={() => n.read_at === null && markRead(n.id, n.work_item_id, n.link_url)}
               className={`px-3 py-2.5 border-b border-brand-border last:border-b-0 transition-colors
                 ${n.read_at === null ? "cursor-pointer hover:bg-orange-50" : "opacity-50"}
                 ${n.urgency === "high" && n.read_at === null ? "bg-red-50 hover:bg-red-50" : ""}
