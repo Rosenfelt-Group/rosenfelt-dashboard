@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 
 type Note = {
   id: string;
@@ -22,6 +23,7 @@ const PANEL_MAX_H = 384; // max-h-96
 const GAP = 8;
 
 export default function NotificationBell() {
+  const router               = useRouter();
   const [notes, setNotes]   = useState<Note[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen]     = useState(false);
@@ -89,9 +91,13 @@ export default function NotificationBell() {
     };
   }, [open, computePos]);
 
-  const markRead = async (id: string) => {
+  const markRead = async (id: string, work_item_id: string | null) => {
     await fetch(`/api/notifications/${id}`, { method: "PATCH" });
     load();
+    if (work_item_id) {
+      setOpen(false);
+      router.push(`/work/${work_item_id}`);
+    }
   };
 
   const panel = open && pos && typeof document !== "undefined"
@@ -116,7 +122,7 @@ export default function NotificationBell() {
           {notes.map((n) => (
             <div
               key={n.id}
-              onClick={() => n.read_at === null && markRead(n.id)}
+              onClick={() => n.read_at === null && markRead(n.id, n.work_item_id)}
               className={`px-3 py-2.5 border-b border-brand-border last:border-b-0 transition-colors
                 ${n.read_at === null ? "cursor-pointer hover:bg-orange-50" : "opacity-50"}
                 ${n.urgency === "high" && n.read_at === null ? "bg-red-50 hover:bg-red-50" : ""}
