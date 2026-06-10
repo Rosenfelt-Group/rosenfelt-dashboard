@@ -16,12 +16,12 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const history = searchParams.get("history") === "true";
 
-    const query = supabaseAdmin
+    let query = supabaseAdmin
       .from("pending_approvals")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (!history) query.eq("status", "pending");
+    if (!history) query = query.eq("status", "pending");
 
     const { data, error } = await query.limit(200);
     if (error) throw error;
@@ -147,6 +147,10 @@ export async function PATCH(req: NextRequest) {
     }
 
     // ── SAM approved actions ─────────────────────────────────────────────────
+    if (status === "approved" && approval?.agent === "sam" && !reviewer) {
+      return NextResponse.json({ error: "Sam action blocked: no human approval on record" }, { status: 403 });
+    }
+
     if (status === "approved" && approval?.agent === "sam") {
       const samEndpoint = SAM_ROUTES[approval.action_type ?? ""];
       const samUrl = process.env.SAM_AGENT_URL;
