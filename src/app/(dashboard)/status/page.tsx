@@ -157,10 +157,10 @@ function componentStatusDot(status: string) {
 // ─── Agents Tab ───────────────────────────────────────────────────────────────
 
 function AgentsTab() {
-  const [health, setHealth]     = useState<AgentHealth[]>([]);
-  const [stats, setStats]       = useState<AgentStat[]>([]);
+  const [health, setHealth]       = useState<AgentHealth[]>([]);
+  const [stats, setStats]         = useState<AgentStat[]>([]);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
-  const [loading, setLoading]   = useState(true);
+  const [loading, setLoading]     = useState(true);
 
   const load = useCallback(async () => {
     const [h, s] = await Promise.all([
@@ -185,55 +185,73 @@ function AgentsTab() {
     name,
   }));
 
-  if (loading) return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">{[0,1,2,3,4].map(i => <div key={i} className="card animate-pulse h-40"/>)}</div>;
-
   return (
     <div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-2">
-        {combined.map(({ name, health: h, stat: s }) => {
-          const up = h?.status === "up";
-          const down = h?.status === "down";
-          return (
-            <div key={name} className="card">
-              <div className="flex items-center gap-3 mb-4">
-                <AgentBadge agent={name as "jordan"|"riley"|"avery"|"casey"|"sam"} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-brand-black capitalize">{name}</p>
-                  <p className="text-xs text-brand-muted">
-                    {s?.last_execution ? `Active ${ago(s.last_execution)}` : "No recent activity"}
-                  </p>
-                </div>
-                <span className={clsx(
-                  "badge text-xs px-2 py-0.5",
-                  up ? "bg-green-50 text-green-700" : down ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-500"
-                )}>
-                  {up ? "Up" : down ? "Down" : "Unknown"}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                <div className="bg-brand-offwhite rounded-lg p-2">
-                  <p className="text-base font-semibold text-brand-black">{s?.executions_24h ?? "—"}</p>
-                  <p className="text-[10px] text-brand-muted">24h runs</p>
-                </div>
-                <div className={clsx("rounded-lg p-2", (s?.errors_24h ?? 0) > 0 ? "bg-red-50" : "bg-brand-offwhite")}>
-                  <p className={clsx("text-base font-semibold", (s?.errors_24h ?? 0) > 0 ? "text-red-600" : "text-brand-black")}>
-                    {s?.errors_24h ?? "—"}
-                  </p>
-                  <p className="text-[10px] text-brand-muted">errors</p>
-                </div>
-                <div className="bg-brand-offwhite rounded-lg p-2">
-                  <p className="text-base font-semibold text-brand-black">
-                    {h?.latency_ms != null ? `${h.latency_ms}ms` : "—"}
-                  </p>
-                  <p className="text-[10px] text-brand-muted">latency</p>
-                </div>
-              </div>
-              {h?.error && (
-                <p className="text-[10px] text-red-600 truncate">{h.error}</p>
-              )}
-            </div>
-          );
-        })}
+      <div className="card p-0 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-brand-border bg-brand-offwhite">
+              <th className="text-left px-4 py-3 text-xs font-medium text-brand-muted">Agent</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-brand-muted">Status</th>
+              <th className="text-right px-4 py-3 text-xs font-medium text-brand-muted">Latency</th>
+              <th className="text-right px-4 py-3 text-xs font-medium text-brand-muted">24h Runs</th>
+              <th className="text-right px-4 py-3 text-xs font-medium text-brand-muted">Errors</th>
+              <th className="text-right px-4 py-3 text-xs font-medium text-brand-muted hidden sm:table-cell">Last Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              [0,1,2,3,4].map(i => (
+                <tr key={i} className="border-b border-brand-border last:border-0">
+                  <td className="px-4 py-3"><div className="animate-pulse h-4 w-24 bg-brand-offwhite rounded"/></td>
+                  <td className="px-4 py-3"><div className="animate-pulse h-4 w-12 bg-brand-offwhite rounded"/></td>
+                  <td className="px-4 py-3"><div className="animate-pulse h-4 w-12 bg-brand-offwhite rounded ml-auto"/></td>
+                  <td className="px-4 py-3"><div className="animate-pulse h-4 w-8 bg-brand-offwhite rounded ml-auto"/></td>
+                  <td className="px-4 py-3"><div className="animate-pulse h-4 w-8 bg-brand-offwhite rounded ml-auto"/></td>
+                  <td className="px-4 py-3 hidden sm:table-cell"><div className="animate-pulse h-4 w-16 bg-brand-offwhite rounded ml-auto"/></td>
+                </tr>
+              ))
+            ) : (
+              combined.map(({ name, health: h, stat: s }) => {
+                const up   = h?.status === "up";
+                const down = h?.status === "down";
+                return (
+                  <tr key={name} className="border-b border-brand-border last:border-0 hover:bg-brand-offwhite/50 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <AgentBadge agent={name as "jordan"|"riley"|"avery"|"casey"|"sam"} size="sm" />
+                        <span className="font-medium text-brand-black capitalize">{name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={clsx(
+                        "badge text-xs px-2 py-0.5",
+                        up ? "bg-green-50 text-green-700" : down ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-500"
+                      )}>
+                        {up ? "Up" : down ? "Down" : "Unknown"}
+                      </span>
+                      {h?.error && <span className="ml-2 text-[10px] text-red-500 truncate max-w-[160px] inline-block align-middle">{h.error}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-right text-brand-black tabular-nums">
+                      {h?.latency_ms != null ? `${h.latency_ms} ms` : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right text-brand-black tabular-nums">
+                      {s?.executions_24h ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      <span className={clsx((s?.errors_24h ?? 0) > 0 ? "text-red-600 font-medium" : "text-brand-black")}>
+                        {s?.errors_24h ?? "—"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-brand-muted text-xs hidden sm:table-cell">
+                      {s?.last_execution ? ago(s.last_execution) : "—"}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
       <div className="flex items-center justify-between mt-2">
         <Link href="/agents/history" className="text-xs text-brand-orange hover:underline">
