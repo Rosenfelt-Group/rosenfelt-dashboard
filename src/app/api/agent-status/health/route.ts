@@ -7,6 +7,7 @@ const AGENTS = [
   { name: "riley",  urlVar: "RILEY_AGENT_URL",  secretVar: "RILEY_WEBHOOK_SECRET"  },
   { name: "avery",  urlVar: "AVERY_AGENT_URL",  secretVar: "AVERY_WEBHOOK_SECRET"  },
   { name: "casey",  urlVar: "CASEY_AGENT_URL",  secretVar: "CASEY_WEBHOOK_SECRET"  },
+  { name: "sam",    urlVar: "SAM_AGENT_URL",    secretVar: "SAM_WEBHOOK_SECRET"    },
 ] as const;
 
 export async function GET() {

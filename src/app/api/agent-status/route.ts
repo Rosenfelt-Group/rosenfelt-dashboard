@@ -14,7 +14,7 @@ export async function GET() {
 
     if (error) throw error;
 
-    const agents = ["riley", "jordan", "avery", "casey"] as const;
+    const agents = ["riley", "jordan", "avery", "casey", "sam"] as const;
     const summary = agents.map((agent) => {
       const rows = (data ?? []).filter((r) => r.agent === agent);
       const errors = rows.filter((r) => r.status === "error").length;
