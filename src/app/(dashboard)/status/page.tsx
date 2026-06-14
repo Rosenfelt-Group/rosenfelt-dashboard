@@ -185,11 +185,11 @@ function AgentsTab() {
     name,
   }));
 
-  if (loading) return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">{[0,1,2,3,4].map(i => <div key={i} className="card animate-pulse h-40"/>)}</div>;
+  if (loading) return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">{[0,1,2,3,4].map(i => <div key={i} className="card animate-pulse h-40"/>)}</div>;
 
   return (
     <div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-2">
         {combined.map(({ name, health: h, stat: s }) => {
           const up = h?.status === "up";
           const down = h?.status === "down";
