@@ -1,5 +1,6 @@
 "use client";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { docTypeLabel } from "@/lib/doc-types";
 import ReactMarkdown from "react-markdown";
@@ -449,7 +450,7 @@ function DocumentsPageInner() {
                 {allCategories.map(c => <option key={c} value={c}>{docTypeLabel(c)}</option>)}
               </select>
             )}
-            <a
+            <Link
               href="/images"
               className="px-3 py-1.5 rounded-lg text-xs font-medium border border-brand-border
                          bg-white text-brand-muted hover:bg-brand-offwhite hover:text-brand-black
@@ -462,7 +463,7 @@ function DocumentsPageInner() {
                 <polyline points="21 15 16 10 5 21"/>
               </svg>
               Images
-            </a>
+            </Link>
             <button
               onClick={reindex.run}
               disabled={reindex.state === "running"}
