@@ -6,13 +6,13 @@ import { PendingApproval } from "@/types";
 
 export default function FinancePage() {
   const [samApprovals, setSamApprovals] = useState<PendingApproval[]>([]);
-  const [usage, setUsage]               = useState<{ totalCost: number; agents: { agent: string; todayCost: number; monthCost: number }[] } | null>(null);
+  const [usage, setUsage]               = useState<{ totalCost: number; agents: { agent: string; todayCost: number; weekCost: number }[] } | null>(null);
   const [loading, setLoading]           = useState(true);
 
   const load = useCallback(async () => {
     const [approvals, usageData] = await Promise.all([
       fetch("/api/approvals").then(r => r.json()).catch(() => []),
-      fetch("/api/usage?days=30").then(r => r.json()).catch(() => null),
+      fetch("/api/usage").then(r => r.json()).catch(() => null),
     ]);
 
     const samOnly = Array.isArray(approvals)
@@ -21,8 +21,8 @@ export default function FinancePage() {
     setSamApprovals(samOnly);
 
     if (usageData?.agents) {
-      const agents = usageData.agents as { agent: string; todayCost: number; monthCost: number }[];
-      const totalCost = agents.reduce((sum, a) => sum + (a.monthCost ?? 0), 0);
+      const agents = usageData.agents as { agent: string; todayCost: number; weekCost: number }[];
+      const totalCost = agents.reduce((sum, a) => sum + (a.weekCost ?? 0), 0);
       setUsage({ totalCost, agents });
     }
     setLoading(false);
@@ -35,12 +35,14 @@ export default function FinancePage() {
   }, [load]);
 
   async function handleApproval(id: string, status: "approved" | "rejected" | "revision_requested", revisionNotes?: string) {
-    await fetch("/api/approvals", {
+    const r = await fetch("/api/approvals", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status, ...(revisionNotes ? { revision_notes: revisionNotes } : {}) }),
+      body: JSON.stringify({ id, status, revision_notes: revisionNotes }),
     });
-    setSamApprovals(prev => prev.filter(a => a.id !== id));
+    if (r.ok) {
+      setSamApprovals(prev => prev.filter(a => a.id !== id));
+    }
   }
 
   if (loading) {
@@ -64,7 +66,7 @@ export default function FinancePage() {
 
         {/* AI cost summary */}
         <div className="card p-4">
-          <p className="text-sm font-medium text-brand-black mb-3">AI Cost (30 days)</p>
+          <p className="text-sm font-medium text-brand-black mb-3">AI Cost (7 days)</p>
           {usage ? (
             <>
               <p className="text-2xl font-semibold text-brand-black">${usage.totalCost.toFixed(4)}</p>
@@ -73,7 +75,7 @@ export default function FinancePage() {
                 {usage.agents.map(a => (
                   <div key={a.agent} className="rounded-lg bg-brand-offwhite px-3 py-2">
                     <p className="text-[10px] text-brand-muted capitalize">{a.agent}</p>
-                    <p className="text-sm font-medium text-brand-black">${(a.monthCost ?? 0).toFixed(4)}</p>
+                    <p className="text-sm font-medium text-brand-black">${(a.weekCost ?? 0).toFixed(4)}</p>
                     <p className="text-[10px] text-brand-muted">today ${(a.todayCost ?? 0).toFixed(4)}</p>
                   </div>
                 ))}
@@ -113,7 +115,7 @@ export default function FinancePage() {
                 <ApprovalCard key={a.id} approval={a} onAction={handleApproval} isAdmin />
               ))}
               {samApprovals.length > 5 && (
-                <Link href="/approvals" className="block text-center text-xs text-brand-orange py-2 hover:underline">
+                <Link href="/approvals?agent=sam" className="block text-center text-xs text-brand-orange py-2 hover:underline">
                   +{samApprovals.length - 5} more →
                 </Link>
               )}
