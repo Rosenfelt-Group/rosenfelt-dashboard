@@ -4,7 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 export async function GET() {
   const { data, error } = await supabaseAdmin
     .from("research_briefs")
-    .select("id, topic, research_type, triggered_by, cost_usd, created_at, summary")
+    .select("id, topic, research_type, created_at")
     .order("created_at", { ascending: false })
     .limit(50);
 

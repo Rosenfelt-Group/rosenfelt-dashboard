@@ -11,10 +11,7 @@ interface Brief {
   id: string;
   topic: string;
   research_type: string | null;
-  triggered_by: string | null;
-  cost_usd: number | null;
   created_at: string;
-  summary: string | null;
 }
 
 export default function SalesPage() {
@@ -220,18 +217,10 @@ export default function SalesPage() {
                       {b.research_type && (
                         <p className="text-xs text-brand-muted mt-0.5 capitalize">{b.research_type}</p>
                       )}
-                      {b.summary && (
-                        <p className="text-xs text-brand-muted mt-1 line-clamp-2">{b.summary}</p>
-                      )}
                     </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      {b.cost_usd !== null && (
-                        <span className="text-xs text-brand-muted">${b.cost_usd.toFixed(4)}</span>
-                      )}
-                      <span className="text-xs text-brand-muted">
-                        {formatDistanceToNow(new Date(b.created_at), { addSuffix: true })}
-                      </span>
-                    </div>
+                    <span className="text-xs text-brand-muted flex-shrink-0">
+                      {formatDistanceToNow(new Date(b.created_at), { addSuffix: true })}
+                    </span>
                   </div>
                 </div>
               ))}
