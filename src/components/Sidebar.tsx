@@ -4,66 +4,45 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import clsx from "clsx";
 import NotificationBell from "./NotificationBell";
-import { can } from "@/lib/permissions";
-
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-type NavItem = {
-  label: string;
-  href: string;
-  icon: string;
-  module: string;
-  requiredPermission?: string;
-};
 
 // ── Navigation map ─────────────────────────────────────────────────────────────
 
-const MODULES = [
-  { key: "overview",       label: "Overview" },
-  { key: "systems",        label: "Systems" },
-  { key: "salesMarketing", label: "Sales & Marketing" },
-  { key: "accounting",     label: "Accounting" },
-  { key: "agents",         label: "Agents" },
-  { key: "documentation",  label: "Documentation" },
-  { key: "security",       label: "Security" },
-];
-
-const NAV: NavItem[] = [
-  // Overview
-  { label: "Overview",     href: "/overview",            icon: "grid",       module: "overview" },
-  { label: "Approvals",    href: "/approvals",           icon: "approval",   module: "overview" },
-
-  // Systems
-  { label: "Status",       href: "/status",              icon: "activity",   module: "systems" },
-  { label: "Work",         href: "/work",                icon: "kanban",     module: "systems" },
-  { label: "Backup",       href: "/backup",              icon: "archive",    module: "systems" },
-  { label: "SQL",          href: "/sql",                 icon: "database",   module: "systems",       requiredPermission: "manage_users" },
-  { label: "Terminal",     href: "/engineering",         icon: "terminal",   module: "systems",       requiredPermission: "manage_users" },
-
-  // Sales & Marketing
-  { label: "CRM",          href: "/crm",                 icon: "users",      module: "salesMarketing" },
-  { label: "Services",     href: "/crm/admin/services",  icon: "package",    module: "salesMarketing", requiredPermission: "manage_users" },
-  { label: "Content",      href: "/content",             icon: "edit",       module: "salesMarketing" },
-  { label: "Keywords",     href: "/content/keywords",    icon: "trendingUp", module: "salesMarketing" },
-  { label: "Analytics",    href: "/analytics",           icon: "barChart",   module: "salesMarketing" },
-  { label: "Quiz",         href: "/quiz",                icon: "funnel",     module: "salesMarketing" },
-
-  // Accounting
-  { label: "Billing",      href: "/billing",             icon: "creditCard", module: "accounting" },
-  { label: "Cost",         href: "/cost",                icon: "dollar",     module: "accounting" },
-
-  // Agents
-  { label: "Chat",         href: "/chat",                icon: "chat",       module: "agents",  requiredPermission: "use_chat" },
-  { label: "Intelligence", href: "/agents/intelligence", icon: "brain",      module: "agents" },
-  { label: "History",      href: "/agents/history",      icon: "history",    module: "agents" },
-
-  // Documentation
-  { label: "Documents",    href: "/documents",           icon: "folder",     module: "documentation" },
-  { label: "Images",       href: "/images",              icon: "image",      module: "documentation" },
-
-  // Security
-  { label: "Users",        href: "/users",               icon: "shield",     module: "security", requiredPermission: "manage_users" },
-  { label: "Roles",        href: "/rbac",                icon: "lock",       module: "security", requiredPermission: "manage_rbac" },
+const WORKSPACE_MODULES = [
+  {
+    id: "dashboard", label: "Dashboard",
+    href: "/overview", icon: "grid",
+    active: ["/overview"],
+  },
+  {
+    id: "control", label: "Control Center",
+    href: "/control-center", icon: "activity",
+    active: ["/control-center", "/status", "/work", "/backup", "/sql", "/engineering", "/approvals"],
+  },
+  {
+    id: "documents", label: "Documents",
+    href: "/documents", icon: "folder",
+    active: ["/documents", "/images"],
+  },
+  {
+    id: "sales", label: "Sales & Marketing",
+    href: "/sales", icon: "trendingUp",
+    active: ["/sales", "/crm", "/quiz", "/content", "/analytics"],
+  },
+  {
+    id: "agents", label: "Agent Central",
+    href: "/agent-central", icon: "brain",
+    active: ["/agent-central", "/agents", "/chat"],
+  },
+  {
+    id: "finance", label: "Finance",
+    href: "/finance", icon: "dollar",
+    active: ["/finance", "/cost", "/billing"],
+  },
+  {
+    id: "tools", label: "Tools",
+    href: "/tools", icon: "wrench",
+    active: ["/tools", "/users", "/rbac"],
+  },
 ];
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -126,15 +105,8 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   const pathname = usePathname();
   const router   = useRouter();
 
-  const [permissions,      setPermissions]      = useState<string[]>([]);
-  const [isMobileOpen,     setIsMobileOpen]     = useState(false);
-  const [collapsedModules, setCollapsedModules] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try {
-      const stored = localStorage.getItem("sidebar-modules-collapsed");
-      return stored ? new Set<string>(JSON.parse(stored)) : new Set<string>();
-    } catch { return new Set<string>(); }
-  });
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -146,32 +118,18 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   // Close mobile drawer on navigation
   useEffect(() => { setIsMobileOpen(false); }, [pathname]);
 
-  function toggleModule(key: string) {
-    setCollapsedModules(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      try { localStorage.setItem("sidebar-modules-collapsed", JSON.stringify([...next])); } catch {}
-      return next;
-    });
-  }
-
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
   }
 
-  function isActive(href: string) {
-    if (href === "/overview") return pathname === href;
-    return pathname === href || pathname.startsWith(href + "/");
+  function isActive(mod: typeof WORKSPACE_MODULES[number]): boolean {
+    return mod.active.some(r =>
+      r === "/overview"
+        ? pathname === r
+        : pathname === r || pathname.startsWith(r + "/")
+    );
   }
-
-  const visibleNav = NAV.filter(
-    item => !item.requiredPermission || can(permissions, item.requiredPermission),
-  );
-
-  const modulesWithItems = MODULES
-    .map(m => ({ ...m, items: visibleNav.filter(n => n.module === m.key) }))
-    .filter(m => m.items.length > 0);
 
   // ── Desktop sidebar ────────────────────────────────────────────────────────
 
@@ -203,7 +161,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
               <RosablyIcon size={26} />
               <div className="min-w-0 overflow-hidden">
                 <p className="text-sm font-semibold text-brand-black leading-tight whitespace-nowrap">Rosably</p>
-                <p className="text-xs text-brand-muted leading-tight whitespace-nowrap">Control Center</p>
+                <p className="text-xs text-brand-muted leading-tight whitespace-nowrap">Workspace</p>
               </div>
             </div>
             <button
@@ -219,60 +177,32 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-2">
-        {modulesWithItems.map((mod, idx) => {
-          const isSectionCollapsed = !collapsed && collapsedModules.has(mod.key);
-          return (
-            <div key={mod.key} className={clsx(idx > 0 && "mt-1")}>
-              {/* Section header — expanded mode only */}
-              {!collapsed && (
-                <button
-                  onClick={() => toggleModule(mod.key)}
-                  className="flex items-center justify-between w-full px-4 py-1.5 group"
-                >
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-muted group-hover:text-brand-black transition-colors">
+        <div className={clsx("space-y-0.5", collapsed ? "px-1.5" : "px-2 py-1")}>
+          {WORKSPACE_MODULES.map(mod => {
+            const active = isActive(mod);
+            return (
+              <Link
+                key={mod.href}
+                href={mod.href}
+                title={collapsed ? mod.label : undefined}
+                className={clsx(
+                  "flex items-center gap-2.5 rounded-lg transition-colors",
+                  collapsed ? "justify-center p-2" : "px-3 py-2",
+                  active
+                    ? "bg-orange-50 text-brand-orange"
+                    : "text-brand-muted hover:bg-brand-offwhite hover:text-brand-black"
+                )}
+              >
+                <Icon name={mod.icon} size={collapsed ? 20 : 18} />
+                {!collapsed && (
+                  <span className={clsx("text-sm truncate", active && "font-medium text-brand-orange")}>
                     {mod.label}
                   </span>
-                  <span className={clsx(
-                    "text-brand-muted group-hover:text-brand-black transition-transform duration-150",
-                    isSectionCollapsed ? "rotate-0" : "rotate-180"
-                  )}>
-                    <Icon name="chevronDown" size={12} />
-                  </span>
-                </button>
-              )}
-
-              {/* Items — hidden when section collapsed (but always visible in icon-only mode) */}
-              {!isSectionCollapsed && (
-                <div className={clsx("space-y-0.5", collapsed ? "px-1.5 pb-2" : "px-2 pb-1")}>
-                  {mod.items.map(item => {
-                    const active = isActive(item.href);
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        title={collapsed ? item.label : undefined}
-                        className={clsx(
-                          "flex items-center gap-2.5 rounded-lg transition-colors",
-                          collapsed ? "justify-center p-2" : "px-3 py-2",
-                          active
-                            ? "bg-orange-50 text-brand-orange"
-                            : "text-brand-muted hover:bg-brand-offwhite hover:text-brand-black"
-                        )}
-                      >
-                        <Icon name={item.icon} size={collapsed ? 20 : 18} />
-                        {!collapsed && (
-                          <span className={clsx("text-sm truncate", active && "font-medium text-brand-orange")}>
-                            {item.label}
-                          </span>
-                        )}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
+                )}
+              </Link>
+            );
+          })}
+        </div>
       </nav>
 
       {/* Bell + Sign out */}
@@ -355,7 +285,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
             <RosablyIcon size={26} />
             <div>
               <p className="text-sm font-semibold text-brand-black leading-tight">Rosably</p>
-              <p className="text-xs text-brand-muted leading-tight">Control Center</p>
+              <p className="text-xs text-brand-muted leading-tight">Workspace</p>
             </div>
           </div>
           <button
@@ -368,41 +298,34 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         </div>
 
         {/* Drawer nav — large card style */}
-        <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-5">
-          {modulesWithItems.map(mod => (
-            <div key={mod.key}>
-              <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-brand-muted">
-                {mod.label}
-              </p>
-              <div className="space-y-1">
-                {mod.items.map(item => {
-                  const active = isActive(item.href);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={clsx(
-                        "flex items-center gap-3.5 px-3 py-3 rounded-xl transition-colors",
-                        active
-                          ? "bg-orange-50 text-brand-orange"
-                          : "text-brand-black hover:bg-brand-offwhite"
-                      )}
-                    >
-                      <div className={clsx(
-                        "p-2 rounded-lg shrink-0",
-                        active ? "bg-orange-100" : "bg-brand-offwhite"
-                      )}>
-                        <Icon name={item.icon} size={20} />
-                      </div>
-                      <span className={clsx("text-[15px]", active ? "font-semibold text-brand-orange" : "font-medium")}>
-                        {item.label}
-                      </span>
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+        <nav className="flex-1 overflow-y-auto py-3 px-3">
+          <div className="space-y-1">
+            {WORKSPACE_MODULES.map(mod => {
+              const active = isActive(mod);
+              return (
+                <Link
+                  key={mod.href}
+                  href={mod.href}
+                  className={clsx(
+                    "flex items-center gap-3.5 px-3 py-3 rounded-xl transition-colors",
+                    active
+                      ? "bg-orange-50 text-brand-orange"
+                      : "text-brand-black hover:bg-brand-offwhite"
+                  )}
+                >
+                  <div className={clsx(
+                    "p-2 rounded-lg shrink-0",
+                    active ? "bg-orange-100" : "bg-brand-offwhite"
+                  )}>
+                    <Icon name={mod.icon} size={20} />
+                  </div>
+                  <span className={clsx("text-[15px]", active ? "font-semibold text-brand-orange" : "font-medium")}>
+                    {mod.label}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
         </nav>
 
         {/* Drawer sign out */}
