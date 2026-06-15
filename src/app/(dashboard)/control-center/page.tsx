@@ -49,7 +49,12 @@ export default function ControlCenterPage() {
       fetch("/api/activity").then(r => r.json()).catch(() => []),
       fetch("/api/approvals").then(r => r.json()).catch(() => []),
     ]);
-    setAgentHealth(typeof health === "object" && health !== null ? health : {});
+    const healthMap = Object.fromEntries(
+      (Array.isArray(health) ? health : []).map(
+        (h: { agent: string; status: string }) => [h.agent, h.status]
+      )
+    );
+    setAgentHealth(healthMap);
     setActivity(Array.isArray(act) ? act.slice(0, 10) : []);
     setApprovalCount(Array.isArray(appr) ? appr.length : 0);
     setLoading(false);
@@ -101,7 +106,7 @@ export default function ControlCenterPage() {
             {SERVICES.map(svc => {
               const health = agentHealth[svc.id];
               const status = svc.type === "agent"
-                ? (health === "ok" ? "ok" : health === "error" ? "down" : "checking")
+                ? (health === "up" ? "ok" : health === "down" ? "down" : "checking")
                 : "ok";
               return (
                 <div key={svc.id} className="flex items-center justify-between px-4 py-3">
@@ -137,8 +142,8 @@ export default function ControlCenterPage() {
         {/* Scheduled jobs */}
         <CollapsibleCard title="Scheduled Jobs" badge={CRON_JOBS.length}>
           <div className="divide-y divide-brand-border">
-            {CRON_JOBS.map((job, i) => (
-              <div key={i} className="flex items-center justify-between px-4 py-3">
+            {CRON_JOBS.map(job => (
+              <div key={`${job.agent}-${job.name}`} className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3">
                   <AgentBadge agent={job.agent} size="sm" />
                   <span className="text-sm text-brand-black">{job.name}</span>
