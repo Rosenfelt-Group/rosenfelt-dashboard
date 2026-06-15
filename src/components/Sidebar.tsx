@@ -105,15 +105,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   const pathname = usePathname();
   const router   = useRouter();
 
-  const [permissions, setPermissions] = useState<string[]>([]);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/auth/me")
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.permissions) setPermissions(data.permissions); })
-      .catch(() => {});
-  }, []);
 
   // Close mobile drawer on navigation
   useEffect(() => { setIsMobileOpen(false); }, [pathname]);
