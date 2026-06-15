@@ -133,7 +133,7 @@ export default function OverviewPage() {
     await fetch("/api/approvals", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify({ id, status, revision_notes: revisionNotes }),
     });
     setApprovals(prev => prev.filter(a => a.id !== id));
     setStats(prev => prev
@@ -141,6 +141,9 @@ export default function OverviewPage() {
       : prev
     );
   }
+
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   if (loading) {
     return (
@@ -158,7 +161,7 @@ export default function OverviewPage() {
     <div className="p-4 md:p-8 max-w-6xl pb-24 md:pb-8">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-brand-black">Good morning</h1>
+        <h1 className="text-xl font-semibold text-brand-black">{greeting}</h1>
         <p className="text-sm text-brand-muted mt-0.5">
           {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
         </p>
