@@ -14,7 +14,7 @@ const AGENTS = [
     label: "Jordan",
     role: "Deploy · SSH · WordPress · n8n",
     tools: 61,
-    chatHref: "/chat/jordan",
+    chatHref: "/chat?agent=jordan",
   },
   {
     name: "riley" as const,
@@ -22,7 +22,7 @@ const AGENTS = [
     label: "Riley",
     role: "Tasks · Memory · Weekly digest",
     tools: 30,
-    chatHref: "/chat/riley",
+    chatHref: "/chat?agent=riley",
   },
   {
     name: "avery" as const,
@@ -30,7 +30,7 @@ const AGENTS = [
     label: "Avery",
     role: "Content · Audits · Research",
     tools: 32,
-    chatHref: "/chat/avery",
+    chatHref: "/chat?agent=avery",
   },
   {
     name: "casey" as const,
@@ -46,7 +46,7 @@ const AGENTS = [
     label: "Sam",
     role: "Accounting · Legal · HR",
     tools: 25,
-    chatHref: "/chat/sam",
+    chatHref: "/chat?agent=sam",
   },
 ] as const;
 
