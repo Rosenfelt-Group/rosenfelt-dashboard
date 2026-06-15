@@ -199,7 +199,7 @@ export default function ControlCenterPage() {
               { label: "Work Board",        href: "/work",                     desc: "Kanban + task queue" },
               { label: "Approvals",         href: "/approvals",                desc: "Pending agent actions" },
               { label: "Agent History",     href: "/agents/history",           desc: "Workflow execution log" },
-              { label: "Agent Prompts",     href: "/agents/agent-prompts",     desc: "Live prompt editor" },
+              { label: "Agent Prompts",     href: "/agents/intelligence",      desc: "Live prompt editor" },
               { label: "Engineering",       href: "/engineering",              desc: "SSH terminal (Jordan)" },
               { label: "Backup",            href: "/backup",                   desc: "VPS backup tools" },
             ].map(link => (

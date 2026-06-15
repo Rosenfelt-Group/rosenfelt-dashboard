@@ -172,7 +172,7 @@ export default function AgentCentralPage() {
               Edit live system prompts — changes take effect on next message
             </p>
           </div>
-          <Link href="/agents/agent-prompts"
+          <Link href="/agents/intelligence"
             className="px-3 py-1.5 rounded-lg border border-brand-border text-sm text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors flex-shrink-0">
             Edit prompts →
           </Link>
