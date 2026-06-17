@@ -65,7 +65,7 @@ export default function SalesPage() {
       <h1 className="text-xl font-semibold text-brand-black mb-4">Sales &amp; Marketing</h1>
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-brand-border mb-6 overflow-x-auto">
+      <div className="flex flex-wrap gap-1 border-b border-brand-border mb-6">
         {TABS.map(t => (
           <button
             key={t.id}
