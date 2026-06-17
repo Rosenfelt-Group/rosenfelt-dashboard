@@ -31,6 +31,9 @@ interface AgentMemory {
   memory_value: string;
   category: "preference" | "procedure" | "known_issue" | "project_context" | "general";
   rating: -1 | 0 | 1;
+  pinned?: boolean;
+  use_count?: number;
+  last_used_at?: string | null;
   source: string;
 }
 
@@ -61,9 +64,10 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 // ─── Memory Card ──────────────────────────────────────────────────────────────
 
-function MemoryCard({ memory, onRate, onDelete, onEdit }: {
+function MemoryCard({ memory, onRate, onPin, onDelete, onEdit }: {
   memory: AgentMemory;
   onRate: (id: string, rating: -1 | 0 | 1) => void;
+  onPin: (id: string, pinned: boolean) => void;
   onDelete: (id: string) => void;
   onEdit: (memory: AgentMemory) => void;
 }) {
@@ -106,9 +110,17 @@ function MemoryCard({ memory, onRate, onDelete, onEdit }: {
 
       <div className="flex items-center justify-between pt-1 border-t border-brand-border">
         <span className="text-[10px] text-brand-muted">
-          {formatDistanceToNow(parseISO(memory.updated_at), { addSuffix: true })} · {memory.source}
+          {formatDistanceToNow(parseISO(memory.updated_at), { addSuffix: true })} · {memory.source} · used {memory.use_count ?? 0}×
         </span>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <button
+            onClick={() => onPin(memory.id, !memory.pinned)}
+            className={clsx("text-xs px-1.5 py-0.5 rounded transition-colors",
+              memory.pinned ? "bg-amber-100 text-amber-700" : "bg-brand-offwhite text-brand-muted hover:bg-amber-50 hover:text-amber-600")}
+            title={memory.pinned ? "Pinned — always retrieved, never pruned" : "Pin this memory"}
+          >
+            {memory.pinned ? "📌 Pinned" : "Pin"}
+          </button>
           <button onClick={() => onEdit(memory)} className="text-xs text-brand-orange hover:text-orange-700 transition-colors">
             Edit
           </button>
@@ -270,6 +282,15 @@ export default function AgentPromptsPage() {
       body: JSON.stringify({ id, rating }),
     });
     setMemories(prev => prev.map(m => m.id === id ? { ...m, rating } : m));
+  }
+
+  async function handlePinMemory(id: string, pinned: boolean) {
+    await fetch("/api/agent-memory", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, pinned }),
+    });
+    setMemories(prev => prev.map(m => m.id === id ? { ...m, pinned } : m));
   }
 
   async function handleDeleteMemory(id: string) {
@@ -522,6 +543,7 @@ export default function AgentPromptsPage() {
                     key={m.id}
                     memory={m}
                     onRate={handleRateMemory}
+                    onPin={handlePinMemory}
                     onDelete={handleDeleteMemory}
                     onEdit={mem => setEditingMemory(mem)}
                   />
