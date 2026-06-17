@@ -2,7 +2,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { Sidebar } from "./Sidebar";
+import { TopBar }    from "./TopBar";
+import { LeftPanel } from "./LeftPanel";
+import { MobileNav } from "./MobileNav";
 
 // ── System alerts ─────────────────────────────────────────────────────────────
 
@@ -29,21 +31,18 @@ function useSystemAlerts(): Alert[] {
 
         const next: Alert[] = [];
 
-        // Agent down → error
         for (const h of health) {
           if (h.status === "down") {
             next.push({ level: "error", label: `${h.agent} agent is down` });
           }
         }
 
-        // Agent errors in last 24h → warning (skip if already flagged as down)
         for (const s of stats) {
           if (s.errors_24h > 0 && !next.some(a => a.label.includes(s.agent))) {
             next.push({ level: "warning", label: `${s.agent}: ${s.errors_24h} error${s.errors_24h !== 1 ? "s" : ""} in 24h` });
           }
         }
 
-        // Latest run per repo with failure → warning
         const seenRepos = new Set<string>();
         for (const run of runs) {
           if (seenRepos.has(run.repo)) continue;
@@ -68,14 +67,14 @@ function useSystemAlerts(): Alert[] {
 // ── Banner ────────────────────────────────────────────────────────────────────
 
 function SystemBanner() {
-  const alerts    = useSystemAlerts();
+  const alerts              = useSystemAlerts();
   const [dismissed, setDismissed] = useState(false);
 
   if (dismissed || alerts.length === 0) return null;
 
-  const isError   = alerts.some(a => a.level === "error");
-  const primary   = alerts[0];
-  const rest      = alerts.length - 1;
+  const isError = alerts.some(a => a.level === "error");
+  const primary = alerts[0];
+  const rest    = alerts.length - 1;
 
   return (
     <div className={clsx(
@@ -84,26 +83,19 @@ function SystemBanner() {
         ? "bg-red-50 border-red-200 text-red-800"
         : "bg-amber-50 border-amber-200 text-amber-800"
     )}>
-      {/* Indicator dot */}
       <span className={clsx(
         "w-1.5 h-1.5 rounded-full flex-shrink-0",
         isError ? "bg-red-500 animate-pulse" : "bg-amber-400"
       )} />
-
-      {/* Message */}
       <span className="font-semibold flex-shrink-0">{isError ? "System issue:" : "Warning:"}</span>
       <span className="truncate">{primary.label}</span>
-      {rest > 0 && (
-        <span className="flex-shrink-0 opacity-70">+{rest} more</span>
-      )}
+      {rest > 0 && <span className="flex-shrink-0 opacity-70">+{rest} more</span>}
       <Link
         href="/status"
         className={clsx("flex-shrink-0 underline font-medium ml-1", isError ? "text-red-700" : "text-amber-700")}
       >
         View status →
       </Link>
-
-      {/* Dismiss */}
       <button
         onClick={() => setDismissed(true)}
         aria-label="Dismiss"
@@ -123,31 +115,18 @@ function SystemBanner() {
 // ── Shell ─────────────────────────────────────────────────────────────────────
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false);
-
-  useEffect(() => {
-    if (localStorage.getItem("sidebar-collapsed") === "true") setCollapsed(true);
-  }, []);
-
-  function toggle() {
-    setCollapsed(prev => {
-      const next = !prev;
-      localStorage.setItem("sidebar-collapsed", String(next));
-      return next;
-    });
-  }
-
   return (
-    <div className="flex min-h-screen bg-brand-offwhite">
-      <Sidebar collapsed={collapsed} onToggle={toggle} />
-      <main className={clsx(
-        "flex-1 min-h-screen transition-[margin-left] duration-200",
-        "pt-14 md:pt-0",
-        collapsed ? "md:ml-14" : "md:ml-56"
-      )}>
-        <SystemBanner />
-        {children}
-      </main>
+    <div className="min-h-screen bg-brand-offwhite">
+      <TopBar />
+      <MobileNav />
+      {/* Offset for fixed top bars: mobile h-14 (56px), desktop h-[46px] */}
+      <div className="flex min-h-screen pt-14 md:pt-[46px]">
+        <LeftPanel />
+        <main className="flex-1 min-h-screen">
+          <SystemBanner />
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
