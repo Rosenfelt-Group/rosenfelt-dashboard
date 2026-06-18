@@ -7,7 +7,7 @@ import { formatDistanceToNow, parseISO } from "date-fns";
 // Extend WorkflowLog locally to include actions_summary
 type WorkflowLogExtended = WorkflowLog & { actions_summary?: string };
 
-const AGENTS: Agent[] = ["riley", "jordan", "avery", "casey"];
+const AGENTS: Agent[] = ["riley", "jordan", "avery", "casey", "sam"];
 
 const AGENT_COLORS: Record<string, string> = {
   riley:  "bg-purple-50 text-purple-700 border-purple-200",

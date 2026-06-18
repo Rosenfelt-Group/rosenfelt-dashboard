@@ -154,7 +154,7 @@ function LastLogPreview({ item }: { item: WorkItem }) {
     <div className="border-t border-brand-border pt-2 mt-1">
       <div className="flex items-center gap-1.5 text-[10px] text-brand-muted mb-0.5">
         {/* Author can be an agent name or 'brian'; only render badge for known agents. */}
-        {(["jordan", "riley", "avery", "casey", "brian"] as const).includes(
+        {(["jordan", "riley", "avery", "casey", "sam", "brian"] as const).includes(
           log.author as AgentName,
         ) && <AgentBadge agent={log.author as AgentName} size="sm" />}
         <span className="px-1 rounded bg-brand-cream text-brand-black">

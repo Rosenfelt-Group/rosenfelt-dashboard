@@ -16,6 +16,7 @@ const AGENTS: { id: Agent; label: string; available: boolean; note?: string }[] 
   { id: "riley",  label: "Riley",  available: true },
   { id: "avery",  label: "Avery",  available: true },
   { id: "casey",  label: "Casey",  available: true },
+  { id: "sam",    label: "Sam",    available: true },
 ];
 
 const AGENT_PROMPTS: Partial<Record<Agent, string>> = {
@@ -23,6 +24,7 @@ const AGENT_PROMPTS: Partial<Record<Agent, string>> = {
   avery: "Ask Avery to draft blog posts, research topics, or manage content.",
   riley: "Ask Riley about CRM data, leads, or client activity.",
   casey: "Ask Casey about audit findings, schema drift, or system health checks.",
+  sam: "Ask Sam about invoices, financials, contracts, or HR — actions require your approval.",
 };
 
 const CHAT_ID = "dashboard_brian";

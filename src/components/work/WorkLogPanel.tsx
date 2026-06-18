@@ -8,7 +8,7 @@ const ENTRY_TYPES: WorkItemLogEntryType[] = [
   "progress", "question", "answer", "note", "error", "completion",
 ];
 
-const AGENT_OPTIONS = ["riley", "jordan", "avery", "casey"];
+const AGENT_OPTIONS = ["riley", "jordan", "avery", "casey", "sam"];
 
 type Props = {
   workItemId: string;

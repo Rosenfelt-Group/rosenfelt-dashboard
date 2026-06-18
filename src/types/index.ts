@@ -112,7 +112,7 @@ export type WorkItemSource =
 
 export type WorkItemType = "internal" | "client";
 
-export type AgentName = "riley" | "jordan" | "avery" | "casey" | "brian";
+export type AgentName = "riley" | "jordan" | "avery" | "casey" | "sam" | "brian";
 
 export interface WorkItem {
   id: string;

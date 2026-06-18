@@ -4,7 +4,7 @@ import { AgentBadge } from "@/components/AgentBadge";
 import clsx from "clsx";
 import { supabase } from "@/lib/supabase";
 
-type Agent = "jordan" | "riley" | "avery" | "casey";
+type Agent = "jordan" | "riley" | "avery" | "casey" | "sam";
 
 interface AgentSummary {
   agent: Agent;

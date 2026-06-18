@@ -50,7 +50,7 @@ const STATUS_LABEL: Record<WorkStatus, string> = {
 
 const PRIORITY_OPTIONS: TaskPriority[] = ["high", "medium", "low"];
 const ASSIGN_OPTIONS: (AgentName | "unassigned")[] = [
-  "unassigned", "jordan", "riley", "avery", "casey", "brian",
+  "unassigned", "jordan", "riley", "avery", "casey", "sam", "brian",
 ];
 const WORK_TYPE_OPTIONS: WorkType[] = [
   "infrastructure", "agent", "dashboard", "content",

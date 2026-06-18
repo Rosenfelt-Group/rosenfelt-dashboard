@@ -13,7 +13,7 @@ export const WORK_TYPES: WorkType[] = [
 ];
 
 export const AGENT_FILTER_OPTIONS: (AgentName | "unassigned")[] = [
-  "riley", "jordan", "avery", "casey", "brian", "unassigned",
+  "riley", "jordan", "avery", "casey", "sam", "brian", "unassigned",
 ];
 
 export const PRIORITIES: TaskPriority[] = ["high", "medium", "low"];

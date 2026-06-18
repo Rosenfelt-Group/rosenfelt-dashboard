@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { formatDistanceToNow, parseISO } from "date-fns";
 
-type Agent = "jordan" | "riley" | "avery" | "casey";
+type Agent = "jordan" | "riley" | "avery" | "casey" | "sam";
 
 interface AgentPrompt {
   id: string;
@@ -37,13 +37,14 @@ interface AgentMemory {
   source: string;
 }
 
-const AGENTS: Agent[] = ["jordan", "riley", "avery", "casey"];
+const AGENTS: Agent[] = ["jordan", "riley", "avery", "casey", "sam"];
 
 const AGENT_COLORS: Record<Agent, string> = {
   jordan: "bg-blue-50 text-blue-700 border-blue-200",
   riley:  "bg-purple-50 text-purple-700 border-purple-200",
   avery:  "bg-green-50 text-green-700 border-green-200",
   casey:  "bg-rose-50 text-rose-700 border-rose-200",
+  sam:    "bg-gray-50 text-gray-600 border-gray-200",
 };
 
 const CATEGORY_STYLES: Record<string, string> = {
