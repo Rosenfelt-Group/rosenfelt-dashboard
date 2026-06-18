@@ -12,6 +12,14 @@ export interface WorkflowLog {
   status: "success" | "error" | "pending";
   error_message?: string;
   duration_ms?: number;
+  actions_summary?: string;
+  session_id?: string;
+}
+
+export interface ConversationTurn {
+  role: "user" | "assistant" | "tool";
+  content: string;
+  created_at: string;
 }
 
 export interface PendingApproval {
