@@ -144,18 +144,53 @@ function MemoryCard({ memory, onRate, onPin, onDelete, onEdit }: {
 
 // ─── Memory Edit Modal ────────────────────────────────────────────────────────
 
+// ─── Memory API helpers ───────────────────────────────────────────────────────
+
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : "network error";
+}
+
+// Calls /api/agent-memory and throws on a non-ok response so callers can revert
+// optimistic UI and surface the failure instead of silently appearing to succeed.
+async function memoryRequest(method: string, body: unknown) {
+  const res = await fetch("/api/agent-memory", {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Request failed (${res.status})`);
+  }
+  return res.json().catch(() => ({}));
+}
+
 function MemoryModal({ memory, onSave, onClose }: {
   memory: Partial<AgentMemory> & { agent: Agent };
-  onSave: (updates: Partial<AgentMemory>) => void;
+  onSave: (updates: Partial<AgentMemory>) => Promise<void>;
   onClose: () => void;
 }) {
   const [key,      setKey]      = useState(memory.memory_key ?? "");
   const [value,    setValue]    = useState(memory.memory_value ?? "");
   const [category, setCategory] = useState(memory.category ?? "general");
+  const [saving,   setSaving]   = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({ memory_key: key, memory_value: value, category: category as AgentMemory["category"] });
+      // On success the parent unmounts this modal; no need to clear `saving`.
+    } catch (e) {
+      setError(errMsg(e));
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 backdrop-blur-sm"
-         onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+         onClick={e => { if (e.target === e.currentTarget && !saving) onClose(); }}>
       <div className="bg-white w-full md:max-w-lg md:rounded-xl rounded-t-2xl shadow-xl flex flex-col max-h-[85vh]">
         <div className="md:hidden flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 bg-brand-border rounded-full" />
@@ -195,13 +230,20 @@ function MemoryModal({ memory, onSave, onClose }: {
             </select>
           </div>
         </div>
-        <div className="px-5 py-4 border-t border-brand-border flex gap-2">
-          <button onClick={() => onSave({ memory_key: key, memory_value: value, category: category as AgentMemory["category"] })}
-            disabled={!key.trim() || !value.trim()}
-            className="btn-primary flex-1 disabled:opacity-40">
-            Save
-          </button>
-          <button onClick={onClose} className="btn-ghost px-5">Cancel</button>
+        <div className="px-5 py-4 border-t border-brand-border space-y-3">
+          {error && (
+            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              Couldn&apos;t save: {error}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <button onClick={save}
+              disabled={!key.trim() || !value.trim() || saving}
+              className="btn-primary flex-1 disabled:opacity-40">
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button onClick={onClose} disabled={saving} className="btn-ghost px-5 disabled:opacity-40">Cancel</button>
+          </div>
         </div>
       </div>
     </div>
@@ -277,12 +319,16 @@ export default function AgentPromptsPage() {
   }
 
   async function handleRateMemory(id: string, rating: -1 | 0 | 1) {
-    await fetch("/api/agent-memory", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, rating }),
-    });
+    const previous = memories.find(m => m.id === id)?.rating ?? 0;
+    // Optimistic update, reverted below if the request fails.
+    setMemoryError(null);
     setMemories(prev => prev.map(m => m.id === id ? { ...m, rating } : m));
+    try {
+      await memoryRequest("PATCH", { id, rating });
+    } catch (err) {
+      setMemories(prev => prev.map(m => m.id === id ? { ...m, rating: previous } : m));
+      setMemoryError(`Couldn't update rating: ${errMsg(err)}`);
+    }
   }
 
   async function handlePinMemory(id: string, pinned: boolean) {
@@ -291,48 +337,34 @@ export default function AgentPromptsPage() {
     setMemoryError(null);
     setMemories(prev => prev.map(m => m.id === id ? { ...m, pinned } : m));
     try {
-      const res = await fetch("/api/agent-memory", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, pinned }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `Request failed (${res.status})`);
-      }
+      await memoryRequest("PATCH", { id, pinned });
     } catch (err) {
       setMemories(prev => prev.map(m => m.id === id ? { ...m, pinned: previous } : m));
-      setMemoryError(
-        `Couldn't ${pinned ? "pin" : "unpin"} that memory: ${err instanceof Error ? err.message : "network error"}`
-      );
+      setMemoryError(`Couldn't ${pinned ? "pin" : "unpin"} that memory: ${errMsg(err)}`);
     }
   }
 
   async function handleDeleteMemory(id: string) {
-    await fetch("/api/agent-memory", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    setMemories(prev => prev.filter(m => m.id !== id));
+    // Not optimistic: removing then re-inserting on failure would lose list
+    // order, so we only drop the row after the delete is confirmed.
+    setMemoryError(null);
+    try {
+      await memoryRequest("DELETE", { id });
+      setMemories(prev => prev.filter(m => m.id !== id));
+    } catch (err) {
+      setMemoryError(`Couldn't delete that memory: ${errMsg(err)}`);
+    }
   }
 
+  // Throws on failure so MemoryModal keeps itself open and shows the error;
+  // only closes (clears editingMemory) on success.
   async function handleSaveMemory(updates: Partial<AgentMemory>) {
     if (!editingMemory) return;
     if (editingMemory.id) {
-      await fetch("/api/agent-memory", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editingMemory.id, ...updates }),
-      });
+      await memoryRequest("PATCH", { id: editingMemory.id, ...updates });
       setMemories(prev => prev.map(m => m.id === editingMemory.id ? { ...m, ...updates } : m));
     } else {
-      const res = await fetch("/api/agent-memory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agent: activeAgent, source: "manual", rating: 0, ...updates }),
-      });
-      const created = await res.json();
+      const created = await memoryRequest("POST", { agent: activeAgent, source: "manual", rating: 0, ...updates });
       setMemories(prev => [created, ...prev]);
     }
     setEditingMemory(null);
