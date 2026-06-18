@@ -13,6 +13,13 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 //   window      — optional, duration_ms of the execution (default 0)
 //
 // conversations has no anon SELECT policy, so this reads via the service role.
+//
+// Auth: enforced by src/middleware.ts, which requires a valid session cookie on
+// every route not in its allowlist (this route is not allowlisted). Same model
+// as the sibling /api/chat GET and /api/agent-history routes — any authenticated
+// dashboard user can already see the full history feed; this adds the turn bodies
+// at the same granularity. The dashboard is single-tenant (dashboard_users), so
+// there is no per-user ownership boundary on agent conversations to enforce here.
 export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams;
   const agent = sp.get("agent");
