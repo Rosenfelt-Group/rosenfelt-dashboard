@@ -226,6 +226,7 @@ export default function AgentPromptsPage() {
   const [previewVersion, setPreviewVersion] = useState<PromptVersion | null>(null);
   const [editingMemory,  setEditingMemory]  = useState<(Partial<AgentMemory> & { agent: Agent }) | null>(null);
   const [dirty,         setDirty]         = useState(false);
+  const [memoryError,   setMemoryError]   = useState<string | null>(null);
 
   useEffect(() => {
     loadAgent(activeAgent);
@@ -285,12 +286,26 @@ export default function AgentPromptsPage() {
   }
 
   async function handlePinMemory(id: string, pinned: boolean) {
-    await fetch("/api/agent-memory", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, pinned }),
-    });
+    const previous = memories.find(m => m.id === id)?.pinned;
+    // Optimistic update, reverted below if the request fails.
+    setMemoryError(null);
     setMemories(prev => prev.map(m => m.id === id ? { ...m, pinned } : m));
+    try {
+      const res = await fetch("/api/agent-memory", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, pinned }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Request failed (${res.status})`);
+      }
+    } catch (err) {
+      setMemories(prev => prev.map(m => m.id === id ? { ...m, pinned: previous } : m));
+      setMemoryError(
+        `Couldn't ${pinned ? "pin" : "unpin"} that memory: ${err instanceof Error ? err.message : "network error"}`
+      );
+    }
   }
 
   async function handleDeleteMemory(id: string) {
@@ -496,6 +511,18 @@ export default function AgentPromptsPage() {
         {/* ── MEMORY TAB ── */}
         {activeTab === "memory" && (
           <div className="space-y-4">
+            {memoryError && (
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800">
+                <span className="flex-1">{memoryError}</span>
+                <button
+                  onClick={() => setMemoryError(null)}
+                  aria-label="Dismiss"
+                  className="text-red-600 hover:text-red-800 font-medium flex-shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <div className="flex gap-1 overflow-x-auto scrollbar-none pb-1">
                 {[
