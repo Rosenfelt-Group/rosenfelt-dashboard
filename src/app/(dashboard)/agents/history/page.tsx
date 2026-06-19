@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { WorkflowLog, Agent } from "@/types";
+import { WorkflowLog, ConversationTurn, Agent } from "@/types";
 import clsx from "clsx";
-import { formatDistanceToNow, parseISO } from "date-fns";
+import { formatDistanceToNow, parseISO, format } from "date-fns";
 
-// Extend WorkflowLog locally to include actions_summary
-type WorkflowLogExtended = WorkflowLog & { actions_summary?: string };
+// actions_summary + session_id now live on the canonical WorkflowLog type.
+type WorkflowLogExtended = WorkflowLog;
 
 const AGENTS: Agent[] = ["riley", "jordan", "avery", "casey", "sam"];
 
@@ -72,6 +72,58 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
   );
 }
 
+const ROLE_STYLES: Record<ConversationTurn["role"], { label: string; box: string; chip: string }> = {
+  user:      { label: "Brian",  box: "bg-white border-brand-border",   chip: "bg-orange-50 text-brand-orange" },
+  assistant: { label: "Agent",  box: "bg-white border-brand-border",   chip: "bg-blue-50 text-blue-700" },
+  tool:      { label: "Tool",   box: "bg-slate-50 border-slate-200",   chip: "bg-slate-100 text-slate-600" },
+};
+
+function ConversationView({ log }: { log: WorkflowLogExtended }) {
+  const [turns,   setTurns]   = useState<ConversationTurn[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams({
+      agent: log.agent,
+      session_id: log.session_id ?? "",
+      at: log.created_at,
+      window: String(log.duration_ms ?? 0),
+    });
+    fetch(`/api/agent-history/conversation?${params}`)
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then((d: ConversationTurn[]) => setTurns(Array.isArray(d) ? d : []))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, [log.agent, log.session_id, log.created_at, log.duration_ms]);
+
+  if (loading) return <div className="h-12 rounded bg-white border border-brand-border animate-pulse" />;
+  if (error)   return <p className="text-xs text-red-600">Couldn&apos;t load the conversation.</p>;
+  if (!turns || turns.length === 0)
+    return <p className="text-xs text-brand-muted">No conversation turns captured for this execution.</p>;
+
+  return (
+    <div className="space-y-1.5">
+      {turns.map((t, i) => {
+        const style = ROLE_STYLES[t.role] ?? ROLE_STYLES.tool;
+        return (
+          <div key={i} className={clsx("rounded border px-3 py-2", style.box)}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={clsx("text-[10px] px-1.5 py-0.5 rounded font-medium", style.chip)}>
+                {style.label}
+              </span>
+              <span className="text-[10px] text-brand-muted">
+                {format(parseISO(t.created_at), "HH:mm:ss")}
+              </span>
+            </div>
+            <p className="text-xs text-brand-black whitespace-pre-wrap break-words">{t.content}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function LogRow({ log }: { log: WorkflowLogExtended }) {
   const [expanded, setExpanded] = useState(false);
   const ago = formatDistanceToNow(parseISO(log.created_at), { addSuffix: true });
@@ -132,6 +184,17 @@ function LogRow({ log }: { log: WorkflowLogExtended }) {
 
       {expanded && (
         <div className="px-4 pb-3 space-y-2 bg-brand-offwhite">
+          {/* Full conversation (lazy-loaded by agent + session_id + time window) */}
+          {log.session_id ? (
+            <div>
+              <p className="text-xs font-medium text-brand-muted mb-1">Conversation</p>
+              <ConversationView log={log} />
+            </div>
+          ) : (
+            <p className="text-xs text-brand-muted">
+              No linked conversation — scheduled or pre-update execution. Summary below.
+            </p>
+          )}
           {/* Full response */}
           {response && (
             <div>
