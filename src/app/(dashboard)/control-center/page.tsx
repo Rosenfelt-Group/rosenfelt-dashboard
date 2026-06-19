@@ -2,20 +2,12 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { CollapsibleCard } from "@/components/CollapsibleCard";
+import { CronConfigPanel } from "@/components/CronConfigPanel";
 import Link from "next/link";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
 import { AgentBadge } from "@/components/AgentBadge";
 import { Agent } from "@/types";
-
-// Static cron job schedule (from APScheduler configs in each agent)
-const CRON_JOBS: { agent: Agent; name: string; schedule: string; active: boolean }[] = [
-  { agent: "riley",  name: "Weekly digest",        schedule: "Mon 06:00 ET",          active: true },
-  { agent: "avery",  name: "Content Intel Monitor", schedule: "Wed 06:00 ET",          active: true },
-  { agent: "casey",  name: "Full audit",            schedule: "Sun 07:00 ET",          active: true },
-  { agent: "casey",  name: "Regression suite",      schedule: "Sun 08:00 ET",          active: true },
-  { agent: "sam",    name: "Monthly financial",     schedule: "1st of month 08:00 ET", active: true },
-];
 
 // Services to health-check via the agent-status/health API
 const SERVICES = [
@@ -139,26 +131,9 @@ export default function ControlCenterPage() {
           </div>
         </CollapsibleCard>
 
-        {/* Scheduled jobs */}
-        <CollapsibleCard title="Scheduled Jobs" badge={CRON_JOBS.length}>
-          <div className="divide-y divide-brand-border">
-            {CRON_JOBS.map(job => (
-              <div key={`${job.agent}-${job.name}`} className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <AgentBadge agent={job.agent} size="sm" />
-                  <span className="text-sm text-brand-black">{job.name}</span>
-                </div>
-                <span className="text-xs text-brand-muted">{job.schedule}</span>
-              </div>
-            ))}
-          </div>
-          <div className="px-4 py-3 border-t border-brand-border">
-            <div className="flex flex-wrap gap-4 text-xs text-brand-muted">
-              <span>Manual triggers:</span>
-              <code className="text-brand-black font-mono">POST .../digest/run</code>
-              <code className="text-brand-black font-mono">POST .../monitor/run</code>
-            </div>
-          </div>
+        {/* Scheduled jobs — live from agent_cron_config, editable from here */}
+        <CollapsibleCard title="Scheduled Jobs">
+          <CronConfigPanel />
         </CollapsibleCard>
 
         {/* Recent activity */}
