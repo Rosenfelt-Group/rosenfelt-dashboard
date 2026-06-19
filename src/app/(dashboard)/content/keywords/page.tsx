@@ -311,6 +311,18 @@ export default function KeywordsPage() {
     planned:     rows.filter(r => r.status === "planned").length,
   };
 
+  // Positions are auto-synced weekly from Google Search Console (Casey, Tue 06:00 ET),
+  // which stamps `last_checked` on each matched keyword. The most recent stamp is the
+  // freshness signal; >8 days means a weekly sync was likely missed.
+  const lastSynced = rows
+    .map(r => r.last_checked)
+    .filter((d): d is string => !!d)
+    .sort()
+    .at(-1) ?? null;
+  const syncStale = lastSynced
+    ? (Date.now() - new Date(lastSynced).getTime()) / 86_400_000 > 8
+    : false;
+
   function FilterPill<T extends string>({
     value, active, onClick, children,
   }: { value: T; active: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -350,12 +362,28 @@ export default function KeywordsPage() {
 
       {/* Stats strip */}
       {!loading && rows.length > 0 && (
-        <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+        <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm items-center">
           <span className="text-brand-black font-medium">{counts.total} keywords</span>
           <span className="text-green-700">{counts.published} published</span>
           <span className="text-blue-700">{counts.in_progress} in progress</span>
           <span className="text-brand-orange">{counts.monitoring} monitoring</span>
           <span className="text-brand-muted">{counts.planned} planned</span>
+          {lastSynced ? (
+            <span
+              className={clsx("ml-auto text-xs", syncStale ? "text-amber-700" : "text-brand-muted")}
+              title="Positions auto-sync weekly from Google Search Console (Tue 06:00 ET)"
+            >
+              {syncStale ? "⚠ " : ""}Positions synced {fmtDate(lastSynced)}
+              {syncStale ? " — weekly sync may be overdue" : ""}
+            </span>
+          ) : (
+            <span
+              className="ml-auto text-xs text-brand-muted"
+              title="Positions auto-sync weekly from Google Search Console (Tue 06:00 ET); none have matched GSC impressions yet"
+            >
+              Positions not yet synced from Search Console
+            </span>
+          )}
         </div>
       )}
 
