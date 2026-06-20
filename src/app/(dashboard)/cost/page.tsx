@@ -60,12 +60,12 @@ function fmtTokens(n: number) {
 function SpendBar({ spend, budget }: { spend: number; budget: number }) {
   const pct = budget > 0 ? Math.min((spend / budget) * 100, 100) : 0;
   return (
-    <div className="mt-2">
+    <div className="w-32">
       <div className="flex justify-between text-[10px] text-brand-muted mb-1">
         <span>{fmt(spend)} spent</span>
         <span>{fmt(budget, 2)} cap</span>
       </div>
-      <div className="h-1.5 bg-brand-offwhite rounded-full overflow-hidden">
+      <div className="h-1.5 bg-white rounded-full overflow-hidden border border-brand-border">
         <div
           className={clsx(
             "h-full rounded-full transition-all",
@@ -96,8 +96,7 @@ function BudgetInput({ agent, current, onSave }: { agent: Agent; current: number
   }
 
   return (
-    <div className="flex items-center gap-2 mt-3">
-      <span className="text-xs text-brand-muted">Daily cap</span>
+    <div className="flex items-center gap-2">
       <div className="flex items-center border border-brand-border rounded-lg overflow-hidden">
         <span className="px-2 text-xs text-brand-muted bg-brand-offwhite border-r border-brand-border">$</span>
         <input
@@ -158,8 +157,7 @@ function TokenCapsInput({
   }
 
   return (
-    <div className="flex items-center gap-1.5 mt-2">
-      <span className="text-xs text-brand-muted whitespace-nowrap">Max tokens</span>
+    <div className="flex items-center gap-1.5">
       <label className="flex items-center gap-1 text-[10px] text-brand-muted" title="Sonnet tier output cap">
         S
         <input
@@ -395,53 +393,73 @@ export default function CostPage() {
       )}
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {[1, 2, 3, 4].map(i => <div key={i} className="card animate-pulse h-44" />)}
+        <div className="space-y-4 mb-8">
+          <div className="card animate-pulse h-48" />
+          <div className="card animate-pulse h-64" />
         </div>
       ) : error ? (
         <div className="card p-6 text-sm text-red-600 bg-red-50 mb-8">{error}</div>
       ) : (
         <>
-          {/* ── Per-agent cards ── */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {agents.map(a => (
-              <div key={a.agent} className="card">
-                <div className="flex items-center gap-2 mb-3">
-                  <AgentBadge agent={a.agent} size="sm" />
-                  <span className="text-sm font-medium text-brand-black capitalize">{a.agent}</span>
-                  <span className="ml-auto text-xs text-brand-muted">{a.callsToday} calls</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div className="bg-brand-offwhite rounded-lg p-2 text-center">
-                    <p className="text-base font-semibold text-brand-black">{fmt(a.todayCost)}</p>
-                    <p className="text-[10px] text-brand-muted">{isViewingToday ? "today" : "selected day"}</p>
-                  </div>
-                  <div className="bg-brand-offwhite rounded-lg p-2 text-center">
-                    <p className="text-base font-semibold text-brand-black">{fmt(a.weekCost, 2)}</p>
-                    <p className="text-[10px] text-brand-muted">7 days</p>
-                  </div>
-                  <div className="bg-brand-offwhite rounded-lg p-2 text-center">
-                    <p className="text-base font-semibold text-brand-black">{fmtTokens(a.todayTokens)}</p>
-                    <p className="text-[10px] text-brand-muted">{isViewingToday ? "tokens today" : "tokens"}</p>
-                  </div>
-                  <div className="bg-brand-offwhite rounded-lg p-2 text-center">
-                    <p className="text-base font-semibold text-brand-black">{fmtTokens(a.weekTokens)}</p>
-                    <p className="text-[10px] text-brand-muted">tokens 7d</p>
-                  </div>
-                </div>
-
-                <SpendBar spend={a.todayCost} budget={a.dailyBudget} />
-                <BudgetInput agent={a.agent} current={a.dailyBudget} onSave={v => updateBudget(a.agent, v)} />
-                {configs[a.agent] && (
-                  <TokenCapsInput
-                    sonnet={configs[a.agent].sonnet_max_tokens}
-                    haiku={configs[a.agent].haiku_max_tokens}
-                    onSave={(s, h) => updateAgentConfig(a.agent, s, h)}
-                  />
-                )}
+          {/* ── Per-agent summary table ── */}
+          <div className="card p-0 overflow-hidden mb-8">
+            <div className="px-4 py-3 border-b border-brand-border">
+              <h2 className="text-sm font-medium text-brand-black">Per-agent summary</h2>
+            </div>
+            {agents.length === 0 ? (
+              <p className="text-xs text-brand-muted text-center py-10">No usage recorded yet</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-brand-border bg-brand-offwhite">
+                      <th className="text-left px-4 py-2 text-brand-muted font-medium">Agent</th>
+                      <th className="text-right px-4 py-2 text-brand-muted font-medium">Calls</th>
+                      <th className="text-right px-4 py-2 text-brand-muted font-medium">{isViewingToday ? "Today" : "Selected day"}</th>
+                      <th className="text-right px-4 py-2 text-brand-muted font-medium">7-day</th>
+                      <th className="text-right px-4 py-2 text-brand-muted font-medium">Tokens {isViewingToday ? "today" : ""}</th>
+                      <th className="text-right px-4 py-2 text-brand-muted font-medium">Tokens 7d</th>
+                      <th className="text-left px-4 py-2 text-brand-muted font-medium">Daily cap</th>
+                      <th className="text-left px-4 py-2 text-brand-muted font-medium">Max tokens</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {agents.map(a => (
+                      <tr key={a.agent} className="border-b border-brand-border last:border-0 hover:bg-brand-offwhite/50 align-top">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <AgentBadge agent={a.agent} size="sm" />
+                            <span className="font-medium text-brand-black capitalize">{a.agent}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right text-brand-black">{a.callsToday}</td>
+                        <td className="px-4 py-3 text-right font-medium text-brand-black">{fmt(a.todayCost)}</td>
+                        <td className="px-4 py-3 text-right text-brand-black">{fmt(a.weekCost, 2)}</td>
+                        <td className="px-4 py-3 text-right text-brand-muted">{fmtTokens(a.todayTokens)}</td>
+                        <td className="px-4 py-3 text-right text-brand-muted">{fmtTokens(a.weekTokens)}</td>
+                        <td className="px-4 py-3">
+                          <div className="space-y-2">
+                            <SpendBar spend={a.todayCost} budget={a.dailyBudget} />
+                            <BudgetInput agent={a.agent} current={a.dailyBudget} onSave={v => updateBudget(a.agent, v)} />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {configs[a.agent] ? (
+                            <TokenCapsInput
+                              sonnet={configs[a.agent].sonnet_max_tokens}
+                              haiku={configs[a.agent].haiku_max_tokens}
+                              onSave={(s, h) => updateAgentConfig(a.agent, s, h)}
+                            />
+                          ) : (
+                            <span className="text-[10px] text-brand-muted">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))}
+            )}
           </div>
 
           {/* ── Daily breakdown table ── */}
