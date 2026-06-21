@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { AgentBadge } from "@/components/AgentBadge";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { StatCard } from "@/components/StatCard";
+import { CollapsibleCard } from "@/components/CollapsibleCard";
 import { DashboardStats, WorkflowLog, PendingApproval, AgentStatus, Agent } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 import clsx from "clsx";
@@ -361,50 +362,48 @@ export default function OverviewPage() {
 
       {/* Approvals + Activity — compact two-column */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Pending approvals */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-brand-black">
-              Needs your approval
-              {approvals.length > 0 && (
-                <span className="ml-2 text-xs text-brand-muted font-normal">{approvals.length} pending</span>
-              )}
-            </h2>
-            {approvals.length > 0 && (
-              <Link href="/approvals" className="text-xs text-brand-orange hover:underline">View all →</Link>
+        <CollapsibleCard
+          title="Needs your approval"
+          badge={approvals.length > 0 ? approvals.length : undefined}
+          defaultOpen={true}
+          action={
+            approvals.length > 0
+              ? <Link href="/approvals" className="text-xs text-brand-orange hover:underline">View all →</Link>
+              : undefined
+          }
+        >
+          <div className="p-4">
+            {approvals.length === 0 ? (
+              <p className="text-sm text-brand-muted text-center py-2">No pending approvals</p>
+            ) : (
+              <div className="space-y-3">
+                {approvals.slice(0, 2).map(a => (
+                  <ApprovalCard key={a.id} approval={a} onAction={handleApproval} />
+                ))}
+                {approvals.length > 2 && (
+                  <Link href="/approvals"
+                    className="block text-center text-xs text-brand-orange py-2 hover:underline">
+                    +{approvals.length - 2} more →
+                  </Link>
+                )}
+              </div>
             )}
           </div>
-          {approvals.length === 0 ? (
-            <div className="card text-center py-6">
-              <p className="text-sm text-brand-muted">No pending approvals</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {approvals.slice(0, 2).map(a => (
-                <ApprovalCard key={a.id} approval={a} onAction={handleApproval} />
-              ))}
-              {approvals.length > 2 && (
-                <Link href="/approvals"
-                  className="block text-center text-xs text-brand-orange py-2 hover:underline">
-                  +{approvals.length - 2} more →
-                </Link>
-              )}
-            </div>
-          )}
-        </div>
+        </CollapsibleCard>
 
-        {/* Recent activity */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-brand-black">Recent activity</h2>
+        <CollapsibleCard
+          title="Recent activity"
+          defaultOpen={true}
+          action={
             <Link href="/agents/history" className="text-xs text-brand-orange hover:underline">View all →</Link>
-          </div>
+          }
+        >
           {activity.length === 0 ? (
-            <div className="card text-center py-6">
+            <div className="p-4 text-center">
               <p className="text-sm text-brand-muted">No recent activity</p>
             </div>
           ) : (
-            <div className="card p-0 overflow-hidden">
+            <>
               {activity.slice(0, 6).map((log, i) => (
                 <div key={log.id}
                   className={clsx(
@@ -425,9 +424,9 @@ export default function OverviewPage() {
                   </span>
                 </div>
               ))}
-            </div>
+            </>
           )}
-        </div>
+        </CollapsibleCard>
       </div>
     </div>
   );
