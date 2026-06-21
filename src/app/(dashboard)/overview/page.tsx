@@ -3,11 +3,30 @@ import { useEffect, useState, useCallback } from "react";
 import { AgentBadge } from "@/components/AgentBadge";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { StatCard } from "@/components/StatCard";
-import { DashboardStats, WorkflowLog, PendingApproval, AgentStatus } from "@/types";
+import { DashboardStats, WorkflowLog, PendingApproval, AgentStatus, Agent } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+
+interface RawNote {
+  id: string;
+  agent: string | null;
+  message: string;
+  urgency: string;
+  read_at: string | null;
+}
+
+function stripTags(html: string): string {
+  return html.replace(/<[^>]*>/g, "");
+}
+
+type AlertNote = {
+  id: string;
+  agent: string | null;
+  message: string;
+  urgency: string;
+};
 
 export default function OverviewPage() {
   const [stats,       setStats]       = useState<DashboardStats | null>(null);
@@ -16,14 +35,16 @@ export default function OverviewPage() {
   const [agentStatus, setAgentStatus] = useState<AgentStatus[]>([]);
   const [costToday,   setCostToday]   = useState<number | null>(null);
   const [loading,     setLoading]     = useState(true);
+  const [alerts,      setAlerts]      = useState<AlertNote[]>([]);
 
   const load = useCallback(async () => {
-    const [s, a, ap, ag, usage] = await Promise.all([
+    const [s, a, ap, ag, usage, notifRes] = await Promise.all([
       fetch("/api/stats").then(r => r.json()),
       fetch("/api/activity").then(r => r.json()),
       fetch("/api/approvals").then(r => r.json()),
       fetch("/api/agent-status").then(r => r.json()),
       fetch("/api/usage?days=1").then(r => r.json()).catch(() => null),
+      fetch("/api/notifications").then(r => r.json()).catch(() => ({ notifications: [] })),
     ]);
     setStats(s);
     setActivity(Array.isArray(a) ? a : []);
@@ -34,6 +55,13 @@ export default function OverviewPage() {
       setCostToday(total);
     }
     setLoading(false);
+    const rawNotes: RawNote[] = notifRes.notifications ?? [];
+    setAlerts(
+      rawNotes
+        .filter(n => n.urgency === "high" && !n.read_at)
+        .map(({ id, agent, message, urgency }) => ({ id, agent, message, urgency }))
+        .slice(0, 3)
+    );
   }, []);
 
   useEffect(() => {
@@ -143,6 +171,11 @@ export default function OverviewPage() {
     );
   }
 
+  async function dismissAlert(id: string) {
+    setAlerts(prev => prev.filter(n => n.id !== id));
+    await fetch(`/api/notifications/${id}`, { method: "PATCH" });
+  }
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
@@ -167,6 +200,36 @@ export default function OverviewPage() {
           {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
         </p>
       </div>
+
+      {/* Global alert banners */}
+      {alerts.length > 0 && (
+        <div className="space-y-2 mb-4">
+          {alerts.map(alert => (
+            <div
+              key={alert.id}
+              className="flex items-start gap-3 px-4 py-3 rounded-lg border border-red-200 bg-red-50 text-sm"
+            >
+              {alert.agent && (
+                <AgentBadge agent={alert.agent as Agent} size="sm" />
+              )}
+              <span className="flex-1 text-red-800">
+                {stripTags(alert.message)}
+              </span>
+              <button
+                onClick={() => dismissAlert(alert.id)}
+                className="text-red-400 hover:text-red-600 flex-shrink-0 mt-0.5"
+                aria-label="Dismiss"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Agent status strip */}
       <div className="card p-3 mb-6">
