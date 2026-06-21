@@ -4,13 +4,14 @@ import { supabase } from "@/lib/supabase";
 import { AgentBadge } from "@/components/AgentBadge";
 import RegressionPanel from "@/components/status/RegressionPanel";
 import WebsitePanel from "@/components/status/WebsitePanel";
+import PatchStatusPanel from "@/components/status/PatchStatusPanel";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "agents" | "github" | "vercel" | "supabase" | "vps" | "n8n" | "wordpress" | "regression" | "website" | "kick";
+type Tab = "agents" | "github" | "vercel" | "supabase" | "vps" | "n8n" | "wordpress" | "regression" | "website" | "patches" | "kick";
 
 interface AgentHealth {
   agent: string;
@@ -1476,6 +1477,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "wordpress",  label: "WordPress"  },
   { id: "regression", label: "Regression" },
   { id: "website",    label: "Website"    },
+  { id: "patches",    label: "Patches"    },
   { id: "kick",       label: "Kick"       },
 ];
 
@@ -1540,6 +1542,7 @@ export default function StatusPage() {
       <div className={tab === "wordpress"  ? "block" : "hidden"}><WordpressTab /></div>
       <div className={tab === "regression" ? "block" : "hidden"}><RegressionPanel isAdmin={isAdmin} /></div>
       <div className={tab === "website"    ? "block" : "hidden"}><WebsitePanel isAdmin={isAdmin} /></div>
+      <div className={tab === "patches"    ? "block" : "hidden"}><PatchStatusPanel /></div>
       <div className={tab === "kick"       ? "block" : "hidden"}><KickTab /></div>
     </div>
   );
