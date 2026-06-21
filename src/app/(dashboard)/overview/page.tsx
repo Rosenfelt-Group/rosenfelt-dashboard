@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { AgentBadge } from "@/components/AgentBadge";
 import { ApprovalCard } from "@/components/ApprovalCard";
+import { StatCard } from "@/components/StatCard";
 import { DashboardStats, WorkflowLog, PendingApproval, AgentStatus } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 import clsx from "clsx";
@@ -190,6 +191,29 @@ export default function OverviewPage() {
             </>
           )}
         </div>
+      </div>
+
+      {/* Stats summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <StatCard
+          label="Open work items"
+          value={stats?.open_tasks ?? 0}
+          warn={(stats?.overdue_tasks ?? 0) > 0}
+        />
+        <StatCard
+          label="Overdue"
+          value={stats?.overdue_tasks ?? 0}
+          alert={(stats?.overdue_tasks ?? 0) > 0}
+        />
+        <StatCard
+          label="Runs today"
+          value={stats?.executions_today ?? 0}
+        />
+        <StatCard
+          label="Errors today"
+          value={stats?.errors_today ?? 0}
+          alert={(stats?.errors_today ?? 0) > 0}
+        />
       </div>
 
       {/* Module tiles */}
