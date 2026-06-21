@@ -11,7 +11,17 @@ interface Brief {
   id: string;
   topic: string;
   research_type: string | null;
+  category: string | null;
+  doc_id: string | null;
+  storage_path: string | null;
+  query_count: number | null;
   created_at: string;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  sort_order: number;
 }
 
 export default function SalesPage() {
@@ -22,13 +32,29 @@ export default function SalesPage() {
   const [running, setRunning] = useState(false);
   const [runMsg, setRunMsg] = useState("");
 
+  // Category state
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [catFilter, setCatFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [showManage, setShowManage] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [catSaving, setCatSaving] = useState(false);
+
   useEffect(() => {
     if (tab === "research") {
       setBriefsLoading(true);
-      fetch("/api/research/briefs")
-        .then(r => r.json())
-        .then(d => setBriefs(Array.isArray(d) ? d : []))
-        .catch(() => setBriefs([]))
+      Promise.all([
+        fetch("/api/research/briefs").then(r => r.json()),
+        fetch("/api/research/categories").then(r => r.json()),
+      ])
+        .then(([briefsData, catsData]) => {
+          setBriefs(Array.isArray(briefsData) ? briefsData : []);
+          setCategories(Array.isArray(catsData) ? catsData : []);
+        })
+        .catch(() => {
+          setBriefs([]);
+          setCategories([]);
+        })
         .finally(() => setBriefsLoading(false));
     }
   }, [tab]);
@@ -51,6 +77,58 @@ export default function SalesPage() {
     }
     setRunning(false);
   }
+
+  async function updateBriefCategory(briefId: string, category: string) {
+    // Optimistic update
+    setBriefs(prev =>
+      prev.map(b => (b.id === briefId ? { ...b, category: category || null } : b))
+    );
+    try {
+      await fetch(`/api/research/briefs/${briefId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: category || null }),
+      });
+    } catch {
+      // If it fails, the optimistic update stays — not critical
+    }
+  }
+
+  async function addCategory() {
+    const name = newCatName.trim();
+    if (!name || catSaving) return;
+    setCatSaving(true);
+    try {
+      const r = await fetch("/api/research/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (r.ok) {
+        const cat = await r.json();
+        setCategories(prev => [...prev, cat]);
+        setNewCatName("");
+      }
+    } catch {
+      // silent
+    }
+    setCatSaving(false);
+  }
+
+  async function deleteCategory(catId: string) {
+    setCategories(prev => prev.filter(c => c.id !== catId));
+    try {
+      await fetch(`/api/research/categories/${catId}`, { method: "DELETE" });
+    } catch {
+      // silent
+    }
+  }
+
+  const filteredBriefs = briefs.filter(
+    b =>
+      (!catFilter || b.category === catFilter) &&
+      (!typeFilter || b.research_type === typeFilter)
+  );
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "overview",  label: "Overview" },
@@ -197,33 +275,163 @@ export default function SalesPage() {
             )}
           </div>
 
-          {/* Briefs list */}
+          {/* Filter row */}
+          {!briefsLoading && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                value={catFilter}
+                onChange={e => setCatFilter(e.target.value)}
+                className="text-xs py-1 px-2 border border-brand-border rounded bg-white text-brand-black focus:outline-none focus:border-brand-orange"
+              >
+                <option value="">All categories</option>
+                {categories.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+              <select
+                value={typeFilter}
+                onChange={e => setTypeFilter(e.target.value)}
+                className="text-xs py-1 px-2 border border-brand-border rounded bg-white text-brand-black focus:outline-none focus:border-brand-orange"
+              >
+                <option value="">All types</option>
+                <option value="competitor">Competitor</option>
+                <option value="tool">Tool</option>
+                <option value="trend">Trend</option>
+              </select>
+              <div className="flex-1" />
+              <button
+                onClick={() => setShowManage(v => !v)}
+                className="text-xs text-brand-orange hover:underline"
+              >
+                Manage categories
+              </button>
+            </div>
+          )}
+
+          {/* Briefs table */}
           {briefsLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map(i => <div key={i} className="card animate-pulse h-16" />)}
             </div>
-          ) : briefs.length === 0 ? (
+          ) : filteredBriefs.length === 0 ? (
             <div className="card text-center py-8">
               <p className="text-sm text-brand-muted">No research briefs yet</p>
               <p className="text-xs text-brand-muted mt-1">Run a brief above to get started</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {briefs.map(b => (
-                <div key={b.id} className="card p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-brand-black truncate">{b.topic}</p>
-                      {b.research_type && (
-                        <p className="text-xs text-brand-muted mt-0.5 capitalize">{b.research_type}</p>
-                      )}
-                    </div>
-                    <span className="text-xs text-brand-muted flex-shrink-0">
-                      {formatDistanceToNow(new Date(b.created_at), { addSuffix: true })}
-                    </span>
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-x-auto card">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    {["Topic", "Category", "Type", "Queries", "Date", "Doc"].map(h => (
+                      <th
+                        key={h}
+                        className="text-left text-xs font-semibold text-brand-muted uppercase tracking-wider px-3 py-2.5 whitespace-nowrap"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredBriefs.map(b => (
+                    <tr key={b.id} className="border-t border-brand-border">
+                      <td className="px-3 py-2.5 text-sm text-brand-black font-medium max-w-xs">
+                        {b.topic}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <select
+                          value={b.category ?? ""}
+                          onChange={e => updateBriefCategory(b.id, e.target.value)}
+                          className="text-xs py-1 px-2 border border-brand-border rounded bg-white text-brand-black focus:outline-none focus:border-brand-orange"
+                        >
+                          <option value="">—</option>
+                          {categories.map(c => (
+                            <option key={c.id} value={c.name}>{c.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className="capitalize text-xs text-brand-muted">
+                          {b.research_type ?? "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className="text-xs text-brand-muted">
+                          {b.query_count ?? "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className="text-xs text-brand-muted">
+                          {formatDistanceToNow(new Date(b.created_at), { addSuffix: true })}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {b.storage_path ? (
+                          <a
+                            href={`/documents?path=${encodeURIComponent(b.storage_path)}`}
+                            target="_blank"
+                            className="text-xs text-brand-orange hover:underline"
+                          >
+                            View →
+                          </a>
+                        ) : (
+                          <span className="text-xs text-brand-muted">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Manage categories panel */}
+          {showManage && (
+            <div className="card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-brand-black">Categories</p>
+                <button
+                  onClick={() => setShowManage(false)}
+                  className="text-xs text-brand-muted hover:text-brand-black"
+                >
+                  ✕
+                </button>
+              </div>
+              {categories.length === 0 ? (
+                <p className="text-xs text-brand-muted">No categories yet.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {categories.map(c => (
+                    <li key={c.id} className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-brand-black">{c.name}</span>
+                      <button
+                        onClick={() => deleteCategory(c.id)}
+                        className="text-xs text-brand-muted hover:text-red-500"
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex gap-2 pt-1">
+                <input
+                  type="text"
+                  value={newCatName}
+                  onChange={e => setNewCatName(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && addCategory()}
+                  placeholder="New category name"
+                  className="flex-1 px-3 py-1.5 text-sm border border-brand-border rounded-lg focus:outline-none focus:border-brand-orange"
+                />
+                <button
+                  onClick={addCategory}
+                  disabled={catSaving || !newCatName.trim()}
+                  className="px-3 py-1.5 rounded-lg bg-brand-orange text-white text-sm font-medium disabled:opacity-50 hover:bg-brand-orange/90 transition-colors"
+                >
+                  {catSaving ? "Adding…" : "Add"}
+                </button>
+              </div>
             </div>
           )}
         </div>
