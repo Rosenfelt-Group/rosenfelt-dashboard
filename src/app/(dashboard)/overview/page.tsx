@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { AgentBadge } from "@/components/AgentBadge";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { StatCard } from "@/components/StatCard";
@@ -37,6 +37,7 @@ export default function OverviewPage() {
   const [costToday,   setCostToday]   = useState<number | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [alerts,      setAlerts]      = useState<AlertNote[]>([]);
+  const dismissedIdsRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     const [s, a, ap, ag, usage, notifRes] = await Promise.all([
@@ -59,7 +60,7 @@ export default function OverviewPage() {
     const rawNotes: RawNote[] = notifRes.notifications ?? [];
     setAlerts(
       rawNotes
-        .filter(n => n.urgency === "high" && !n.read_at)
+        .filter(n => n.urgency === "high" && !n.read_at && !dismissedIdsRef.current.has(n.id))
         .map(({ id, agent, message, urgency }) => ({ id, agent, message, urgency }))
         .slice(0, 3)
     );
@@ -173,6 +174,7 @@ export default function OverviewPage() {
   }
 
   async function dismissAlert(id: string) {
+    dismissedIdsRef.current.add(id);
     setAlerts(prev => prev.filter(n => n.id !== id));
     await fetch(`/api/notifications/${id}`, { method: "PATCH" });
   }
@@ -403,7 +405,7 @@ export default function OverviewPage() {
               <p className="text-sm text-brand-muted">No recent activity</p>
             </div>
           ) : (
-            <>
+            <div className="overflow-hidden">
               {activity.slice(0, 6).map((log, i) => (
                 <div key={log.id}
                   className={clsx(
@@ -424,7 +426,7 @@ export default function OverviewPage() {
                   </span>
                 </div>
               ))}
-            </>
+            </div>
           )}
         </CollapsibleCard>
       </div>
