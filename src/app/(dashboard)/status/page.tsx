@@ -810,47 +810,51 @@ function formatUptime(seconds: number) {
   return `${m}m`;
 }
 
-function VpsTab() {
-  const [stats, setStats]     = useState<VpsStats | null>(null);
-  const [error, setError]     = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+const OVH_CORE_CONTAINERS = ["jordan-agent", "riley-agent", "avery-agent", "casey-agent", "sam-agent", "traefik"];
+const HOSTINGER_CORE_CONTAINERS = ["n8n-n8n-1", "wordpress-wordpress-1", "vaultwarden-vaultwarden-1", "docs-mcp", "n8n-traefik-1", "wordpress-wordpress-db-1"];
 
-  const load = useCallback(async () => {
-    setError(null);
-    const res = await fetch("/api/vps/stats");
-    if (!res.ok) { setError(`Failed to load (${res.status})`); setLoading(false); return; }
-    setStats(await res.json());
-    setLastRefresh(new Date());
-    setLoading(false);
-  }, []);
+interface ServerCardProps {
+  label: string;
+  ip: string;
+  stats: VpsStats | null;
+  error: string | null;
+  coreContainers: string[];
+}
 
-  useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t); }, [load]);
-
-  if (loading) return <div className="card animate-pulse h-64" />;
-  if (error)   return <div className="card p-6 text-sm text-red-600">{error}</div>;
-  if (!stats)  return null;
-
-  const CORE_CONTAINERS = ["jordan-agent", "riley-agent", "avery-agent", "n8n", "traefik", "wordpress"];
-
+function ServerCard({ label, ip, stats, error, coreContainers }: ServerCardProps) {
+  if (error) {
+    return (
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold text-brand-black">{label} <span className="font-normal text-brand-muted">— {ip}</span></h2>
+        <div className="card p-4 text-sm text-red-600">{error}</div>
+      </div>
+    );
+  }
+  if (!stats) {
+    return (
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold text-brand-black">{label} <span className="font-normal text-brand-muted">— {ip}</span></h2>
+        <div className="card animate-pulse h-40" />
+      </div>
+    );
+  }
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      <h2 className="text-sm font-semibold text-brand-black">{label} <span className="font-normal text-brand-muted">— {ip}</span></h2>
+
       {/* System metrics */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* CPU */}
+      <div className="grid grid-cols-3 gap-3">
         <div className="card space-y-2">
           <p className="text-xs text-brand-muted uppercase tracking-wide">CPU</p>
           <p className="text-2xl font-semibold text-brand-black">{stats.cpu_percent.toFixed(1)}%</p>
           <UsageBar percent={stats.cpu_percent} />
         </div>
-        {/* Memory */}
         <div className="card space-y-2">
           <p className="text-xs text-brand-muted uppercase tracking-wide">Memory</p>
           <p className="text-2xl font-semibold text-brand-black">{stats.memory.percent.toFixed(1)}%</p>
           <UsageBar percent={stats.memory.percent} />
           <p className="text-xs text-brand-muted">{stats.memory.used_gb} / {stats.memory.total_gb} GB</p>
         </div>
-        {/* Disk */}
         <div className="card space-y-2">
           <p className="text-xs text-brand-muted uppercase tracking-wide">Disk</p>
           <p className="text-2xl font-semibold text-brand-black">{stats.disk.percent}%</p>
@@ -859,27 +863,23 @@ function VpsTab() {
         </div>
       </div>
 
-      {/* Uptime + refresh */}
-      <div className="flex items-center justify-between text-xs text-brand-muted px-0.5">
-        <span>Uptime: <span className="text-brand-black font-medium">{formatUptime(stats.uptime_seconds)}</span></span>
-        <div className="flex items-center gap-3">
-          {lastRefresh && <span>Updated {formatDistanceToNow(lastRefresh, { addSuffix: true })}</span>}
-          <button onClick={load} className="text-brand-orange hover:underline">Refresh</button>
-        </div>
-      </div>
+      {/* Uptime */}
+      <p className="text-xs text-brand-muted px-0.5">
+        Uptime: <span className="text-brand-black font-medium">{formatUptime(stats.uptime_seconds)}</span>
+      </p>
 
       {/* Containers */}
       <div>
-        <h2 className="text-sm font-medium text-brand-black mb-3">Containers</h2>
+        <p className="text-xs font-medium text-brand-black mb-2">Containers</p>
         <div className="card p-0 overflow-hidden">
           {stats.containers.length === 0 ? (
-            <div className="p-6 text-sm text-brand-muted text-center">No running containers found</div>
+            <div className="p-4 text-sm text-brand-muted text-center">No running containers found</div>
           ) : (
             stats.containers
               .slice()
               .sort((a, b) => {
-                const ai = CORE_CONTAINERS.indexOf(a.name);
-                const bi = CORE_CONTAINERS.indexOf(b.name);
+                const ai = coreContainers.indexOf(a.name);
+                const bi = coreContainers.indexOf(b.name);
                 if (ai === -1 && bi === -1) return a.name.localeCompare(b.name);
                 if (ai === -1) return 1;
                 if (bi === -1) return -1;
@@ -897,6 +897,47 @@ function VpsTab() {
                 );
               })
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VpsTab() {
+  const [ovhStats,  setOvhStats]  = useState<VpsStats | null>(null);
+  const [hostStats, setHostStats] = useState<VpsStats | null>(null);
+  const [ovhError,  setOvhError]  = useState<string | null>(null);
+  const [hostError, setHostError] = useState<string | null>(null);
+  const [loading,   setLoading]   = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+
+  const load = useCallback(async () => {
+    const [ovhRes, hostRes] = await Promise.all([
+      fetch("/api/vps/stats"),
+      fetch("/api/hostinger/stats"),
+    ]);
+    if (ovhRes.ok)  { setOvhStats(await ovhRes.json());   setOvhError(null); }
+    else            { setOvhError(`OVH: ${ovhRes.status}`); }
+    if (hostRes.ok) { setHostStats(await hostRes.json()); setHostError(null); }
+    else            { setHostError(`Hostinger: ${hostRes.status}`); }
+    setLastRefresh(new Date());
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t); }, [load]);
+
+  if (loading) return <div className="space-y-6">{[1, 2].map(i => <div key={i} className="card animate-pulse h-64" />)}</div>;
+
+  return (
+    <div className="space-y-8">
+      <ServerCard label="OVH" ip="40.160.3.254" stats={ovhStats} error={ovhError} coreContainers={OVH_CORE_CONTAINERS} />
+      <ServerCard label="Hostinger" ip="72.61.3.102" stats={hostStats} error={hostError} coreContainers={HOSTINGER_CORE_CONTAINERS} />
+
+      <div className="flex items-center justify-between text-xs text-brand-muted px-0.5">
+        <span />
+        <div className="flex items-center gap-3">
+          {lastRefresh && <span>Updated {formatDistanceToNow(lastRefresh, { addSuffix: true })}</span>}
+          <button onClick={load} className="text-brand-orange hover:underline">Refresh</button>
         </div>
       </div>
     </div>
