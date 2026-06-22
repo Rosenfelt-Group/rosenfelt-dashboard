@@ -132,17 +132,39 @@ function severityBadge(sev?: string): string {
   return "bg-gray-100 text-gray-500";
 }
 
+interface RemApproval {
+  id: string;
+  status: string;
+  created_at: string;
+  reviewed_at: string | null;
+  payload: { host?: string; category?: string } | null;
+}
+
+const REM_BADGE: Record<string, { label: string; cls: string }> = {
+  pending: { label: "approval pending", cls: "bg-amber-50 text-amber-700" },
+  approved: { label: "approved", cls: "bg-green-50 text-green-700" },
+  rejected: { label: "rejected", cls: "bg-red-50 text-red-700" },
+  revision_requested: { label: "revision", cls: "bg-amber-50 text-amber-700" },
+  expired: { label: "expired", cls: "bg-gray-100 text-gray-500" },
+};
+
 export default function PatchStatusPanel() {
   const [rows, setRows] = useState<PatchRow[]>([]);
+  const [rems, setRems] = useState<RemApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/patch/runs?limit=80");
-      const data = res.ok ? await res.json() : [];
-      setRows(Array.isArray(data) ? data : []);
+      const [runsRes, remsRes] = await Promise.all([
+        fetch("/api/patch/runs?limit=80"),
+        fetch("/api/patch/remediations"),
+      ]);
+      const runsData = runsRes.ok ? await runsRes.json() : [];
+      const remsData = remsRes.ok ? await remsRes.json() : [];
+      setRows(Array.isArray(runsData) ? runsData : []);
+      setRems(Array.isArray(remsData) ? remsData : []);
     } finally {
       setLoading(false);
     }
@@ -161,6 +183,15 @@ export default function PatchStatusPanel() {
           debounce.current = setTimeout(() => load(), 800);
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "pending_approvals" },
+        () => {
+          // Remediation approvals filed/approved/rejected → refresh badges.
+          if (debounce.current) clearTimeout(debounce.current);
+          debounce.current = setTimeout(() => load(), 800);
+        },
+      )
       .subscribe();
     return () => {
       if (debounce.current) clearTimeout(debounce.current);
@@ -175,6 +206,13 @@ export default function PatchStatusPanel() {
   const scans = groupScans(rows);
   const latest = scans[0];
   const history = scans.slice(1, 11);
+
+  // Most-recent remediation approval keyed by host/category (rems are created_at desc).
+  const remByKey: Record<string, RemApproval> = {};
+  for (const r of rems) {
+    const k = `${r.payload?.host}/${r.payload?.category}`;
+    if (!remByKey[k]) remByKey[k] = r;
+  }
 
   return (
     <div className="space-y-4">
@@ -226,6 +264,12 @@ export default function PatchStatusPanel() {
                     {items.length > 0 && (
                       <span className="text-xs text-brand-muted flex-shrink-0">{items.length} item{items.length === 1 ? "" : "s"}</span>
                     )}
+                    {(() => {
+                      const rem = remByKey[`${row.host}/${row.category}`];
+                      if (!rem) return null;
+                      const b = REM_BADGE[rem.status] ?? { label: rem.status, cls: "bg-gray-100 text-gray-500" };
+                      return <span className={clsx("badge text-[10px] px-1.5 py-0.5 flex-shrink-0", b.cls)}>{b.label}</span>;
+                    })()}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <span className={clsx("uppercase text-[10px] font-semibold", STATUS_BADGE[row.status])}>

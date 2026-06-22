@@ -10,6 +10,79 @@ interface ApprovalCardProps {
   isAdmin?: boolean;
 }
 
+interface RemItem { item: string; current?: string; available?: string; severity?: string; source?: string }
+
+function PatchRemediationDetail({ payload }: { payload?: Record<string, unknown> }) {
+  const host = (payload?.host as string) ?? "";
+  const category = (payload?.category as string) ?? "";
+  const safe = (payload?.safe_items as RemItem[]) ?? [];
+  const deferred = (payload?.deferred_items as RemItem[]) ?? [];
+  const plan = (payload?.plan as string[]) ?? [];
+  const snapshot = Boolean(payload?.snapshot_required);
+  const hostLabel = host === "ovh" ? "OVH" : host === "hostinger" ? "Hostinger" : host === "wordpress" ? "WordPress" : host;
+  const kind = category === "wp_plugins" ? "plugin" : "OS package";
+
+  return (
+    <div className="border-t border-brand-border pt-3 space-y-3">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="badge bg-amber-50 text-amber-700 px-2 py-0.5">Dry-run</span>
+        <span className="text-brand-muted">Approving records intent only — no host changes yet (Phase 2a).</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-brand-muted">
+        <span>Host: <span className="text-brand-black">{hostLabel}</span></span>
+        <span><span className="text-brand-black">{safe.length}</span> {kind}(s) to apply</span>
+        {deferred.length > 0 && <span><span className="text-brand-black">{deferred.length}</span> deferred</span>}
+        {snapshot && <span className="badge bg-blue-50 text-blue-700 px-1.5 py-0.5">snapshot + backup first</span>}
+      </div>
+
+      {safe.length > 0 && (
+        <div className="rounded-lg border border-brand-border overflow-hidden">
+          <div className="px-3 py-1.5 bg-brand-offwhite text-[11px] font-semibold text-brand-muted uppercase tracking-wide">
+            Will apply ({safe.length})
+          </div>
+          <div className="divide-y divide-brand-border">
+            {safe.map((it, i) => (
+              <div key={i} className="px-3 py-1.5 flex items-center gap-2 flex-wrap text-xs">
+                <span className="font-mono text-brand-black">{it.item}</span>
+                {(it.current || it.available) && (
+                  <span className="text-brand-muted font-mono">{it.current || "—"} → <span className="text-brand-black">{it.available || "—"}</span></span>
+                )}
+                {it.severity === "major" && <span className="badge bg-red-50 text-red-700 text-[9px] px-1 py-0">major</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {deferred.length > 0 && (
+        <div className="rounded-lg border border-brand-border overflow-hidden">
+          <div className="px-3 py-1.5 bg-brand-offwhite text-[11px] font-semibold text-brand-muted uppercase tracking-wide flex items-center gap-2 flex-wrap">
+            Deferred — manual maintenance window ({deferred.length})
+            <span className="badge bg-gray-100 text-gray-500 text-[9px] px-1 py-0">restart/reboot risk</span>
+          </div>
+          <div className="divide-y divide-brand-border">
+            {deferred.map((it, i) => (
+              <div key={i} className="px-3 py-1.5 flex items-center gap-2 flex-wrap text-xs">
+                <span className="font-mono text-brand-muted">{it.item}</span>
+                {(it.current || it.available) && (
+                  <span className="text-brand-muted font-mono">{it.current || "—"} → {it.available || "—"}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {plan.length > 0 && (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-brand-muted select-none">Planned command{plan.length > 1 ? "s" : ""}</summary>
+          <pre className="mt-1 p-2 bg-brand-offwhite rounded text-[11px] text-brand-black overflow-x-auto whitespace-pre-wrap">{plan.join("\n")}</pre>
+        </details>
+      )}
+    </div>
+  );
+}
+
 export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCardProps) {
   const [loading,       setLoading]       = useState<"approved" | "rejected" | "revision_requested" | "send_audit" | null>(null);
   const [showRevise,    setShowRevise]    = useState(false);
@@ -46,6 +119,7 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
   }
 
   const isStackAudit = approval.action_type === "stack_audit_report";
+  const isPatchRemediation = approval.action_type === "patch_remediation";
   const editUrl = approval.payload?.edit_url as string | undefined;
   const auditClient = approval.payload?.company_name as string | undefined;
   const auditEmail = approval.payload?.contact_email as string | undefined;
@@ -64,7 +138,7 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
         <AgentBadge agent={approval.agent} />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-brand-black">{approval.title}</p>
-          {approval.description && (
+          {approval.description && !isPatchRemediation && (
             <p className="text-xs text-brand-muted mt-0.5 line-clamp-2">{approval.description}</p>
           )}
           <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -117,13 +191,15 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
                 >
                   {loading === "approved" ? "…" : "Approve"}
                 </button>
-                <button
-                  onClick={() => setShowRevise(true)}
-                  disabled={loading !== null}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50"
-                >
-                  Revise
-                </button>
+                {!isPatchRemediation && (
+                  <button
+                    onClick={() => setShowRevise(true)}
+                    disabled={loading !== null}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                  >
+                    Revise
+                  </button>
+                )}
                 <button
                   onClick={() => handle("rejected")}
                   disabled={loading !== null}
@@ -141,6 +217,9 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
           </span>
         )}
       </div>
+
+      {/* Patch remediation detail — item table, deferred set, planned command */}
+      {isPatchRemediation && <PatchRemediationDetail payload={approval.payload} />}
 
       {/* Stack Audit recipient summary — surfaces who the PDF will go to */}
       {isStackAudit && (auditClient || auditEmail) && (
