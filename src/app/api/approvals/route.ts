@@ -245,6 +245,53 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: true, execute: executeResult });
     }
 
+    // ── PATCH REMEDIATION approved → Jordan /patch/apply (dry-run unless enabled on Jordan) ──
+    if (status === "approved" && approval?.agent === "casey" && approval?.action_type === "patch_remediation") {
+      if (!reviewer) {
+        return NextResponse.json({ error: "Patch apply blocked: no human reviewer on record" }, { status: 403 });
+      }
+      const jUrl = process.env.JORDAN_API_URL;
+      const jSecret = process.env.JORDAN_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
+      if (!jUrl || !jSecret) {
+        await supabaseAdmin.from("workflow_logs").insert({
+          workflow_name: "Dashboard Patch Apply Gate",
+          agent: "jordan",
+          trigger_text: approval.title ?? `approval ${id}`,
+          status: "error",
+          error_message: !jUrl ? "JORDAN_API_URL not configured" : "JORDAN_WEBHOOK_SECRET not configured",
+        });
+        return NextResponse.json({ success: true, apply: { ok: false, detail: "config missing" } });
+      }
+
+      let applyResult: { ok: boolean; detail: string };
+      try {
+        const res = await fetch(`${jUrl}/patch/apply`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Webhook-Secret": jSecret },
+          body: JSON.stringify({ approval_id: id, reviewer }),
+        });
+        const resBody = await res.json().catch(() => ({}));
+        applyResult = {
+          ok: res.ok,
+          detail: res.ok
+            ? (resBody.dry_run ? `dry-run recorded (${resBody.items} item(s))` : `apply ${resBody.status ?? "done"}`)
+            : `jordan returned HTTP ${res.status}`,
+        };
+      } catch (e) {
+        applyResult = { ok: false, detail: e instanceof Error ? e.message : "apply call failed" };
+      }
+
+      await supabaseAdmin.from("workflow_logs").insert({
+        workflow_name: "Dashboard Patch Apply Gate",
+        agent: "jordan",
+        trigger_text: approval.title ?? `approval ${id}`,
+        status: applyResult.ok ? "success" : "error",
+        ...(applyResult.ok ? {} : { error_message: applyResult.detail }),
+      });
+
+      return NextResponse.json({ success: true, apply: applyResult });
+    }
+
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("Approval update error:", err);
