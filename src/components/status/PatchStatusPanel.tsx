@@ -70,16 +70,26 @@ function groupScans(rows: PatchRow[]): PatchScan[] {
 
   const flush = () => {
     if (!current.length) return;
+    // Rapid back-to-back scans can fall in the same time window; keep one row
+    // per host/category (the most recent — input is run_at-desc).
+    const seen = new Set<string>();
+    const deduped: PatchRow[] = [];
+    for (const r of current) {
+      const k = `${r.host}/${r.category}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      deduped.push(r);
+    }
     let overall: PatchStatus = "clean";
     const counts = { clean: 0, needs_attention: 0, error: 0 };
-    for (const r of current) {
+    for (const r of deduped) {
       overall = worst(overall, r.status);
       counts[r.status] += 1;
     }
     scans.push({
-      run_at: current[0].run_at,
-      triggered_by: current[0].triggered_by,
-      rows: current,
+      run_at: deduped[0].run_at,
+      triggered_by: deduped[0].triggered_by,
+      rows: deduped,
       overall,
       counts,
     });
