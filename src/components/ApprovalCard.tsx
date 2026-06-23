@@ -6,13 +6,17 @@ import { formatDistanceToNow } from "date-fns";
 
 interface ApprovalCardProps {
   approval: PendingApproval;
-  onAction: (id: string, status: "approved" | "rejected" | "revision_requested", revisionNotes?: string) => Promise<void>;
+  onAction: (id: string, status: "approved" | "rejected" | "revision_requested", revisionNotes?: string, selectedItems?: string[]) => Promise<void>;
   isAdmin?: boolean;
 }
 
 interface RemItem { item: string; current?: string; available?: string; severity?: string; source?: string }
 
-function PatchRemediationDetail({ payload }: { payload?: Record<string, unknown> }) {
+function PatchRemediationDetail({ payload, selected, onToggle }: {
+  payload?: Record<string, unknown>;
+  selected: Set<string>;
+  onToggle: (item: string) => void;
+}) {
   const host = (payload?.host as string) ?? "";
   const category = (payload?.category as string) ?? "";
   const safe = (payload?.safe_items as RemItem[]) ?? [];
@@ -24,31 +28,33 @@ function PatchRemediationDetail({ payload }: { payload?: Record<string, unknown>
 
   return (
     <div className="border-t border-brand-border pt-3 space-y-3">
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="badge bg-amber-50 text-amber-700 px-2 py-0.5">Dry-run</span>
-        <span className="text-brand-muted">Approving records intent only — no host changes yet (Phase 2a).</span>
-      </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-brand-muted">
         <span>Host: <span className="text-brand-black">{hostLabel}</span></span>
-        <span><span className="text-brand-black">{safe.length}</span> {kind}(s) to apply</span>
+        <span><span className="text-brand-black">{selected.size}</span> of {safe.length} {kind}(s) selected</span>
         {deferred.length > 0 && <span><span className="text-brand-black">{deferred.length}</span> deferred</span>}
-        {snapshot && <span className="badge bg-blue-50 text-blue-700 px-1.5 py-0.5">snapshot + backup first</span>}
+        {snapshot && <span className="badge bg-blue-50 text-blue-700 px-1.5 py-0.5">version-pin rollback recorded</span>}
       </div>
 
       {safe.length > 0 && (
         <div className="rounded-lg border border-brand-border overflow-hidden">
           <div className="px-3 py-1.5 bg-brand-offwhite text-[11px] font-semibold text-brand-muted uppercase tracking-wide">
-            Will apply ({safe.length})
+            Select {kind}s to apply ({selected.size}/{safe.length})
           </div>
           <div className="divide-y divide-brand-border">
             {safe.map((it, i) => (
-              <div key={i} className="px-3 py-1.5 flex items-center gap-2 flex-wrap text-xs">
+              <label key={i} className="px-3 py-1.5 flex items-center gap-2 flex-wrap text-xs cursor-pointer hover:bg-brand-offwhite">
+                <input
+                  type="checkbox"
+                  checked={selected.has(it.item)}
+                  onChange={() => onToggle(it.item)}
+                  className="accent-brand-orange flex-shrink-0"
+                />
                 <span className="font-mono text-brand-black">{it.item}</span>
                 {(it.current || it.available) && (
                   <span className="text-brand-muted font-mono">{it.current || "—"} → <span className="text-brand-black">{it.available || "—"}</span></span>
                 )}
                 {it.severity === "major" && <span className="badge bg-red-50 text-red-700 text-[9px] px-1 py-0">major</span>}
-              </div>
+              </label>
             ))}
           </div>
         </div>
@@ -89,12 +95,45 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
   const [revisionNotes, setRevisionNotes] = useState("");
   const [sendError,     setSendError]     = useState<string | null>(null);
 
-  async function handle(status: "approved" | "rejected" | "revision_requested", notes?: string) {
+  const safeItems = (approval.payload?.safe_items as RemItem[]) ?? [];
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(safeItems.map((i) => i.item)));
+  const [dryLoading, setDryLoading] = useState(false);
+  const [dryResult, setDryResult] = useState<string | null>(null);
+  const toggleItem = (name: string) =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(name)) n.delete(name); else n.add(name);
+      return n;
+    });
+
+  async function handle(status: "approved" | "rejected" | "revision_requested", notes?: string, items?: string[]) {
     setLoading(status);
-    await onAction(approval.id, status, notes);
+    await onAction(approval.id, status, notes, items);
     setLoading(null);
     setShowRevise(false);
     setRevisionNotes("");
+  }
+
+  async function handleDryRun() {
+    setDryLoading(true);
+    setDryResult(null);
+    try {
+      const res = await fetch("/api/patch/dry-run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approval_id: approval.id, selected_items: Array.from(selected) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setDryResult(`✓ Dry-run OK — would apply ${data.items} item(s):\n${data.preview ?? ""}`);
+      } else {
+        setDryResult(`Dry-run failed: ${data.detail ?? data.error ?? `HTTP ${res.status}`}`);
+      }
+    } catch (e) {
+      setDryResult(`Dry-run failed: ${e instanceof Error ? e.message : "error"}`);
+    } finally {
+      setDryLoading(false);
+    }
   }
 
   async function handleSendAudit() {
@@ -182,6 +221,30 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
                   {loading === "rejected" ? "…" : "Reject"}
                 </button>
               </>
+            ) : isPatchRemediation ? (
+              <>
+                <button
+                  onClick={handleDryRun}
+                  disabled={loading !== null || dryLoading || selected.size === 0}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                >
+                  {dryLoading ? "…" : `Dry-run (${selected.size})`}
+                </button>
+                <button
+                  onClick={() => handle("approved", undefined, Array.from(selected))}
+                  disabled={loading !== null || dryLoading || selected.size === 0}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  {loading === "approved" ? "…" : `Apply live (${selected.size})`}
+                </button>
+                <button
+                  onClick={() => handle("rejected")}
+                  disabled={loading !== null || dryLoading}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                >
+                  {loading === "rejected" ? "…" : "Reject"}
+                </button>
+              </>
             ) : (
               <>
                 <button
@@ -191,15 +254,13 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
                 >
                   {loading === "approved" ? "…" : "Approve"}
                 </button>
-                {!isPatchRemediation && (
-                  <button
-                    onClick={() => setShowRevise(true)}
-                    disabled={loading !== null}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50"
-                  >
-                    Revise
-                  </button>
-                )}
+                <button
+                  onClick={() => setShowRevise(true)}
+                  disabled={loading !== null}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                >
+                  Revise
+                </button>
                 <button
                   onClick={() => handle("rejected")}
                   disabled={loading !== null}
@@ -218,8 +279,13 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
         )}
       </div>
 
-      {/* Patch remediation detail — item table, deferred set, planned command */}
-      {isPatchRemediation && <PatchRemediationDetail payload={approval.payload} />}
+      {/* Patch remediation detail — selectable item table, deferred set, planned command */}
+      {isPatchRemediation && (
+        <PatchRemediationDetail payload={approval.payload} selected={selected} onToggle={toggleItem} />
+      )}
+      {isPatchRemediation && dryResult && (
+        <pre className="text-[11px] text-brand-black bg-brand-offwhite border border-brand-border rounded-lg p-2 overflow-x-auto whitespace-pre-wrap">{dryResult}</pre>
+      )}
 
       {/* Stack Audit recipient summary — surfaces who the PDF will go to */}
       {isStackAudit && (auditClient || auditEmail) && (

@@ -265,10 +265,11 @@ export async function PATCH(req: NextRequest) {
 
       let applyResult: { ok: boolean; detail: string };
       try {
+        const selectedItems = Array.isArray(body.selected_items) ? body.selected_items : undefined;
         const res = await fetch(`${jUrl}/patch/apply`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Webhook-Secret": jSecret },
-          body: JSON.stringify({ approval_id: id, reviewer }),
+          body: JSON.stringify({ approval_id: id, reviewer, selected_items: selectedItems, dry_run: false }),
         });
         const resBody = await res.json().catch(() => ({}));
         applyResult = {

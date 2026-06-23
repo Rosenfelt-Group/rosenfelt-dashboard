@@ -125,11 +125,12 @@ export default function ApprovalsPage() {
     id: string,
     status: "approved" | "rejected" | "revision_requested",
     revisionNotes?: string,
+    selectedItems?: string[],
   ) {
     const res = await fetch("/api/approvals", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status, revision_notes: revisionNotes }),
+      body: JSON.stringify({ id, status, revision_notes: revisionNotes, selected_items: selectedItems }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
