@@ -1,46 +1,45 @@
 import React from "react";
 
 export const WORKSPACE_MODULES = [
+  // ── Home ────────────────────────────────────────────────────────────────────
   {
     id: "dashboard",
-    label: "Overview",
-    tabLabel: "Overview",
+    label: "Dashboard",
+    tabLabel: "Dashboard",
     href: "/overview",
     icon: "grid",
     active: ["/overview"],
+    group: "Home",
   },
   {
-    id: "control",
-    label: "Control Center",
-    tabLabel: "Control",
-    href: "/control-center",
-    icon: "activity",
-    active: ["/control-center", "/status", "/work", "/approvals"],
+    id: "work",
+    label: "Work Items",
+    tabLabel: "Work",
+    href: "/work",
+    icon: "kanban",
+    active: ["/work"],
+    group: "Home",
   },
-  {
-    id: "documents",
-    label: "Documents",
-    tabLabel: "Docs",
-    href: "/documents",
-    icon: "folder",
-    active: ["/documents", "/images"],
-  },
+  // ── Sales & Marketing ───────────────────────────────────────────────────────
   {
     id: "sales",
-    label: "Sales & Marketing",
+    label: "Sales",
     tabLabel: "Sales",
     href: "/sales",
     icon: "trendingUp",
-    active: ["/sales", "/crm", "/quiz", "/content", "/analytics"],
+    active: ["/sales", "/crm", "/quiz"],
+    group: "Sales & Marketing",
   },
   {
-    id: "agents",
-    label: "Agent Central",
-    tabLabel: "Agents",
-    href: "/agent-central",
-    icon: "brain",
-    active: ["/agent-central", "/agents", "/chat"],
+    id: "marketing",
+    label: "Marketing",
+    tabLabel: "Marketing",
+    href: "/content",
+    icon: "edit",
+    active: ["/content", "/analytics"],
+    group: "Sales & Marketing",
   },
+  // ── Finance ─────────────────────────────────────────────────────────────────
   {
     id: "finance",
     label: "Finance",
@@ -48,6 +47,36 @@ export const WORKSPACE_MODULES = [
     href: "/finance",
     icon: "dollar",
     active: ["/finance", "/cost", "/billing"],
+    group: "Finance",
+  },
+  // ── System ──────────────────────────────────────────────────────────────────
+  {
+    id: "status",
+    label: "Status",
+    tabLabel: "Status",
+    href: "/status",
+    icon: "activity",
+    active: ["/status", "/control-center", "/approvals"],
+    group: "System",
+  },
+  {
+    id: "agents",
+    label: "Agents",
+    tabLabel: "Agents",
+    href: "/agent-central",
+    icon: "brain",
+    active: ["/agent-central", "/agents", "/chat"],
+    group: "System",
+  },
+  // ── Resources ───────────────────────────────────────────────────────────────
+  {
+    id: "docs",
+    label: "Docs",
+    tabLabel: "Docs",
+    href: "/documents",
+    icon: "folder",
+    active: ["/documents", "/images"],
+    group: "Resources",
   },
   {
     id: "tools",
@@ -56,8 +85,12 @@ export const WORKSPACE_MODULES = [
     href: "/tools",
     icon: "wrench",
     active: ["/tools", "/users", "/rbac", "/backup", "/sql", "/engineering"],
+    group: "Resources",
   },
 ] as const;
+
+export const NAV_GROUPS = ["Home", "Sales & Marketing", "Finance", "System", "Resources"] as const;
+export type NavGroup = typeof NAV_GROUPS[number];
 
 export type SectionId = typeof WORKSPACE_MODULES[number]["id"];
 
@@ -68,21 +101,18 @@ export interface SubPage {
 }
 
 export const SUB_PAGES: Partial<Record<SectionId, SubPage[]>> = {
-  control: [
-    { label: "Status",     href: "/status",    icon: "activity" },
-    { label: "Work Board", href: "/work",       icon: "kanban"   },
-    { label: "Approvals",  href: "/approvals",  icon: "check"    },
-  ],
-  documents: [
-    { label: "Documents", href: "/documents", icon: "folder" },
-    { label: "Images",    href: "/images",    icon: "image"  },
+  work: [
+    { label: "Work Board", href: "/work",      icon: "kanban" },
+    { label: "Approvals",  href: "/approvals", icon: "check"  },
   ],
   sales: [
-    { label: "Sales",     href: "/sales",     icon: "trendingUp" },
-    { label: "CRM",       href: "/crm",       icon: "users"      },
-    { label: "Content",   href: "/content",   icon: "edit"       },
-    { label: "Analytics", href: "/analytics", icon: "barChart"   },
-    { label: "Quiz",      href: "/quiz",       icon: "package"   },
+    { label: "Sales",  href: "/sales", icon: "trendingUp" },
+    { label: "CRM",    href: "/crm",   icon: "users"      },
+    { label: "Quiz",   href: "/quiz",  icon: "package"    },
+  ],
+  marketing: [
+    { label: "Content",   href: "/content",   icon: "edit"     },
+    { label: "Analytics", href: "/analytics", icon: "barChart" },
   ],
   agents: [
     { label: "Agent Central", href: "/agent-central",       icon: "brain"   },
@@ -91,9 +121,13 @@ export const SUB_PAGES: Partial<Record<SectionId, SubPage[]>> = {
     { label: "Chat",          href: "/chat",                icon: "chat"    },
   ],
   finance: [
-    { label: "Finance", href: "/finance",  icon: "dollar"     },
-    { label: "Cost",    href: "/cost",     icon: "creditCard" },
-    { label: "Billing", href: "/billing",  icon: "barChart"   },
+    { label: "Finance", href: "/finance", icon: "dollar"     },
+    { label: "Cost",    href: "/cost",    icon: "creditCard" },
+    { label: "Billing", href: "/billing", icon: "barChart"   },
+  ],
+  docs: [
+    { label: "Documents", href: "/documents", icon: "folder" },
+    { label: "Images",    href: "/images",    icon: "image"  },
   ],
   tools: [
     { label: "Tools",  href: "/tools",       icon: "wrench"   },

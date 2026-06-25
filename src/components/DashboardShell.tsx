@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
+import { Sidebar }   from "./Sidebar";
 import { TopBar }    from "./TopBar";
 import { LeftPanel } from "./LeftPanel";
 import { MobileNav } from "./MobileNav";
@@ -117,10 +118,13 @@ function SystemBanner() {
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-brand-offwhite">
+      {/* Desktop: fixed left sidebar */}
+      <Sidebar />
+      {/* Mobile: top bar + slide-out nav */}
       <TopBar />
       <MobileNav />
-      {/* Offset for fixed top bars: mobile h-14 (56px), desktop h-[46px] */}
-      <div className="flex min-h-screen pt-14 md:pt-[46px]">
+      {/* Content area — offset left by sidebar on desktop, top on mobile */}
+      <div className="flex min-h-screen pt-14 md:pt-0 md:pl-[220px]">
         <LeftPanel />
         <main className="flex-1 min-h-screen">
           <SystemBanner />
