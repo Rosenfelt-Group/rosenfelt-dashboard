@@ -38,7 +38,7 @@ export function Sidebar() {
           const items = WORKSPACE_MODULES.filter(m => m.group === group);
           return (
             <div key={group}>
-              <div className="px-2 mb-1 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-brand-border">
+              <div className="px-2 mb-1 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-brand-muted">
                 {group}
               </div>
               {items.map(mod => {
@@ -51,10 +51,10 @@ export function Sidebar() {
                       "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[12.5px] font-medium transition-colors mb-0.5",
                       active
                         ? "bg-orange-50 text-brand-orange"
-                        : "text-brand-muted hover:text-brand-black hover:bg-brand-offwhite"
+                        : "text-brand-black hover:bg-brand-offwhite"
                     )}
                   >
-                    <span className={clsx("shrink-0", active ? "text-brand-orange" : "text-brand-border")}>
+                    <span className={clsx("shrink-0", active ? "text-brand-orange" : "text-brand-muted")}>
                       <Icon name={mod.icon} size={15} />
                     </span>
                     {mod.label}
