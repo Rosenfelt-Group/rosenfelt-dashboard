@@ -1570,7 +1570,7 @@ export default function StatusPage() {
         </div>
       </div>
       <div className={tab === "website"    ? "block" : "hidden"}><WebsitePanel isAdmin={isAdmin} /></div>
-      <div className={tab === "patches"    ? "block" : "hidden"}><PatchStatusPanel /></div>
+      <div className={tab === "patches"    ? "block" : "hidden"}><PatchStatusPanel isAdmin={isAdmin} /></div>
       <div className={tab === "kick"       ? "block" : "hidden"}><KickTab /></div>
     </div>
   );

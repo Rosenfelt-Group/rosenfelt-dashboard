@@ -158,10 +158,12 @@ const REM_BADGE: Record<string, { label: string; cls: string }> = {
   expired: { label: "expired", cls: "bg-gray-100 text-gray-500" },
 };
 
-export default function PatchStatusPanel() {
+export default function PatchStatusPanel({ isAdmin }: { isAdmin: boolean }) {
   const [rows, setRows] = useState<PatchRow[]>([]);
   const [rems, setRems] = useState<RemApproval[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scanning, setScanning] = useState(false);
+  const [scanMsg, setScanMsg] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -209,6 +211,24 @@ export default function PatchStatusPanel() {
     };
   }, [load]);
 
+  const handleRescan = async () => {
+    setScanning(true);
+    setScanMsg(null);
+    try {
+      const res = await fetch("/api/patch/detect/run", { method: "POST" });
+      if (res.ok) {
+        setScanMsg("Scan started — results refresh automatically when complete (~15s).");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setScanMsg(`Error: ${body.error ?? res.status}`);
+      }
+    } catch (err) {
+      setScanMsg(`Error: ${String(err)}`);
+    } finally {
+      setScanning(false);
+    }
+  };
+
   const toggle = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
   if (loading) return <div className="card animate-pulse h-64" />;
@@ -238,8 +258,27 @@ export default function PatchStatusPanel() {
             <p className="text-xs text-brand-muted mt-0.5">No scans recorded yet.</p>
           )}
         </div>
-        <span className="text-[11px] text-brand-muted">Detection only — applies nothing</span>
+        {isAdmin ? (
+          <button
+            onClick={handleRescan}
+            disabled={scanning}
+            className="btn-primary text-sm px-4 py-2 disabled:opacity-60"
+          >
+            {scanning ? "Scanning…" : "▶ Rescan"}
+          </button>
+        ) : (
+          <span className="text-[11px] text-brand-muted">Detection only — applies nothing</span>
+        )}
       </div>
+
+      {scanMsg && (
+        <div className={clsx(
+          "card text-sm",
+          scanMsg.startsWith("Error") ? "border-red-200 text-red-600" : "border-amber-200 text-amber-700"
+        )}>
+          {scanMsg}
+        </div>
+      )}
 
       {!latest ? (
         <div className="card text-sm text-brand-muted">
