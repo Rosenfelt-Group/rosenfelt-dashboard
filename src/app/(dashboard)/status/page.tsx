@@ -491,6 +491,12 @@ function GitHubTab({ live: _live }: { live: boolean }) {
                   <p className="text-[10px] text-brand-muted mb-1 line-clamp-1">{info.description}</p>
                 )}
 
+                {info?.pushed_at && (
+                  <p className="text-[10px] text-brand-muted mb-1">
+                    pushed to <span className="font-mono">{info.default_branch ?? "main"}</span> {ago(info.pushed_at)}
+                  </p>
+                )}
+
                 {latest && meta ? (
                   <>
                     <div className="flex items-center gap-3 py-2.5">
@@ -537,10 +543,7 @@ function GitHubTab({ live: _live }: { live: boolean }) {
                   </>
                 ) : (
                   <div className="py-3 text-center">
-                    <p className="text-xs text-brand-muted">No workflow runs yet</p>
-                    {info?.pushed_at && (
-                      <p className="text-[10px] text-brand-muted mt-1">Last push {ago(info.pushed_at)}</p>
-                    )}
+                    <p className="text-xs text-brand-muted">No CI configured</p>
                   </div>
                 )}
               </div>
