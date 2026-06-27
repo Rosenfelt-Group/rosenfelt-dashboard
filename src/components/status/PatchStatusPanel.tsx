@@ -55,6 +55,15 @@ const STATUS_LABEL: Record<PatchStatus, string> = {
   error: "error",
 };
 
+// Mirrors _DEFER_PREFIXES in casey-agent/tools/patch_remediation_tools.py.
+// Packages matching these prefixes are never auto-applied (restart/reboot risk).
+const DEFER_PREFIXES = ["docker", "containerd", "linux-image", "linux-headers", "linux-generic"];
+
+function isDeferred(item: string): boolean {
+  const lower = item.toLowerCase();
+  return DEFER_PREFIXES.some((p) => lower === p || lower.startsWith(p + "-") || lower.startsWith(p + "."));
+}
+
 // Worst-status precedence: error > needs_attention > clean
 function worst(a: PatchStatus, b: PatchStatus): PatchStatus {
   const rank: Record<PatchStatus, number> = { clean: 0, needs_attention: 1, error: 2 };
@@ -314,6 +323,19 @@ export default function PatchStatusPanel({ isAdmin }: { isAdmin: boolean }) {
                       <span className="text-xs text-brand-muted flex-shrink-0">{items.length} item{items.length === 1 ? "" : "s"}</span>
                     )}
                     {(() => {
+                      // If every detected package is deferred, flag it — no approval will be filed.
+                      if (
+                        row.category === "os_packages" &&
+                        row.status === "needs_attention" &&
+                        items.length > 0 &&
+                        items.every((it) => isDeferred(it.item))
+                      ) {
+                        return (
+                          <span className="badge text-[10px] px-1.5 py-0.5 flex-shrink-0 bg-purple-50 text-purple-700">
+                            deferred
+                          </span>
+                        );
+                      }
                       const rem = remByKey[`${row.host}/${row.category}`];
                       if (!rem) return null;
                       const b = REM_BADGE[rem.status] ?? { label: rem.status, cls: "bg-gray-100 text-gray-500" };
@@ -333,6 +355,13 @@ export default function PatchStatusPanel({ isAdmin }: { isAdmin: boolean }) {
                     {row.summary && (
                       <p className="text-xs text-brand-muted leading-relaxed">{row.summary}</p>
                     )}
+                    {items.length > 0 &&
+                      row.category === "os_packages" &&
+                      items.every((it) => isDeferred(it.item)) && (
+                        <p className="text-xs text-purple-700 bg-purple-50 rounded px-2 py-1">
+                          All updates are deferred — docker/containerd/kernel packages require a manual maintenance window and are never auto-applied.
+                        </p>
+                      )}
                     {items.length > 0 && row.category !== "reboot" && (
                       <div className="divide-y divide-brand-border">
                         {items.map((it, i) => (
@@ -343,7 +372,10 @@ export default function PatchStatusPanel({ isAdmin }: { isAdmin: boolean }) {
                                 {it.current || "—"} → <span className="text-brand-black">{it.available || "—"}</span>
                               </span>
                             )}
-                            {it.severity && it.severity !== "os" && (
+                            {isDeferred(it.item) && (
+                              <span className="badge text-[9px] px-1 py-0 bg-purple-50 text-purple-700">deferred</span>
+                            )}
+                            {it.severity && it.severity !== "os" && !isDeferred(it.item) && (
                               <span className={clsx("badge text-[9px] px-1 py-0", severityBadge(it.severity))}>
                                 {it.severity}
                               </span>
