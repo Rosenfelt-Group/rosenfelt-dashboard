@@ -281,22 +281,24 @@ function GearIcon({ size = 14 }: { size?: number }) {
 }
 
 function RepoSettingsModal({
-  open, onClose, repos, hidden, onChange,
+  open, onClose, repos, allNames, hidden, onChange,
 }: {
   open: boolean;
   onClose: () => void;
   repos: RepoInfo[];
+  allNames: string[];
   hidden: Set<string>;
   onChange: (next: Set<string>) => void;
 }) {
   if (!open) return null;
+  const repoByName = new Map(repos.map(r => [r.name, r]));
   const toggle = (name: string) => {
     const next = new Set(hidden);
     if (next.has(name)) next.delete(name); else next.add(name);
     onChange(next);
   };
   const showAll = () => onChange(new Set());
-  const hideAll = () => onChange(new Set(repos.map(r => r.name)));
+  const hideAll = () => onChange(new Set(allNames));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -312,19 +314,23 @@ function RepoSettingsModal({
           <span className="ml-auto text-brand-muted">{repos.length - hidden.size} of {repos.length} visible</span>
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-2">
-          {repos.map(r => (
-            <label key={r.name} className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-brand-offwhite rounded px-1">
-              <input
-                type="checkbox"
-                checked={!hidden.has(r.name)}
-                onChange={() => toggle(r.name)}
-                className="accent-brand-orange"
-              />
-              <span className="font-mono text-xs text-brand-black flex-1 truncate">{r.name}</span>
-              {r.archived && <span className="badge text-[9px] px-1 py-0 bg-gray-100 text-gray-500">archived</span>}
-              {!r.private && <span className="badge text-[9px] px-1 py-0 bg-blue-50 text-blue-700">public</span>}
-            </label>
-          ))}
+          {allNames.map(name => {
+            const r = repoByName.get(name);
+            return (
+              <label key={name} className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-brand-offwhite rounded px-1">
+                <input
+                  type="checkbox"
+                  checked={!hidden.has(name)}
+                  onChange={() => toggle(name)}
+                  className="accent-brand-orange"
+                />
+                <span className="font-mono text-xs text-brand-black flex-1 truncate">{name}</span>
+                {r?.archived && <span className="badge text-[9px] px-1 py-0 bg-gray-100 text-gray-500">archived</span>}
+                {r && !r.private && <span className="badge text-[9px] px-1 py-0 bg-blue-50 text-blue-700">public</span>}
+                {!r && <span className="badge text-[9px] px-1 py-0 bg-amber-50 text-amber-700">runs only</span>}
+              </label>
+            );
+          })}
         </div>
         <div className="px-4 py-2 border-t border-brand-border text-[10px] text-brand-muted">
           Saved per-browser. Hiding a repo removes it from the GitHub tab only.
@@ -383,7 +389,7 @@ function GitHubTab({ live: _live }: { live: boolean }) {
   }, [load]);
 
   // Merge repos + runs into one ordered list
-  const cards = useMemo(() => {
+  const { cards, allNames } = useMemo(() => {
     const runsByRepo = new Map<string, RunLog[]>();
     for (const run of runs) {
       const list = runsByRepo.get(run.repo) ?? [];
@@ -391,7 +397,7 @@ function GitHubTab({ live: _live }: { live: boolean }) {
       runsByRepo.set(run.repo, list);
     }
 
-    // If repos failed to load, fall back to repos derived from runs only.
+    // Union of API repos and run-derived repos (handles deleted/renamed repos still in the log).
     const allRepoNames = new Set<string>();
     repos.forEach(r => allRepoNames.add(r.name));
     runsByRepo.forEach((_v, k) => allRepoNames.add(k));
@@ -401,18 +407,21 @@ function GitHubTab({ live: _live }: { live: boolean }) {
       return i === -1 ? REPO_PRIORITY.length : i;
     };
 
-    return [...allRepoNames]
+    const allNames = [...allRepoNames].sort((a, b) => {
+      const ka = sortKey(a), kb = sortKey(b);
+      if (ka !== kb) return ka - kb;
+      return a.localeCompare(b);
+    });
+
+    const cards = allNames
       .filter(name => !hidden.has(name))
-      .sort((a, b) => {
-        const ka = sortKey(a), kb = sortKey(b);
-        if (ka !== kb) return ka - kb;
-        return a.localeCompare(b);
-      })
       .map(name => ({
         name,
         info: repos.find(r => r.name === name) ?? null,
         runs: runsByRepo.get(name) ?? [],
       }));
+
+    return { cards, allNames };
   }, [runs, repos, hidden]);
 
   if (loading) return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[0,1,2,3].map(i=><div key={i} className="card animate-pulse h-36"/>)}</div>;
@@ -443,7 +452,13 @@ function GitHubTab({ live: _live }: { live: boolean }) {
       )}
 
       {cards.length === 0 ? (
-        <div className="card text-sm text-brand-muted text-center py-12">No repositories to show. Open settings to enable.</div>
+        <div className="card text-sm text-brand-muted text-center py-12">
+          No repositories to show.{" "}
+          {hidden.size > 0 && (
+            <button onClick={() => updateHidden(new Set())} className="text-brand-orange hover:underline">Show all</button>
+          )}{" "}or{" "}
+          <button onClick={() => setSettingsOpen(true)} className="text-brand-orange hover:underline">open settings</button>.
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {cards.map(({ name, info, runs: repoRuns }) => {
@@ -538,6 +553,7 @@ function GitHubTab({ live: _live }: { live: boolean }) {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         repos={repos}
+        allNames={allNames}
         hidden={hidden}
         onChange={updateHidden}
       />
