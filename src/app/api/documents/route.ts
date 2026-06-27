@@ -23,8 +23,8 @@ function readDir(dir: string, base: string): DocEntry[] {
   return entries
     .filter(e => !e.name.startsWith("."))
     .map(e => {
-      const full    = path.join(dir, e.name);
-      const relPath = path.join(base, e.name).replace(/\\/g, "/");
+      const full    = path.join(/* turbopackIgnore: true */ dir, e.name);
+      const relPath = path.join(/* turbopackIgnore: true */ base, e.name).replace(/\\/g, "/");
       const stat    = fs.statSync(full);
       return {
         name:     e.name,
