@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { AgentBadge } from "@/components/AgentBadge";
 import RegressionPanel from "@/components/status/RegressionPanel";
+import AlignmentAuditPanel from "@/components/status/AlignmentAuditPanel";
 import WebsitePanel from "@/components/status/WebsitePanel";
 import PatchStatusPanel from "@/components/status/PatchStatusPanel";
 import { formatDistanceToNow, parseISO } from "date-fns";
@@ -11,7 +12,7 @@ import Link from "next/link";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "agents" | "github" | "vercel" | "supabase" | "vps" | "n8n" | "wordpress" | "regression" | "website" | "patches" | "kick";
+type Tab = "agents" | "github" | "vercel" | "supabase" | "vps" | "n8n" | "wordpress" | "audit" | "website" | "patches" | "kick";
 
 interface AgentHealth {
   agent: string;
@@ -1475,7 +1476,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "vps",        label: "VPS"        },
   { id: "n8n",        label: "n8n"        },
   { id: "wordpress",  label: "WordPress"  },
-  { id: "regression", label: "Regression" },
+  { id: "audit",      label: "Audit"      },
   { id: "website",    label: "Website"    },
   { id: "patches",    label: "Patches"    },
   { id: "kick",       label: "Kick"       },
@@ -1540,7 +1541,15 @@ export default function StatusPage() {
       <div className={tab === "vps"        ? "block" : "hidden"}><VpsTab /></div>
       <div className={tab === "n8n"        ? "block" : "hidden"}><N8nTab /></div>
       <div className={tab === "wordpress"  ? "block" : "hidden"}><WordpressTab /></div>
-      <div className={tab === "regression" ? "block" : "hidden"}><RegressionPanel isAdmin={isAdmin} /></div>
+      <div className={tab === "audit" ? "block" : "hidden"}>
+        <div className="space-y-8">
+          <AlignmentAuditPanel isAdmin={isAdmin} />
+          <div>
+            <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-4">Regression Tests</p>
+            <RegressionPanel isAdmin={isAdmin} />
+          </div>
+        </div>
+      </div>
       <div className={tab === "website"    ? "block" : "hidden"}><WebsitePanel isAdmin={isAdmin} /></div>
       <div className={tab === "patches"    ? "block" : "hidden"}><PatchStatusPanel /></div>
       <div className={tab === "kick"       ? "block" : "hidden"}><KickTab /></div>
