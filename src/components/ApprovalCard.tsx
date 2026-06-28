@@ -93,7 +93,8 @@ function LinkedInCarouselDetail({ payload }: { payload?: Record<string, unknown>
   const slides      = (payload?.carousel_slides as string[]) ?? [];
   const caption     = (payload?.caption as string) ?? "";
   const commentText = (payload?.comment_text as string) ?? "";
-  const postUrl     = (payload?.post_url as string) ?? "";
+  const rawPostUrl  = (payload?.post_url as string) ?? "";
+  const postUrl     = /^https?:\/\//i.test(rawPostUrl) ? rawPostUrl : "";
   const day         = (payload?.suggested_post_day as string) ?? "";
   const [copied, setCopied] = useState<"caption" | "comment" | null>(null);
 
