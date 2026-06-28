@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { supabase } from "@/lib/supabase";
@@ -80,6 +80,10 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
   const [tab, setTab] = useState<"log" | "docs">("log");
   const [statusCheckPending, setStatusCheckPending] = useState(false);
   const [statusCheckSince, setStatusCheckSince] = useState<number | null>(null);
+  // Ref holds the safety-net timeout handle so it can be cancelled when
+  // Realtime delivers the prompt (prevents a stale timeout from clearing a
+  // subsequent in-flight request after Jordan finishes early).
+  const writePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [writePromptPending, setWritePromptPending] = useState(false);
   // Snapshot of item.prompt at the moment Write Prompt was clicked — so we
   // clear the spinner only when a genuinely new prompt lands, not when we
@@ -281,7 +285,11 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
       // Safety-net: Jordan can take several minutes (15+ tool calls). Realtime
       // on work_items clears the spinner the moment a new prompt lands; this is
       // the fallback if that event never arrives.
-      setTimeout(() => setWritePromptPending(false), 300_000);
+      if (writePromptTimeoutRef.current) clearTimeout(writePromptTimeoutRef.current);
+      writePromptTimeoutRef.current = setTimeout(() => {
+        writePromptTimeoutRef.current = null;
+        setWritePromptPending(false);
+      }, 300_000);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Write prompt failed");
       setWritePromptPending(false);
@@ -291,13 +299,25 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
   // Watch for prompt arrival via Realtime. Clear the spinner only when
   // item.prompt actually changes from what was there when the button was
   // clicked — so a pre-existing prompt doesn't immediately reset the state.
+  // Also cancel the safety-net timeout so it can't fire against a later request.
   useEffect(() => {
     if (writePromptPending && promptAtRequest !== null) {
       if ((item.prompt ?? "") !== promptAtRequest) {
+        if (writePromptTimeoutRef.current) {
+          clearTimeout(writePromptTimeoutRef.current);
+          writePromptTimeoutRef.current = null;
+        }
         setWritePromptPending(false);
       }
     }
   }, [item.prompt, writePromptPending, promptAtRequest]);
+
+  // Cancel any outstanding safety-net timeout on unmount.
+  useEffect(() => {
+    return () => {
+      if (writePromptTimeoutRef.current) clearTimeout(writePromptTimeoutRef.current);
+    };
+  }, []);
 
   // Phase 0.7: commit the phase. Blank/0/negative clears it (removes from
   // phase); a positive integer sets it. No-op when unchanged so blur doesn't
