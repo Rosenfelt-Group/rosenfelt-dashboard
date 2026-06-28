@@ -89,7 +89,7 @@ function PatchRemediationDetail({ payload, selected, onToggle }: {
   );
 }
 
-function LinkedInCarouselDetail({ payload }: { payload?: Record<string, unknown> }) {
+export function LinkedInCarouselDetail({ payload }: { payload?: Record<string, unknown> }) {
   const slides      = (payload?.carousel_slides as string[]) ?? [];
   const caption     = (payload?.caption as string) ?? "";
   const commentText = (payload?.comment_text as string) ?? "";

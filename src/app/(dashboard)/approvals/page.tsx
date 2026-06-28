@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { PendingApproval } from "@/types";
 import { can } from "@/lib/permissions";
-import { ApprovalCard } from "@/components/ApprovalCard";
+import { ApprovalCard, LinkedInCarouselDetail } from "@/components/ApprovalCard";
 import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
@@ -58,6 +58,9 @@ function HistoryRow({ item }: { item: PendingApproval }) {
             <span>Type: <span className="text-brand-black">{item.action_type}</span></span>
             <span>Agent: <span className="text-brand-black capitalize">{item.agent}</span></span>
           </div>
+          {item.action_type === "linkedin_carousel" && (
+            <LinkedInCarouselDetail payload={item.payload} />
+          )}
         </div>
       )}
     </div>
