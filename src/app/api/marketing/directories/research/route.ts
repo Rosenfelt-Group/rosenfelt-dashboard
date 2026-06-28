@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const maxDuration = 45;
 
+const CANDIDATE_FIELDS = new Set(["name", "url", "priority_tier", "cost", "complexity", "notes"]);
+
 export async function POST() {
   const averyUrl = process.env.AVERY_API_URL;
   const secret = process.env.AVERY_WEBHOOK_SECRET ?? process.env.JORDAN_WEBHOOK_SECRET;
@@ -30,12 +32,18 @@ export async function POST() {
 
   if (fresh.length === 0) return NextResponse.json({ added: 0 });
 
-  const rows = fresh.map(c => ({
-    ...c,
-    status: "Not Started",
-    is_candidate: true,
-    source: "avery_research",
-  }));
+  const rows = fresh.map(c => {
+    const safe: Record<string, unknown> = {};
+    for (const key of CANDIDATE_FIELDS) {
+      if (key in c) safe[key] = c[key];
+    }
+    return {
+      ...safe,
+      status: "Not Started",
+      is_candidate: true,
+      source: "avery_research",
+    };
+  });
 
   const { data, error } = await supabaseAdmin
     .from("directories")

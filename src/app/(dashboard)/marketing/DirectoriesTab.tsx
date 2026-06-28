@@ -31,9 +31,13 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function toHref(url: string): string {
+  return url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`;
+}
+
 function DirectoryRow({ dir, onUpdate, onDelete }: {
   dir: Directory;
-  onUpdate: (id: string, patch: Partial<Directory>) => Promise<void>;
+  onUpdate: (id: string, patch: Partial<Directory>) => Promise<boolean>;
   onDelete: (id: string) => Promise<void>;
 }) {
   const [editingStatus, setEditingStatus] = useState(false);
@@ -73,7 +77,7 @@ function DirectoryRow({ dir, onUpdate, onDelete }: {
       <td className="px-3 py-2.5">
         <div className="flex flex-col gap-0.5">
           <span className="text-sm font-medium text-brand-black">{dir.name}</span>
-          <a href={`https://${dir.url}`} target="_blank" rel="noopener noreferrer"
+          <a href={toHref(dir.url)} target="_blank" rel="noopener noreferrer"
             className="text-[11px] text-brand-orange hover:underline"
             onClick={e => e.stopPropagation()}>
             {dir.url} ↗
@@ -96,7 +100,7 @@ function DirectoryRow({ dir, onUpdate, onDelete }: {
             autoFocus
             defaultValue={dir.status}
             disabled={saving}
-            onChange={e => patchStatus(e.target.value)}
+            onChange={e => { if (e.target.value !== dir.status) patchStatus(e.target.value); }}
             onBlur={() => setEditingStatus(false)}
             className="text-xs border border-brand-orange rounded px-1.5 py-1 focus:outline-none"
           >
@@ -174,8 +178,13 @@ export default function DirectoriesTab() {
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/marketing/directories");
+      if (!res.ok) {
+        setError("Failed to load directories");
+        return;
+      }
       const data = await res.json();
       setDirs(Array.isArray(data) ? data : []);
+      setError(null);
     } catch {
       setError("Failed to load directories");
     } finally {
@@ -185,14 +194,19 @@ export default function DirectoriesTab() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleUpdate = useCallback(async (id: string, patch: Partial<Directory>) => {
+  const handleUpdate = useCallback(async (id: string, patch: Partial<Directory>): Promise<boolean> => {
     const res = await fetch(`/api/marketing/directories/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
     const updated = await res.json();
-    if (res.ok) setDirs(prev => prev.map(d => d.id === id ? { ...d, ...updated } : d));
+    if (res.ok) {
+      setDirs(prev => prev.map(d => d.id === id ? { ...d, ...updated } : d));
+      return true;
+    }
+    setError(updated.error ?? "Failed to save — please try again");
+    return false;
   }, []);
 
   const handleDelete = useCallback(async (id: string) => {
@@ -277,6 +291,13 @@ export default function DirectoriesTab() {
         </div>
       </div>
 
+      {error && !loading && (
+        <div className="flex items-center justify-between text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="ml-3 text-red-400 hover:text-red-700 font-medium">✕</button>
+        </div>
+      )}
+
       {researchMsg && (
         <p className="text-xs text-brand-orange bg-brand-orange/5 border border-brand-orange/20 rounded-lg px-3 py-2">
           {researchMsg}
@@ -287,7 +308,7 @@ export default function DirectoriesTab() {
       <div className="card p-0 overflow-x-auto">
         {loading ? (
           <div className="p-8 text-center text-xs text-brand-muted">Loading…</div>
-        ) : error ? (
+        ) : !loading && dirs.length === 0 && error ? (
           <div className="p-8 text-center text-xs text-red-600">{error}</div>
         ) : (
           <table className="w-full text-left">
