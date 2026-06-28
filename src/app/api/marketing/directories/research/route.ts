@@ -6,7 +6,7 @@ export const maxDuration = 45;
 const CANDIDATE_FIELDS = new Set(["name", "url", "priority_tier", "cost", "complexity", "notes"]);
 
 export async function POST() {
-  const averyUrl = process.env.AVERY_API_URL;
+  const averyUrl = process.env.AVERY_AGENT_URL;
   const secret = process.env.AVERY_WEBHOOK_SECRET ?? process.env.JORDAN_WEBHOOK_SECRET;
 
   if (!averyUrl || !secret) {
