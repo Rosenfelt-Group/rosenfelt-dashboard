@@ -31,7 +31,7 @@ export const WORKSPACE_MODULES = [
     tabLabel: "Sales",
     href: "/sales",
     icon: "trendingUp",
-    active: ["/sales", "/crm", "/quiz", "/content", "/analytics"],
+    active: ["/sales", "/crm", "/quiz", "/content", "/analytics", "/marketing"],
   },
   {
     id: "agents",
@@ -78,11 +78,12 @@ export const SUB_PAGES: Partial<Record<SectionId, SubPage[]>> = {
     { label: "Images",    href: "/images",    icon: "image"  },
   ],
   sales: [
-    { label: "Sales",     href: "/sales",     icon: "trendingUp" },
-    { label: "CRM",       href: "/crm",       icon: "users"      },
-    { label: "Content",   href: "/content",   icon: "edit"       },
-    { label: "Analytics", href: "/analytics", icon: "barChart"   },
-    { label: "Quiz",      href: "/quiz",       icon: "package"   },
+    { label: "Sales",      href: "/sales",      icon: "trendingUp" },
+    { label: "CRM",        href: "/crm",        icon: "users"      },
+    { label: "Content",    href: "/content",    icon: "edit"       },
+    { label: "Analytics",  href: "/analytics",  icon: "barChart"   },
+    { label: "Quiz",       href: "/quiz",        icon: "package"   },
+    { label: "Marketing",  href: "/marketing",  icon: "trendingUp" },
   ],
   agents: [
     { label: "Agent Central", href: "/agent-central",       icon: "brain"   },
