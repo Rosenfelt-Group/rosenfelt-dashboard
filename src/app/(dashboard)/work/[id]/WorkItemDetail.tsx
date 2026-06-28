@@ -81,6 +81,10 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
   const [statusCheckPending, setStatusCheckPending] = useState(false);
   const [statusCheckSince, setStatusCheckSince] = useState<number | null>(null);
   const [writePromptPending, setWritePromptPending] = useState(false);
+  // Snapshot of item.prompt at the moment Write Prompt was clicked — so we
+  // clear the spinner only when a genuinely new prompt lands, not when we
+  // detect the pre-existing one that was already there before the click.
+  const [promptAtRequest, setPromptAtRequest] = useState<string | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
   const [showArchNotes, setShowArchNotes] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -262,6 +266,9 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
 
   const requestPrompt = useCallback(async () => {
     setError(null);
+    // Capture the current prompt BEFORE marking pending so the cleanup effect
+    // knows what value was already there and waits for a genuinely new write.
+    setPromptAtRequest(item.prompt ?? "");
     setWritePromptPending(true);
     try {
       const res = await fetch(`/api/work/${item.id}/write-prompt`, {
@@ -271,22 +278,26 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
         const body = await res.text().catch(() => "");
         throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
       }
-      // Re-enable after 30s as a safety net; Realtime on work_items will
-      // also flip the spinner off when Jordan writes the prompt.
-      setTimeout(() => setWritePromptPending(false), 30_000);
+      // Safety-net: Jordan can take several minutes (15+ tool calls). Realtime
+      // on work_items clears the spinner the moment a new prompt lands; this is
+      // the fallback if that event never arrives.
+      setTimeout(() => setWritePromptPending(false), 300_000);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Write prompt failed");
       setWritePromptPending(false);
     }
-  }, [item.id]);
+  }, [item.id, item.prompt]);
 
-  // Watch for prompt arrival — when item.prompt becomes non-empty after a
-  // pending request, clear the spinner immediately.
+  // Watch for prompt arrival via Realtime. Clear the spinner only when
+  // item.prompt actually changes from what was there when the button was
+  // clicked — so a pre-existing prompt doesn't immediately reset the state.
   useEffect(() => {
-    if (writePromptPending && item.prompt && item.prompt.length > 0) {
-      setWritePromptPending(false);
+    if (writePromptPending && promptAtRequest !== null) {
+      if ((item.prompt ?? "") !== promptAtRequest) {
+        setWritePromptPending(false);
+      }
     }
-  }, [item.prompt, writePromptPending]);
+  }, [item.prompt, writePromptPending, promptAtRequest]);
 
   // Phase 0.7: commit the phase. Blank/0/negative clears it (removes from
   // phase); a positive integer sets it. No-op when unchanged so blur doesn't
