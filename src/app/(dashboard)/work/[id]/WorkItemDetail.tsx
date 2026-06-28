@@ -202,6 +202,71 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
     };
   }, [statusCheckPending, item.id]);
 
+  // On mount: restore the write-prompt spinner if Jordan is mid-run. We detect
+  // this by checking whether the newest log entry is the "✍️ Writing" start-log
+  // Jordan writes before the LLM fires, and it's less than 10 minutes old.
+  // This makes the button appear "in progress" even after a page refresh.
+  useEffect(() => {
+    if (initial.status !== "approved") return;
+    const TEN_MIN = 10 * 60 * 1000;
+    supabase
+      .from("work_item_logs")
+      .select("message, entry_type, created_at")
+      .eq("work_item_id", initial.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        if (!data?.length) return;
+        const latest = data[0];
+        const isWritingEntry =
+          latest.entry_type === "progress" &&
+          (latest.message as string | null)?.startsWith("✍️");
+        const elapsed = Date.now() - new Date(latest.created_at).getTime();
+        if (!isWritingEntry || elapsed >= TEN_MIN) return;
+        setPromptAtRequest(initial.prompt ?? "");
+        setWritePromptPending(true);
+        if (writePromptTimeoutRef.current) clearTimeout(writePromptTimeoutRef.current);
+        writePromptTimeoutRef.current = setTimeout(() => {
+          writePromptTimeoutRef.current = null;
+          setWritePromptPending(false);
+        }, TEN_MIN - elapsed);
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- mount only, initial is stable
+
+  // While write-prompt is pending, listen for Jordan's terminal log entries
+  // (error / question / completion) to clear the spinner immediately rather
+  // than waiting for the 5-minute safety-net timeout.
+  useEffect(() => {
+    if (!writePromptPending) return;
+    const channel = supabase
+      .channel(`write-prompt-log-${item.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "work_item_logs",
+          filter: `work_item_id=eq.${item.id}`,
+        },
+        (payload) => {
+          const entry = payload.new as { entry_type?: string };
+          if (
+            entry.entry_type === "error" ||
+            entry.entry_type === "question" ||
+            entry.entry_type === "completion"
+          ) {
+            if (writePromptTimeoutRef.current) {
+              clearTimeout(writePromptTimeoutRef.current);
+              writePromptTimeoutRef.current = null;
+            }
+            setWritePromptPending(false);
+          }
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [writePromptPending, item.id]);
+
   const patch = useCallback(
     async (updates: Partial<WorkItem> & { dispatch?: boolean }): Promise<boolean> => {
       setBusy(true);
