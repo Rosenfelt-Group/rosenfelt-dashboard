@@ -5,6 +5,15 @@ export const maxDuration = 45;
 
 const CANDIDATE_FIELDS = new Set(["name", "url", "priority_tier", "cost", "complexity", "notes"]);
 
+function extractDomain(url: string): string {
+  try {
+    const u = new URL(url.startsWith("http") ? url : `https://${url}`);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return url.split("/")[0].replace(/^www\./, "");
+  }
+}
+
 export async function POST() {
   const averyUrl = process.env.AVERY_AGENT_URL;
   const secret = process.env.AVERY_WEBHOOK_SECRET ?? process.env.JORDAN_WEBHOOK_SECRET;
@@ -16,7 +25,8 @@ export async function POST() {
   const { data: existing } = await supabaseAdmin
     .from("directories")
     .select("url");
-  const knownUrls = new Set((existing ?? []).map((r: { url: string }) => r.url));
+  // Compare by domain so deleted/skipped entries and URL path variations don't re-appear
+  const knownDomains = new Set((existing ?? []).map((r: { url: string }) => extractDomain(r.url)));
 
   const res = await fetch(`${averyUrl}/research-directories`, {
     method: "POST",
@@ -28,7 +38,7 @@ export async function POST() {
   }
 
   const { candidates } = await res.json() as { candidates: Record<string, unknown>[] };
-  const fresh = candidates.filter(c => !knownUrls.has(c.url as string));
+  const fresh = candidates.filter(c => !knownDomains.has(extractDomain(c.url as string)));
 
   if (fresh.length === 0) return NextResponse.json({ added: 0 });
 

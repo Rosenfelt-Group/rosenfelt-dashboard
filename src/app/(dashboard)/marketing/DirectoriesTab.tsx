@@ -210,9 +210,14 @@ export default function DirectoriesTab() {
   }, []);
 
   const handleDelete = useCallback(async (id: string) => {
-    if (!confirm("Delete this directory entry?")) return;
-    const res = await fetch(`/api/marketing/directories/${id}`, { method: "DELETE" });
-    if (res.ok) setDirs(prev => prev.filter(d => d.id !== id));
+    if (!confirm("Mark this directory as Skipped? It won't be suggested by Avery again.")) return;
+    const res = await fetch(`/api/marketing/directories/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "Skipped" }),
+    });
+    const updated = await res.json();
+    if (res.ok) setDirs(prev => prev.map(d => d.id === id ? { ...d, ...updated } : d));
   }, []);
 
   async function handleResearch() {
