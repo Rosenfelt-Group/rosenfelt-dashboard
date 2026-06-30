@@ -91,14 +91,20 @@ Dashboard: History tab shows "View on LinkedIn ↗" link
 
 Uses the LinkedIn **REST API (LinkedIn-Version: 202306)**.
 
-**Required OAuth scopes:** `openid`, `profile`, `w_member_social`, `r_member_social`
+**Required OAuth scopes:** `openid`, `profile`, `w_member_social`
+
+Note: `r_member_social` is a restricted scope (approved users only) and is not needed for posting — `w_member_social` is sufficient for uploading documents, creating posts, and commenting.
+
+All requests require both `LinkedIn-Version: {YYYYMM}` and `X-Restli-Protocol-Version: 2.0.0` headers.
 
 ### Step 1 — Register document upload
 ```
-POST https://api.linkedin.com/rest/documents
+POST https://api.linkedin.com/rest/documents?action=initializeUpload
 Headers:
   LinkedIn-Version: 202306
+  X-Restli-Protocol-Version: 2.0.0
   Authorization: Bearer {token}
+  Content-Type: application/json
 
 Body:
 {
@@ -108,7 +114,7 @@ Body:
 }
 
 Response:
-{ "value": { "uploadUrl": "...", "document": "urn:li:document:..." } }
+{ "value": { "uploadUrl": "...", "uploadUrlExpiresAt": 1650567510704, "document": "urn:li:document:..." } }
 ```
 
 ### Step 2 — Upload PDF bytes
@@ -116,6 +122,8 @@ Response:
 PUT {uploadUrl}
 Content-Type: application/octet-stream
 Body: <pdf_bytes>
+
+Response: 201 Created (no body)
 ```
 
 ### Step 3 — Create post
@@ -123,7 +131,9 @@ Body: <pdf_bytes>
 POST https://api.linkedin.com/rest/posts
 Headers:
   LinkedIn-Version: 202306
+  X-Restli-Protocol-Version: 2.0.0
   Authorization: Bearer {token}
+  Content-Type: application/json
 
 Body:
 {
@@ -145,24 +155,31 @@ Body:
   "isReshareDisabledByAuthor": false
 }
 
-Response: Location header contains the post URN (e.g. "urn:li:share:123456")
+Response: 201 Created
+  x-restli-id header contains the post URN (e.g. "urn:li:share:6844785523593134080")
 ```
 
 ### Step 4 — Post first comment (URL)
+
+The activity URN for the comment `object` field is derived from the post URN: take the numeric ID from `x-restli-id` and prefix with `urn:li:activity:`.
+
 ```
 POST https://api.linkedin.com/rest/socialActions/{url_encoded_post_urn}/comments
 Headers:
   LinkedIn-Version: 202306
+  X-Restli-Protocol-Version: 2.0.0
   Authorization: Bearer {token}
+  Content-Type: application/json
 
 Body:
 {
   "actor": "urn:li:person:{LINKEDIN_PERSON_URN}",
+  "object": "urn:li:activity:{numeric_id_from_post_urn}",
   "message": { "text": "{comment_text}" }
 }
 ```
 
-The post URN from the `Location` header is URL-encoded before use (`:` → `%3A`).
+The post URN from `x-restli-id` is URL-encoded before use in the comment endpoint URL (`:` → `%3A`).
 
 **Return value:** `https://www.linkedin.com/feed/update/{post_urn}/` — written to `approval.payload.linkedin_post_url`.
 
@@ -215,7 +232,10 @@ Run once on OVH after LinkedIn Developer App is created and env vars are set:
 cd /opt/avery-agent && python3 scripts/linkedin_oauth.py
 ```
 
-**Flow:**
+**Simpler alternative — LinkedIn Developer Portal Token Generator:**
+LinkedIn provides a built-in token generator at `linkedin.com/developers/tools/oauth/token-generator`. Select your app, choose scopes, click Allow — it issues a token with a 60-day TTL directly. Copy the token and run `python3 scripts/linkedin_oauth.py --token <token>` to store it in `agent_memory` without the OAuth dance. Use this for initial setup and each 60-day renewal.
+
+**Full OAuth flow (fallback):**
 1. Loads `/opt/avery-agent/.env` via `python-dotenv` (so it can run standalone without `source .env`); reads `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 2. Spins up a temporary `http.server` on port 8080 for ~60 seconds
 3. Prints the LinkedIn auth URL — Brian opens it in browser, clicks Allow
@@ -224,6 +244,8 @@ cd /opt/avery-agent && python3 scripts/linkedin_oauth.py
 6. Calls `GET /v2/userinfo` to retrieve `sub` (the person URN ID)
 7. Stores token JSON in `agent_memory` via Supabase REST (upsert on `linkedin_oauth` row)
 8. Prints: token stored, person URN to add to `.env`, expiry date, next refresh due
+
+**Token refresh note:** Programmatic server-side refresh token exchange is restricted to LinkedIn Marketing Developer Platform (MDP) partners. For a standard `w_member_social` app, the simplest approach is to re-run the Token Generator every 60 days (or trigger the OAuth flow again). The `get_linkedin_token()` helper checks expiry and logs a warning with instructions when the token is within 7 days of expiry rather than attempting an automated refresh.
 
 **Redirect URI to register in LinkedIn app:** `http://localhost:8080/callback`
 
