@@ -166,6 +166,55 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: true, deliver: deliverResult });
     }
 
+    // ── APPROVED → post LinkedIn carousel ───────────────────────────────────────
+    if (status === "approved" && approval?.agent === "avery" && approval?.action_type === "linkedin_carousel") {
+      if (!reviewer) {
+        return NextResponse.json(
+          { error: "LinkedIn post blocked: no human reviewer on record" },
+          { status: 403 },
+        );
+      }
+      if (!avUrl || !secret) {
+        await supabaseAdmin.from("workflow_logs").insert({
+          workflow_name: "Dashboard LinkedIn Post Gate",
+          agent: "avery",
+          trigger_text: approval.title ?? `approval ${id}`,
+          status: "error",
+          error_message: "Missing AVERY_AGENT_URL or webhook secret",
+        });
+        return NextResponse.json({ success: true, post: { ok: false, detail: "config missing" } });
+      }
+
+      let postResult: { ok: boolean; detail: string; post_url?: string };
+      try {
+        const res = await fetch(`${avUrl}/linkedin/post`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Webhook-Secret": secret },
+          body: JSON.stringify({ approval_id: approval.id }),
+        });
+        const resBody = await res.json().catch(() => ({}));
+        postResult = {
+          ok: res.ok,
+          detail: res.ok
+            ? `posted by ${reviewer}`
+            : `avery returned HTTP ${res.status}: ${(resBody as { detail?: string }).detail ?? ""}`,
+          post_url: (resBody as { post_url?: string }).post_url,
+        };
+      } catch (e) {
+        postResult = { ok: false, detail: e instanceof Error ? e.message : "linkedin/post call failed" };
+      }
+
+      await supabaseAdmin.from("workflow_logs").insert({
+        workflow_name: "Dashboard LinkedIn Post Gate",
+        agent: "avery",
+        trigger_text: approval.title ?? `approval ${id}`,
+        status: postResult.ok ? "success" : "error",
+        ...(postResult.ok ? {} : { error_message: postResult.detail }),
+      });
+
+      return NextResponse.json({ success: true, post: postResult });
+    }
+
     // ── REJECTED → reset idea to queued ─────────────────────────────────────
     if (status === "rejected" && isPublishPost && typeof ideaId === "string") {
       await supabaseAdmin
