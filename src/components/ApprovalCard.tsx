@@ -100,7 +100,8 @@ export function LinkedInCarouselDetail({ payload }: { payload?: Record<string, u
   const postLiveUrl    = (() => {
     try {
       const u = new URL(rawPostLiveUrl);
-      return (u.protocol === "https:" && u.hostname.endsWith("linkedin.com")) ? rawPostLiveUrl : "";
+      const h = u.hostname.toLowerCase().replace(/\.$/, "");
+      return (u.protocol === "https:" && (h === "linkedin.com" || h.endsWith(".linkedin.com"))) ? rawPostLiveUrl : "";
     } catch { return ""; }
   })();
   const [copied, setCopied] = useState<"caption" | "comment" | null>(null);
