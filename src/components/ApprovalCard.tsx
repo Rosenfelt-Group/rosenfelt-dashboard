@@ -90,12 +90,19 @@ function PatchRemediationDetail({ payload, selected, onToggle }: {
 }
 
 export function LinkedInCarouselDetail({ payload }: { payload?: Record<string, unknown> }) {
-  const slides      = (payload?.carousel_slides as string[]) ?? [];
-  const caption     = (payload?.caption as string) ?? "";
-  const commentText = (payload?.comment_text as string) ?? "";
-  const rawPostUrl  = (payload?.post_url as string) ?? "";
-  const postUrl     = /^https?:\/\//i.test(rawPostUrl) ? rawPostUrl : "";
-  const day         = (payload?.suggested_post_day as string) ?? "";
+  const slides         = (payload?.carousel_slides as string[]) ?? [];
+  const caption        = (payload?.caption as string) ?? "";
+  const commentText    = (payload?.comment_text as string) ?? "";
+  const rawPostUrl     = (payload?.post_url as string) ?? "";
+  const postUrl        = /^https?:\/\//i.test(rawPostUrl) ? rawPostUrl : "";
+  const day            = (payload?.suggested_post_day as string) ?? "";
+  const rawPostLiveUrl = (payload?.linkedin_post_url as string) ?? "";
+  const postLiveUrl    = (() => {
+    try {
+      const u = new URL(rawPostLiveUrl);
+      return (u.protocol === "https:" && u.hostname.endsWith("linkedin.com")) ? rawPostLiveUrl : "";
+    } catch { return ""; }
+  })();
   const [copied, setCopied] = useState<"caption" | "comment" | null>(null);
 
   function copy(text: string, key: "caption" | "comment") {
@@ -119,6 +126,19 @@ export function LinkedInCarouselDetail({ payload }: { payload?: Record<string, u
               <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
             </svg>
             Source post
+          </a>
+        )}
+        {postLiveUrl && (
+          <a
+            href={postLiveUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] font-medium text-green-700 bg-green-50 px-1.5 py-0.5 rounded hover:underline flex items-center gap-1"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+            </svg>
+            View on LinkedIn
           </a>
         )}
       </div>
