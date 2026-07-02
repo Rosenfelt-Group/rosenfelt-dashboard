@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { CRMBusiness } from "@/types";
 import { CRMNav } from "@/components/CRMNav";
 import Link from "next/link";
+import { safeHref } from "@/lib/safe-url";
 
 const SIZE_OPTIONS = ["1-10", "11-50", "51-200", "200+"] as const;
 
@@ -138,7 +139,9 @@ export default function BusinessesPage() {
         </div>
       ) : (
         <div className="card divide-y divide-brand-border">
-          {filtered.map(biz => (
+          {filtered.map(biz => {
+            const website = safeHref(biz.website);
+            return (
             <div key={biz.id} className="py-3 flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <Link href={`/crm/businesses/${biz.id}`} className="text-sm font-medium text-brand-black hover:text-brand-orange hover:underline">
@@ -146,9 +149,9 @@ export default function BusinessesPage() {
                 </Link>
                 {biz.industry && <p className="text-xs text-brand-muted">{biz.industry}</p>}
                 <div className="text-xs text-brand-muted mt-1 space-y-0.5">
-                  {biz.website && (
+                  {website && (
                     <div>
-                      <a href={biz.website} target="_blank" rel="noopener noreferrer"
+                      <a href={website} target="_blank" rel="noopener noreferrer"
                          className="text-brand-orange hover:underline">{biz.website}</a>
                     </div>
                   )}
@@ -178,7 +181,8 @@ export default function BusinessesPage() {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
