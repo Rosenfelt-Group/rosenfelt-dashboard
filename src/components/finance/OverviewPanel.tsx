@@ -87,6 +87,9 @@ export function OverviewPanel() {
           ? { ...s, value: String(Math.max(0, Number(s.value) - 1)) }
           : s
       ));
+    } else {
+      console.error('Approval action failed', r.status);
+      load();
     }
   }
 
