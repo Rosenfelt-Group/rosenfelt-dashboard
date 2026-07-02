@@ -7,16 +7,8 @@ import clsx from "clsx";
 import Link from "next/link";
 import { AgentBadge } from "@/components/AgentBadge";
 import { CRMNav } from "@/components/CRMNav";
+import { STAGES } from "@/lib/crm/stages";
 import { Agent } from "@/types";
-
-const STAGES: { stage: CRMStage; label: string; color: string }[] = [
-  { stage: "new",           label: "New",           color: "bg-blue-50 text-blue-700" },
-  { stage: "qualification", label: "Qualification",  color: "bg-amber-50 text-amber-700" },
-  { stage: "engaged",       label: "Engaged",        color: "bg-purple-50 text-purple-700" },
-  { stage: "proposal",      label: "Proposal",       color: "bg-orange-50 text-brand-orange" },
-  { stage: "won",           label: "Won",            color: "bg-green-50 text-green-700" },
-  { stage: "lost",          label: "Lost",           color: "bg-gray-100 text-gray-500" },
-];
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝",
