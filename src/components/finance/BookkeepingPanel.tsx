@@ -73,7 +73,9 @@ export function BookkeepingPanel() {
     }
   }, []);
 
-  useEffect(() => { loadPnL(); loadTransactions(); }, [loadPnL, loadTransactions]);
+  useEffect(() => {
+    Promise.allSettled([loadPnL(), loadTransactions()]);
+  }, [loadPnL, loadTransactions]);
 
   async function sendChat() {
     const text = chatInput.trim();
@@ -123,9 +125,9 @@ export function BookkeepingPanel() {
               )}
               <div className="grid grid-cols-3 gap-3 mb-5">
                 {[
-                  { label: "Income",   value: `$${pnl.income}`, color: "text-green-600" },
+                  { label: "Income",   value: `$${pnl.income}`, color: "text-brand-orange" },
                   { label: "Expenses", value: `$${pnl.expenses}`, color: "text-brand-black" },
-                  { label: "Net",      value: `$${pnl.net}`,     color: pnl.net.startsWith("-") ? "text-red-600" : "text-green-600" },
+                  { label: "Net",      value: `$${pnl.net}`,     color: pnl.net.startsWith("-") ? "text-brand-muted" : "text-brand-orange" },
                 ].map(tile => (
                   <div key={tile.label} className="card text-center py-4">
                     <p className={`text-xl font-semibold ${tile.color}`}>{tile.value}</p>
@@ -185,7 +187,7 @@ export function BookkeepingPanel() {
                   </span>
                   <span className={clsx(
                     "text-sm font-medium w-20 text-right flex-shrink-0",
-                    tx.type === "income" ? "text-green-600" : "text-brand-black"
+                    tx.type === "income" ? "text-brand-orange" : "text-brand-black"
                   )}>
                     {tx.type === "income" ? "+" : "−"}${tx.amount.toFixed(2)}
                   </span>
@@ -199,7 +201,7 @@ export function BookkeepingPanel() {
         <div className="flex flex-col border border-brand-border rounded-xl overflow-hidden h-[520px] lg:h-auto lg:max-h-[640px]">
           {/* Chat header */}
           <div className="flex items-center gap-2 px-4 py-3 bg-brand-offwhite border-b border-brand-border flex-shrink-0">
-            <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+            <div className="w-2 h-2 rounded-full bg-brand-orange flex-shrink-0" />
             <div>
               <p className="text-xs font-semibold text-brand-black">Sam</p>
               <p className="text-[10px] text-brand-muted">Accounting · Legal · HR</p>
