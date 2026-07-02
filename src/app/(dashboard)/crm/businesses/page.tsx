@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { CRMBusiness } from "@/types";
 import { CRMNav } from "@/components/CRMNav";
+import Link from "next/link";
 
 const SIZE_OPTIONS = ["1-10", "11-50", "51-200", "200+"] as const;
 
@@ -140,7 +141,9 @@ export default function BusinessesPage() {
           {filtered.map(biz => (
             <div key={biz.id} className="py-3 flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-brand-black">{biz.name}</p>
+                <Link href={`/crm/businesses/${biz.id}`} className="text-sm font-medium text-brand-black hover:text-brand-orange hover:underline">
+                  {biz.name}
+                </Link>
                 {biz.industry && <p className="text-xs text-brand-muted">{biz.industry}</p>}
                 <div className="text-xs text-brand-muted mt-1 space-y-0.5">
                   {biz.website && (
@@ -161,6 +164,12 @@ export default function BusinessesPage() {
                     {biz.source.replace("_", " ")}
                   </span>
                 )}
+                <Link
+                  href={`/crm/businesses/${biz.id}`}
+                  className="text-xs px-2 py-1 rounded border border-brand-border hover:bg-brand-cream block ml-auto w-fit"
+                >
+                  View →
+                </Link>
                 <button
                   onClick={() => openEdit(biz)}
                   className="text-xs px-2 py-1 rounded border border-brand-border hover:bg-brand-cream block ml-auto"
