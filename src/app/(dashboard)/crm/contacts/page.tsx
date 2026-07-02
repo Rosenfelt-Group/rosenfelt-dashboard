@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { CRMContact, CRMBusiness } from "@/types";
+import { CRMContact, CRMBusiness, CRMContactRole } from "@/types";
 import { CRMNav } from "@/components/CRMNav";
 
 type Form = {
@@ -9,14 +9,25 @@ type Form = {
   email: string;
   phone: string;
   title: string;
+  role: CRMContactRole | "";
+  linkedinUrl: string;
   businessId: string;
   isPrimary: boolean;
   notes: string;
 };
 const BLANK_FORM: Form = {
   firstName: "", lastName: "", email: "", phone: "", title: "",
-  businessId: "", isPrimary: false, notes: "",
+  role: "", linkedinUrl: "", businessId: "", isPrimary: false, notes: "",
 };
+
+const ROLE_OPTIONS: { value: CRMContactRole; label: string }[] = [
+  { value: "decision_maker", label: "Decision maker" },
+  { value: "champion", label: "Champion" },
+  { value: "billing", label: "Billing" },
+  { value: "influencer", label: "Influencer" },
+  { value: "technical", label: "Technical" },
+];
+const ROLE_LABELS: Record<string, string> = Object.fromEntries(ROLE_OPTIONS.map(r => [r.value, r.label]));
 
 function formFromContact(c: CRMContact): Form {
   return {
@@ -25,6 +36,8 @@ function formFromContact(c: CRMContact): Form {
     email: c.email ?? "",
     phone: c.phone ?? "",
     title: c.title ?? "",
+    role: c.role ?? "",
+    linkedinUrl: c.linkedin_url ?? "",
     businessId: c.business_id ?? "",
     isPrimary: c.is_primary,
     notes: c.notes ?? "",
@@ -82,6 +95,8 @@ export default function ContactsPage() {
         email: form.email.trim() || null,
         phone: form.phone.trim() || null,
         title: form.title.trim() || null,
+        role: form.role || null,
+        linkedin_url: form.linkedinUrl.trim() || null,
         business_id: form.businessId || null,
         is_primary: form.isPrimary,
         notes: form.notes.trim() || null,
@@ -154,6 +169,9 @@ export default function ContactsPage() {
                   {contact.first_name}{contact.last_name ? " " + contact.last_name : ""}
                   {contact.is_primary && (
                     <span className="ml-2 badge badge-orange text-xs">Primary</span>
+                  )}
+                  {contact.role && (
+                    <span className="ml-2 badge badge-neutral text-xs">{ROLE_LABELS[contact.role] ?? contact.role}</span>
                   )}
                 </p>
                 {contact.title && (
@@ -255,6 +273,27 @@ export default function ContactsPage() {
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="text-xs text-brand-muted mb-1 block">Role</label>
+                <select
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                  value={form.role}
+                  onChange={e => setForm(p => ({ ...p, role: e.target.value as CRMContactRole | "" }))}
+                >
+                  <option value="">— no role —</option>
+                  {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-brand-muted mb-1 block">LinkedIn URL</label>
+                <input
+                  type="url"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                  value={form.linkedinUrl}
+                  onChange={e => setForm(p => ({ ...p, linkedinUrl: e.target.value }))}
+                  placeholder="https://linkedin.com/in/..."
+                />
               </div>
               <label className="flex items-center gap-2 text-xs text-brand-black">
                 <input
