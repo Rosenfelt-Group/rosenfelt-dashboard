@@ -47,7 +47,7 @@ export default function LeadDetailPage() {
   // Edit form state
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({
-    estimated_value: "", close_date: "", lost_reason: "", assigned_agent: "" as Agent | "",
+    estimated_value: "", close_date: "", lost_reason: "", assigned_agent: "" as Agent | "", quiz_url: "",
   });
 
   function openEditForm(l: CRMLead) {
@@ -56,6 +56,7 @@ export default function LeadDetailPage() {
       close_date: l.close_date ?? "",
       lost_reason: l.lost_reason ?? "",
       assigned_agent: (l.assigned_agent ?? "") as Agent | "",
+      quiz_url: l.quiz_url ?? "",
     });
     setShowEdit(true);
   }
@@ -71,6 +72,7 @@ export default function LeadDetailPage() {
         close_date: editForm.close_date || null,
         lost_reason: editForm.lost_reason || null,
         assigned_agent: editForm.assigned_agent || null,
+        quiz_url: editForm.quiz_url.trim() || null,
       }),
     });
     const updated = await res.json();
@@ -195,6 +197,12 @@ export default function LeadDetailPage() {
             <p className="text-sm text-brand-muted mt-0.5">{contactName}</p>
             {lead.contact?.email && (
               <p className="text-sm text-brand-orange mt-0.5">{lead.contact.email}</p>
+            )}
+            {lead.quiz_url && (
+              <a href={lead.quiz_url} target="_blank" rel="noopener noreferrer"
+                className="text-sm text-brand-orange hover:underline mt-0.5 block">
+                View quiz result ↗
+              </a>
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -335,6 +343,12 @@ export default function LeadDetailPage() {
               )}
               {lead.contact.phone && (
                 <p className="text-xs text-brand-muted">{lead.contact.phone}</p>
+              )}
+              {lead.contact.linkedin_url && (
+                <a href={lead.contact.linkedin_url} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-brand-orange hover:underline block mt-1">
+                  LinkedIn ↗
+                </a>
               )}
             </div>
           )}
@@ -525,6 +539,16 @@ export default function LeadDetailPage() {
                     <option key={a} value={a} className="capitalize">{a}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="text-xs text-brand-muted mb-1 block">Quiz result URL</label>
+                <input
+                  type="url"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                  value={editForm.quiz_url}
+                  onChange={e => setEditForm(p => ({ ...p, quiz_url: e.target.value }))}
+                  placeholder="https://rosably.com/ai-readiness-assessment/..."
+                />
               </div>
               <div>
                 <label className="text-xs text-brand-muted mb-1 block">Est. value ($/mo)</label>
