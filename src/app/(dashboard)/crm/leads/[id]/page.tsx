@@ -9,6 +9,7 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { CRMNav } from "@/components/CRMNav";
 import { STAGES } from "@/lib/crm/stages";
 import { Agent } from "@/types";
+import { safeHref } from "@/lib/safe-url";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝",
@@ -184,6 +185,8 @@ export default function LeadDetailPage() {
   const contactName = lead.contact
     ? `${lead.contact.first_name}${lead.contact.last_name ? " " + lead.contact.last_name : ""}`
     : "—";
+  const quizUrl = safeHref(lead.quiz_url);
+  const contactLinkedinUrl = safeHref(lead.contact?.linkedin_url);
 
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
@@ -198,8 +201,8 @@ export default function LeadDetailPage() {
             {lead.contact?.email && (
               <p className="text-sm text-brand-orange mt-0.5">{lead.contact.email}</p>
             )}
-            {lead.quiz_url && (
-              <a href={lead.quiz_url} target="_blank" rel="noopener noreferrer"
+            {quizUrl && (
+              <a href={quizUrl} target="_blank" rel="noopener noreferrer"
                 className="text-sm text-brand-orange hover:underline mt-0.5 block">
                 View quiz result ↗
               </a>
@@ -344,8 +347,8 @@ export default function LeadDetailPage() {
               {lead.contact.phone && (
                 <p className="text-xs text-brand-muted">{lead.contact.phone}</p>
               )}
-              {lead.contact.linkedin_url && (
-                <a href={lead.contact.linkedin_url} target="_blank" rel="noopener noreferrer"
+              {contactLinkedinUrl && (
+                <a href={contactLinkedinUrl} target="_blank" rel="noopener noreferrer"
                   className="text-xs text-brand-orange hover:underline block mt-1">
                   LinkedIn ↗
                 </a>
