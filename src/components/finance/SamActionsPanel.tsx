@@ -74,6 +74,9 @@ export function SamActionsPanel() {
     if (r.ok) {
       setPending(prev => prev.filter(a => a.id !== id));
       load();
+    } else {
+      console.error('Approval action failed', r.status);
+      load();
     }
   }
 
@@ -119,7 +122,7 @@ export function SamActionsPanel() {
             disabled={composeSending || !compose.trim()}
             className="btn-primary disabled:opacity-50 px-4 py-2"
           >
-            Send
+            {composeSending ? "Sending…" : "Send"}
           </button>
         </div>
 
