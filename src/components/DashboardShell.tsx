@@ -2,9 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { TopBar }    from "./TopBar";
-import { LeftPanel } from "./LeftPanel";
-import { MobileNav } from "./MobileNav";
+import { Sidebar } from "./Sidebar";
 
 // ── System alerts ─────────────────────────────────────────────────────────────
 
@@ -116,13 +114,12 @@ function SystemBanner() {
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-brand-offwhite">
-      <TopBar />
-      <MobileNav />
-      {/* Offset for fixed top bars: mobile h-14 (56px), desktop h-[46px] */}
-      <div className="flex min-h-screen pt-14 md:pt-[46px]">
-        <LeftPanel />
-        <main className="flex-1 min-h-screen">
+    <div className="min-h-screen bg-brand-offwhite flex">
+      <Sidebar />
+      {/* Offset for the fixed nav strip below 900px; the desktop sidebar is a normal
+          flex sibling (not fixed), so no top offset is needed at >=900px. */}
+      <div className="flex-1 min-h-screen min-w-0 pt-14 min-[900px]:pt-0">
+        <main className="min-h-screen">
           <SystemBanner />
           {children}
         </main>
