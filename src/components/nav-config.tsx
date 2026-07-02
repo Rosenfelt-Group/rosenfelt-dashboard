@@ -1,65 +1,54 @@
 import React from "react";
 
-export const WORKSPACE_MODULES = [
-  {
-    id: "dashboard",
-    label: "Overview",
-    tabLabel: "Overview",
-    href: "/overview",
-    icon: "grid",
-    active: ["/overview"],
-  },
-  {
-    id: "control",
-    label: "Control Center",
-    tabLabel: "Control",
-    href: "/control-center",
-    icon: "activity",
-    active: ["/control-center", "/status", "/work", "/approvals"],
-  },
-  {
-    id: "documents",
-    label: "Documents",
-    tabLabel: "Docs",
-    href: "/documents",
-    icon: "folder",
-    active: ["/documents", "/images"],
-  },
-  {
-    id: "sales",
-    label: "Sales & Marketing",
-    tabLabel: "Sales",
-    href: "/sales",
-    icon: "trendingUp",
-    active: ["/sales", "/crm", "/quiz", "/content", "/analytics", "/marketing"],
-  },
-  {
-    id: "agents",
-    label: "Agent Central",
-    tabLabel: "Agents",
-    href: "/agent-central",
-    icon: "brain",
-    active: ["/agent-central", "/agents", "/chat"],
-  },
-  {
-    id: "finance",
-    label: "Finance",
-    tabLabel: "Finance",
-    href: "/finance",
-    icon: "dollar",
-    active: ["/finance", "/cost", "/billing"],
-  },
-  {
-    id: "tools",
-    label: "Tools",
-    tabLabel: "Tools",
-    href: "/tools",
-    icon: "wrench",
-    active: ["/tools", "/users", "/rbac", "/backup", "/sql", "/engineering"],
-  },
-] as const;
+// ── Nav data ───────────────────────────────────────────────────────────────────
+//
+// Grouped by frequency of use, not by category:
+//   - "operations" and "growth" render flat at the top of the sidebar.
+//   - "workspace" is anchored to the bottom, styled de-emphasized (lower-frequency
+//     tools/finance/admin-ish pages). See Sidebar.tsx.
+//
+// NOTE: `/sales` (the old tabbed CRM/Content/Quiz/Research hub) is intentionally
+// not linked from nav anymore — Leads/Content/Reports below give direct access to
+// the same data without the extra hop. The page itself hasn't been deleted.
 
-export type SectionId = typeof WORKSPACE_MODULES[number]["id"];
+export interface NavItem {
+  id: string;
+  label: string;
+  href: string;
+  icon: string;
+  /** Path prefixes that count as "this section is active" for nav highlighting. */
+  active: string[];
+}
+
+export const NAV_GROUPS: { operations: NavItem[]; growth: NavItem[]; workspace: NavItem[] } = {
+  operations: [
+    { id: "overview", label: "Overview",       href: "/overview",       icon: "grid",     active: ["/overview"] },
+    { id: "control",  label: "Control Center", href: "/control-center", icon: "activity", active: ["/control-center", "/status", "/work"] },
+    { id: "approvals",label: "Approvals",      href: "/approvals",      icon: "check",    active: ["/approvals"] },
+    { id: "agents",   label: "Agent Central",  href: "/agent-central",  icon: "brain",    active: ["/agent-central", "/agents", "/chat"] },
+  ],
+  growth: [
+    { id: "leads",    label: "Leads",   href: "/crm",       icon: "users",      active: ["/crm"] },
+    { id: "content",  label: "Content", href: "/content",   icon: "edit",       active: ["/content"] },
+    { id: "reports",  label: "Reports", href: "/analytics", icon: "barChart",   active: ["/analytics"] },
+  ],
+  workspace: [
+    { id: "documents", label: "Documents", href: "/documents",     icon: "folder",     active: ["/documents", "/images"] },
+    { id: "finance",   label: "Finance",   href: "/finance",       icon: "dollar",     active: ["/finance", "/cost", "/billing"] },
+    { id: "marketing", label: "Marketing", href: "/marketing",     icon: "trendingUp", active: ["/marketing"] },
+    { id: "quiz",      label: "Quiz",      href: "/quiz",          icon: "package",    active: ["/quiz"] },
+    { id: "tools",     label: "Tools",     href: "/tools",         icon: "wrench",     active: ["/tools", "/users", "/rbac", "/backup", "/sql", "/engineering"] },
+  ],
+};
+
+// TODO: once the Workspace group exceeds ~5 items, make it collapsible
+// (single <details>/disclosure toggle, default open) rather than flat.
+
+export const ALL_NAV_ITEMS: NavItem[] = [
+  ...NAV_GROUPS.operations,
+  ...NAV_GROUPS.growth,
+  ...NAV_GROUPS.workspace,
+];
 
 export interface SubPage {
   label: string;
@@ -67,23 +56,10 @@ export interface SubPage {
   icon: string;
 }
 
-export const SUB_PAGES: Partial<Record<SectionId, SubPage[]>> = {
+export const SUB_PAGES: Record<string, SubPage[]> = {
   control: [
-    { label: "Status",     href: "/status",    icon: "activity" },
-    { label: "Work Board", href: "/work",       icon: "kanban"   },
-    { label: "Approvals",  href: "/approvals",  icon: "check"    },
-  ],
-  documents: [
-    { label: "Documents", href: "/documents", icon: "folder" },
-    { label: "Images",    href: "/images",    icon: "image"  },
-  ],
-  sales: [
-    { label: "Sales",      href: "/sales",      icon: "trendingUp" },
-    { label: "CRM",        href: "/crm",        icon: "users"      },
-    { label: "Content",    href: "/content",    icon: "edit"       },
-    { label: "Analytics",  href: "/analytics",  icon: "barChart"   },
-    { label: "Quiz",       href: "/quiz",        icon: "package"   },
-    { label: "Marketing",  href: "/marketing",  icon: "trendingUp" },
+    { label: "Status",     href: "/status", icon: "activity" },
+    { label: "Work Board", href: "/work",   icon: "kanban"   },
   ],
   agents: [
     { label: "Agent Central", href: "/agent-central",       icon: "brain"   },
@@ -91,10 +67,25 @@ export const SUB_PAGES: Partial<Record<SectionId, SubPage[]>> = {
     { label: "Intelligence",  href: "/agents/intelligence", icon: "shield"  },
     { label: "Chat",          href: "/chat",                icon: "chat"    },
   ],
+  leads: [
+    { label: "Pipeline",   href: "/crm",           icon: "kanban" },
+    { label: "Leads",      href: "/crm/leads",     icon: "users"  },
+    { label: "Contacts",   href: "/crm/contacts",  icon: "users"  },
+    { label: "Businesses", href: "/crm/businesses",icon: "folder" },
+    { label: "Clients",    href: "/crm/clients",   icon: "users"  },
+  ],
+  content: [
+    { label: "Content",  href: "/content",          icon: "edit" },
+    { label: "Keywords", href: "/content/keywords", icon: "barChart" },
+  ],
+  documents: [
+    { label: "Documents", href: "/documents", icon: "folder" },
+    { label: "Images",    href: "/images",    icon: "image"  },
+  ],
   finance: [
-    { label: "Finance", href: "/finance",  icon: "dollar"     },
-    { label: "Cost",    href: "/cost",     icon: "creditCard" },
-    { label: "Billing", href: "/billing",  icon: "barChart"   },
+    { label: "Finance", href: "/finance", icon: "dollar"     },
+    { label: "Cost",    href: "/cost",    icon: "creditCard" },
+    { label: "Billing", href: "/billing", icon: "barChart"   },
   ],
   tools: [
     { label: "Tools",  href: "/tools",       icon: "wrench"   },
@@ -106,12 +97,9 @@ export const SUB_PAGES: Partial<Record<SectionId, SubPage[]>> = {
   ],
 };
 
-export function isActiveSection(
-  mod: typeof WORKSPACE_MODULES[number],
-  pathname: string
-): boolean {
-  return mod.active.some(r =>
-    r === "/overview"
+export function isActiveSection(item: NavItem, pathname: string): boolean {
+  return item.active.some(r =>
+    r === "/overview" || r === "/approvals"
       ? pathname === r
       : pathname === r || pathname.startsWith(r + "/")
   );
@@ -121,7 +109,7 @@ export function isActiveSubPage(href: string, pathname: string): boolean {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
-// ── Icon component (moved from Sidebar.tsx) ───────────────────────────────────
+// ── Icon component ────────────────────────────────────────────────────────────
 
 export function Icon({ name, size = 18 }: { name: string; size?: number }) {
   const icons: Record<string, React.ReactElement> = {
@@ -145,7 +133,7 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }) {
     shield:      <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>,
     lock:        <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
     chevronLeft: <><polyline points="15 18 9 12 15 6"/></>,
-    chevronRight: <><polyline points="9 18 15 12 9 6"/></>,
+    chevronRight:<><polyline points="9 18 15 12 9 6"/></>,
     menu:        <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>,
     x:           <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
     database:    <><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></>,
@@ -161,7 +149,7 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }) {
   );
 }
 
-// ── Logo crop (moved from Sidebar.tsx) ────────────────────────────────────────
+// ── Logo crop ──────────────────────────────────────────────────────────────────
 
 export function RosablyIcon({ size }: { size: number }) {
   const scaledWidth = Math.round(1280 * (size / 229));

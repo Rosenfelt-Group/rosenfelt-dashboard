@@ -7,6 +7,9 @@ export async function GET() {
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
 
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(startOfWeek.getDate() - 7);
+
     const [
       { count: pendingApprovals },
       { count: openTasks },
@@ -14,6 +17,8 @@ export async function GET() {
       { count: executionsToday },
       { count: errorsToday },
       { count: contentQueue },
+      { count: leadsThisWeek },
+      { count: contentPublishedThisWeek },
     ] = await Promise.all([
       supabaseAdmin
         .from("pending_approvals")
@@ -43,6 +48,17 @@ export async function GET() {
         .from("content_ideas")
         .select("*", { count: "exact", head: true })
         .eq("status", "queued"),
+      supabaseAdmin
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", startOfWeek.toISOString()),
+      // content_ideas has no separate published_at column, so this uses created_at
+      // as a proxy for "published this week" — approximate, not exact publish date.
+      supabaseAdmin
+        .from("content_ideas")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "published")
+        .gte("created_at", startOfWeek.toISOString()),
     ]);
 
     return NextResponse.json({
@@ -52,6 +68,8 @@ export async function GET() {
       executions_today: executionsToday ?? 0,
       errors_today: errorsToday ?? 0,
       content_queue: contentQueue ?? 0,
+      leads_this_week: leadsThisWeek ?? 0,
+      content_published_this_week: contentPublishedThisWeek ?? 0,
     });
   } catch (err) {
     console.error("Stats error:", err);

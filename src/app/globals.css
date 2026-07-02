@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Urbanist:wght@600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,13 +7,25 @@
 @layer base {
   body {
     @apply bg-brand-offwhite text-brand-black antialiased;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+  :focus-visible {
+    outline: 2px solid theme('colors.brand.orange');
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
 @layer components {
   .card {
-    @apply bg-white rounded-xl border border-brand-border p-5;
+    @apply bg-white rounded-2xl border border-brand-border p-5 shadow-sm;
   }
   .btn-primary {
     @apply bg-brand-orange text-white px-4 py-2 rounded-lg text-sm font-medium
@@ -39,4 +51,13 @@
 }
 .animate-slide-up {
   animation: slide-up 0.25s ease-out;
+}
+
+/* Horizontal nav strip (tablet/mobile) — scrollable, scrollbar hidden */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { AgentBadge } from "@/components/AgentBadge";
+import { AgentStatusCard, deriveAgentStatus } from "@/components/AgentStatusCard";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { StatCard } from "@/components/StatCard";
 import { CollapsibleCard } from "@/components/CollapsibleCard";
@@ -234,132 +235,39 @@ export default function OverviewPage() {
         </div>
       )}
 
-      {/* Agent status strip */}
-      <div className="card p-3 mb-6">
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs font-medium text-brand-muted uppercase tracking-wider pr-1">Agents</span>
-          {agentStatus.map(a => (
-            <div key={a.agent} className="flex items-center gap-1.5">
-              <div className={clsx(
-                "w-1.5 h-1.5 rounded-full",
-                a.errors_24h > 0 ? "bg-amber-400" : "bg-green-400"
-              )} />
-              <span className="text-xs capitalize text-brand-black">{a.agent}</span>
-              <span className="text-xs text-brand-muted">
-                {a.executions_24h}x · {a.errors_24h} err
-              </span>
-            </div>
-          ))}
-          {costToday !== null && (
-            <>
-              <div className="flex-1" />
-              <span className="text-xs text-brand-muted">API cost today: ${costToday.toFixed(4)}</span>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Stats summary */}
+      {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <StatCard
-          label="Open work items"
-          value={stats?.open_tasks ?? 0}
-          warn={(stats?.overdue_tasks ?? 0) > 0}
+          label="Active agents"
+          value={`${agentStatus.filter(a => deriveAgentStatus(a) !== "idle").length}/${agentStatus.length || 5}`}
         />
         <StatCard
-          label="Overdue"
-          value={stats?.overdue_tasks ?? 0}
-          alert={(stats?.overdue_tasks ?? 0) > 0}
+          label="Pending approvals"
+          value={stats?.pending_approvals ?? 0}
+          warn={(stats?.pending_approvals ?? 0) > 0}
         />
         <StatCard
-          label="Runs today"
-          value={stats?.executions_today ?? 0}
+          label="Leads this week"
+          value={stats?.leads_this_week ?? 0}
         />
         <StatCard
-          label="Errors today"
-          value={stats?.errors_today ?? 0}
-          alert={(stats?.errors_today ?? 0) > 0}
+          label="Content published"
+          value={stats?.content_published_this_week ?? 0}
+          sub="last 7 days"
         />
       </div>
 
-      {/* Module tiles */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-        {[
-          {
-            label: "Control Center",
-            href: "/control-center",
-            iconPath: "M22 12h-4l-3 9L9 3l-3 9H2",
-            desc: "System status · Work items",
-            badge: (stats?.errors_today ?? 0) > 0 ? `${stats?.errors_today} errors` : null,
-            badgeColor: "text-red-600 bg-red-50",
-          },
-          {
-            label: "Documents",
-            href: "/documents",
-            iconPath: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z",
-            desc: "Docs · Images · Reports",
-            badge: null,
-            badgeColor: "",
-          },
-          {
-            label: "Sales & Marketing",
-            href: "/sales",
-            iconPath: "M23 6 13.5 15.5 8.5 10.5 1 18M17 6h6v6",
-            desc: "CRM · Content · Research",
-            badge: null,
-            badgeColor: "",
-          },
-          {
-            label: "Agent Central",
-            href: "/agent-central",
-            iconPath: "M9.5 2a2.5 2.5 0 0 1 5 0M12 6v6M9 9h6",
-            desc: "5 agents · Chat · History",
-            badge: null,
-            badgeColor: "",
-          },
-          {
-            label: "Finance",
-            href: "/finance",
-            iconPath: "M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
-            desc: "AI cost · Transactions",
-            badge: null,
-            badgeColor: "",
-          },
-          {
-            label: "Tools",
-            href: "/tools",
-            iconPath: "M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.8 2.8-2.4-2.4z",
-            desc: "Backup · Users · SQL",
-            badge: null,
-            badgeColor: "",
-          },
-        ].map(tile => (
-          <Link
-            key={tile.href}
-            href={tile.href}
-            className="card flex flex-col gap-2 p-4 hover:border-brand-orange/40 hover:shadow-sm transition-all group"
-          >
-            <div className="flex items-start justify-between">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
-                   className="text-brand-orange mt-0.5"
-                   aria-hidden="true">
-                <path d={tile.iconPath}/>
-              </svg>
-              {tile.badge && (
-                <span className={clsx("text-[10px] font-medium px-1.5 py-0.5 rounded-full", tile.badgeColor)}>
-                  {tile.badge}
-                </span>
-              )}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-brand-black group-hover:text-brand-orange transition-colors">
-                {tile.label}
-              </p>
-              <p className="text-xs text-brand-muted mt-0.5">{tile.desc}</p>
-            </div>
-          </Link>
-        ))}
+      {/* Agent status at a glance */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2.5">
+          <h2 className="text-sm font-semibold text-brand-black">Agents</h2>
+          {costToday !== null && (
+            <span className="text-xs text-brand-muted">API cost today: ${costToday.toFixed(4)}</span>
+          )}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+          {agentStatus.map(a => <AgentStatusCard key={a.agent} status={a} />)}
+        </div>
       </div>
 
       {/* Approvals + Activity — compact two-column */}

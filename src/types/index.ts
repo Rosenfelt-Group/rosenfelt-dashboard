@@ -374,6 +374,8 @@ export interface DashboardStats {
   executions_today: number;
   errors_today: number;
   content_queue: number;
+  leads_this_week: number;
+  content_published_this_week: number;
 }
 
 // Work item v2 — log stream + doc registry linking
