@@ -174,7 +174,9 @@ export interface DashboardRole {
 
 // ─── CRM Types ────────────────────────────────────────────────────────────────
 
-export type CRMStage = "new" | "qualification" | "engaged" | "proposal" | "won" | "lost";
+export type CRMStage = "quiz_started" | "quiz_completed" | "snapshot_viewed" | "new" | "qualification" | "engaged" | "proposal" | "won" | "lost";
+export type CRMEntryStage = "quiz_started" | "new";
+export type CRMContactRole = "decision_maker" | "champion" | "billing" | "influencer" | "technical";
 export type CRMSource = "website_contact" | "website_assessment" | "manual" | "referral";
 export type CRMActivityType = "note" | "email_sent" | "email_received" | "stage_change" | "assessment" | "system";
 export type CRMBillingStatus = "active" | "paused" | "cancelled";
@@ -205,6 +207,8 @@ export interface CRMContact {
   email?: string;
   phone?: string;
   title?: string;
+  role?: CRMContactRole;
+  linkedin_url?: string;
   is_primary: boolean;
   notes?: string;
   created_at: string;
@@ -217,6 +221,8 @@ export interface CRMLead {
   business_id: string;
   contact_id?: string;
   stage: CRMStage;
+  entry_stage: CRMEntryStage;
+  quiz_url?: string;
   source?: CRMSource;
   assigned_agent?: Agent;
   estimated_value?: number;
@@ -238,6 +244,16 @@ export interface CRMActivity {
   email_subject?: string;
   email_direction?: "sent" | "received";
   metadata?: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface CRMBusinessResearch {
+  id: string;
+  business_id: string;
+  summary?: string;
+  details?: Record<string, unknown>;
+  source?: string;
+  researched_by?: string;
   created_at: string;
 }
 

@@ -5,16 +5,8 @@ import { differenceInDays } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
 import { CRMNav } from "@/components/CRMNav";
+import { STAGES } from "@/lib/crm/stages";
 import { CreateLeadModal } from "@/components/crm/CreateLeadModal";
-
-const STAGES: { stage: CRMStage; label: string; color: string }[] = [
-  { stage: "new",           label: "New",           color: "bg-blue-50 text-blue-700" },
-  { stage: "qualification", label: "Qualification",  color: "bg-amber-50 text-amber-700" },
-  { stage: "engaged",       label: "Engaged",        color: "bg-purple-50 text-purple-700" },
-  { stage: "proposal",      label: "Proposal",       color: "bg-orange-50 text-brand-orange" },
-  { stage: "won",           label: "Won",            color: "bg-green-50 text-green-700" },
-  { stage: "lost",          label: "Lost",           color: "bg-gray-100 text-gray-500" },
-];
 
 const SOURCE_LABELS: Record<string, string> = {
   website_contact: "Contact form",
@@ -66,8 +58,8 @@ export default function CRMPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {STAGES.map(col => (
+      <div className="flex flex-wrap gap-3">
+        {STAGES.filter(col => !col.isQuizStage || byStage(col.stage).length > 0).map(col => (
           <div
             key={col.stage}
             onDragOver={e => e.preventDefault()}
@@ -77,7 +69,7 @@ export default function CRMPage() {
               }
               setDragId(null);
             }}
-            className="min-h-[200px]"
+            className="min-h-[200px] flex-1 basis-[140px]"
           >
             <div className="flex items-center justify-between mb-3">
               <span className={clsx("badge text-xs", col.color)}>{col.label}</span>

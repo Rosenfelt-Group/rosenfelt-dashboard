@@ -7,16 +7,9 @@ import clsx from "clsx";
 import Link from "next/link";
 import { AgentBadge } from "@/components/AgentBadge";
 import { CRMNav } from "@/components/CRMNav";
+import { STAGES } from "@/lib/crm/stages";
 import { Agent } from "@/types";
-
-const STAGES: { stage: CRMStage; label: string; color: string }[] = [
-  { stage: "new",           label: "New",           color: "bg-blue-50 text-blue-700" },
-  { stage: "qualification", label: "Qualification",  color: "bg-amber-50 text-amber-700" },
-  { stage: "engaged",       label: "Engaged",        color: "bg-purple-50 text-purple-700" },
-  { stage: "proposal",      label: "Proposal",       color: "bg-orange-50 text-brand-orange" },
-  { stage: "won",           label: "Won",            color: "bg-green-50 text-green-700" },
-  { stage: "lost",          label: "Lost",           color: "bg-gray-100 text-gray-500" },
-];
+import { safeHref } from "@/lib/safe-url";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝",
@@ -55,7 +48,7 @@ export default function LeadDetailPage() {
   // Edit form state
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({
-    estimated_value: "", close_date: "", lost_reason: "", assigned_agent: "" as Agent | "",
+    estimated_value: "", close_date: "", lost_reason: "", assigned_agent: "" as Agent | "", quiz_url: "",
   });
 
   function openEditForm(l: CRMLead) {
@@ -64,6 +57,7 @@ export default function LeadDetailPage() {
       close_date: l.close_date ?? "",
       lost_reason: l.lost_reason ?? "",
       assigned_agent: (l.assigned_agent ?? "") as Agent | "",
+      quiz_url: l.quiz_url ?? "",
     });
     setShowEdit(true);
   }
@@ -79,6 +73,7 @@ export default function LeadDetailPage() {
         close_date: editForm.close_date || null,
         lost_reason: editForm.lost_reason || null,
         assigned_agent: editForm.assigned_agent || null,
+        quiz_url: editForm.quiz_url.trim() || null,
       }),
     });
     const updated = await res.json();
@@ -190,6 +185,8 @@ export default function LeadDetailPage() {
   const contactName = lead.contact
     ? `${lead.contact.first_name}${lead.contact.last_name ? " " + lead.contact.last_name : ""}`
     : "—";
+  const quizUrl = safeHref(lead.quiz_url);
+  const contactLinkedinUrl = safeHref(lead.contact?.linkedin_url);
 
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
@@ -203,6 +200,12 @@ export default function LeadDetailPage() {
             <p className="text-sm text-brand-muted mt-0.5">{contactName}</p>
             {lead.contact?.email && (
               <p className="text-sm text-brand-orange mt-0.5">{lead.contact.email}</p>
+            )}
+            {quizUrl && (
+              <a href={quizUrl} target="_blank" rel="noopener noreferrer"
+                className="text-sm text-brand-orange hover:underline mt-0.5 block">
+                View quiz result ↗
+              </a>
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -343,6 +346,12 @@ export default function LeadDetailPage() {
               )}
               {lead.contact.phone && (
                 <p className="text-xs text-brand-muted">{lead.contact.phone}</p>
+              )}
+              {contactLinkedinUrl && (
+                <a href={contactLinkedinUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-brand-orange hover:underline block mt-1">
+                  LinkedIn ↗
+                </a>
               )}
             </div>
           )}
@@ -533,6 +542,16 @@ export default function LeadDetailPage() {
                     <option key={a} value={a} className="capitalize">{a}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="text-xs text-brand-muted mb-1 block">Quiz result URL</label>
+                <input
+                  type="url"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                  value={editForm.quiz_url}
+                  onChange={e => setEditForm(p => ({ ...p, quiz_url: e.target.value }))}
+                  placeholder="https://rosably.com/ai-readiness-assessment/..."
+                />
               </div>
               <div>
                 <label className="text-xs text-brand-muted mb-1 block">Est. value ($/mo)</label>
