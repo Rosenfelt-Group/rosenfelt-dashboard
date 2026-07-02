@@ -58,8 +58,8 @@ export default function CRMPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {STAGES.map(col => (
+      <div className="flex flex-wrap gap-3">
+        {STAGES.filter(col => !col.isQuizStage || byStage(col.stage).length > 0).map(col => (
           <div
             key={col.stage}
             onDragOver={e => e.preventDefault()}
@@ -69,7 +69,7 @@ export default function CRMPage() {
               }
               setDragId(null);
             }}
-            className="min-h-[200px]"
+            className="min-h-[200px] flex-1 basis-[140px]"
           >
             <div className="flex items-center justify-between mb-3">
               <span className={clsx("badge text-xs", col.color)}>{col.label}</span>
