@@ -399,7 +399,7 @@ export function SupabaseSqlQuery() {
 
       {result && result.columns.length > 0 && result.row_count > 0 && (
         <div className="card p-0 overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
             <table className="w-full text-xs font-mono">
               <thead className="bg-brand-offwhite border-b border-brand-border">
                 <tr>

@@ -293,7 +293,7 @@ export default function AnalyticsPage() {
           {data.pages.length === 0 ? (
             <p className="text-sm text-brand-muted py-12 text-center">No pageviews in this range.</p>
           ) : (
-            <div className="overflow-x-auto -mx-5">
+            <div className="overflow-x-auto -mx-5 [-webkit-overflow-scrolling:touch]">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-brand-muted text-xs uppercase tracking-wider">
@@ -341,7 +341,7 @@ export default function AnalyticsPage() {
           {data.events.length === 0 ? (
             <p className="text-sm text-brand-muted py-12 text-center">No events in this range.</p>
           ) : (
-            <div className="overflow-x-auto -mx-5">
+            <div className="overflow-x-auto -mx-5 [-webkit-overflow-scrolling:touch]">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-brand-muted text-xs uppercase tracking-wider">

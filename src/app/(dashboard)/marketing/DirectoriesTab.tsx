@@ -107,7 +107,7 @@ function DirectoryRow({ dir, onUpdate, onDelete }: {
             {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
           </select>
         ) : (
-          <button onClick={() => setEditingStatus(true)} title="Click to change status">
+          <button onClick={() => setEditingStatus(true)} title="Click to change status" className="touch-manipulation">
             <StatusBadge status={dir.status} />
           </button>
         )}
@@ -310,7 +310,7 @@ export default function DirectoriesTab() {
       )}
 
       {/* Table */}
-      <div className="card p-0 overflow-x-auto">
+      <div className="card p-0 overflow-x-auto [-webkit-overflow-scrolling:touch]">
         {loading ? (
           <div className="p-8 text-center text-xs text-brand-muted">Loading…</div>
         ) : !loading && dirs.length === 0 && error ? (

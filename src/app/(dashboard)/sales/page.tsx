@@ -319,7 +319,7 @@ export default function SalesPage() {
               <p className="text-xs text-brand-muted mt-1">Run a brief above to get started</p>
             </div>
           ) : (
-            <div className="overflow-x-auto card">
+            <div className="overflow-x-auto card [-webkit-overflow-scrolling:touch]">
               <table className="w-full text-sm">
                 <thead>
                   <tr>

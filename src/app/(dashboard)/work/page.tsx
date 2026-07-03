@@ -614,7 +614,7 @@ function WorkPageInner() {
           No columns visible. Use ⚙ Columns to show one.
         </div>
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-3">
+        <div className="flex gap-3 overflow-x-auto pb-3 [-webkit-overflow-scrolling:touch]">
           {visibleColumns.map((status) => (
             <KanbanColumn
               key={status}

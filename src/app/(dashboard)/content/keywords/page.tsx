@@ -448,7 +448,7 @@ export default function KeywordsPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-brand-border bg-brand-offwhite">
@@ -521,7 +521,7 @@ export default function KeywordsPage() {
                     <td className="px-3 py-3 text-right">
                       <button
                         onClick={() => setModal({ mode: "edit", row })}
-                        className="text-xs text-brand-muted hover:text-brand-black transition-colors px-2 py-1 rounded hover:bg-brand-offwhite"
+                        className="text-xs text-brand-muted hover:text-brand-black transition-colors px-2 py-1 rounded hover:bg-brand-offwhite touch-manipulation"
                       >
                         Edit
                       </button>

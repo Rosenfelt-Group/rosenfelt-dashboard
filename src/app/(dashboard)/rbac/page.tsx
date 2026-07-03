@@ -137,7 +137,7 @@ function PermissionMatrix({
   ];
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr>
@@ -181,7 +181,7 @@ function PermissionMatrix({
                     const state = saveStates[key] ?? "idle";
                     return (
                       <td key={role.name} className="px-4 py-2.5 text-center">
-                        <label className="inline-flex items-center justify-center cursor-pointer">
+                        <label className="inline-flex items-center justify-center cursor-pointer touch-manipulation">
                           <input
                             type="checkbox"
                             checked={checked}

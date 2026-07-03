@@ -134,7 +134,7 @@ export default function QuizPage() {
         ) : leads.length === 0 ? (
           <div className="card p-6 text-sm text-brand-muted text-center">No leads yet.</div>
         ) : (
-          <div className="card overflow-x-auto">
+          <div className="card overflow-x-auto [-webkit-overflow-scrolling:touch]">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-brand-border text-xs text-brand-muted font-medium">
@@ -174,13 +174,13 @@ export default function QuizPage() {
                             href={snapshotUrl(lead.token)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-brand-orange hover:underline"
+                            className="text-xs text-brand-orange hover:underline touch-manipulation"
                           >
                             View
                           </a>
                           <button
                             onClick={() => copyLink(lead.token!)}
-                            className="text-xs text-brand-muted hover:text-brand-black transition-colors"
+                            className="text-xs text-brand-muted hover:text-brand-black transition-colors touch-manipulation"
                             title="Copy snapshot link"
                           >
                             {copied === lead.token ? "Copied!" : "Copy link"}

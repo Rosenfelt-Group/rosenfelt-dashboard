@@ -500,7 +500,7 @@ export default function AgentPromptsPage() {
                     Restore this version
                   </button>
                 </div>
-                <pre className="text-xs text-brand-muted p-4 overflow-x-auto whitespace-pre-wrap font-mono max-h-64">
+                <pre className="text-xs text-brand-muted p-4 overflow-x-auto whitespace-pre-wrap font-mono max-h-64 [-webkit-overflow-scrolling:touch]">
                   {previewVersion.prompt}
                 </pre>
               </div>
@@ -557,7 +557,7 @@ export default function AgentPromptsPage() {
               </div>
             )}
             <div className="flex items-center justify-between">
-              <div className="flex gap-1 overflow-x-auto scrollbar-none pb-1">
+              <div className="flex gap-1 overflow-x-auto scrollbar-none pb-1 [-webkit-overflow-scrolling:touch]">
                 {[
                   { key: "all", label: `All (${memoryCounts.all})` },
                   { key: "preference", label: `Preferences (${memoryCounts.preference})` },
@@ -569,7 +569,7 @@ export default function AgentPromptsPage() {
                 ].map(f => (
                   <button key={f.key} onClick={() => setMemoryFilter(f.key)}
                     className={clsx(
-                      "px-2.5 py-1 rounded-full text-xs whitespace-nowrap transition-colors flex-shrink-0",
+                      "px-2.5 py-1 rounded-full text-xs whitespace-nowrap transition-colors flex-shrink-0 touch-manipulation",
                       memoryFilter === f.key ? "bg-brand-orange text-white" : "bg-brand-offwhite text-brand-muted hover:bg-brand-border"
                     )}>
                     {f.label}

@@ -112,7 +112,7 @@ function BudgetInput({ agent, current, onSave }: { agent: Agent; current: number
         onClick={handleSave}
         disabled={saving}
         className={clsx(
-          "text-xs px-3 py-1.5 rounded-lg font-medium transition-colors",
+          "text-xs px-3 py-1.5 rounded-lg font-medium transition-colors touch-manipulation",
           saved
             ? "bg-green-100 text-green-700"
             : "bg-brand-orange text-white hover:bg-brand-orange/90 disabled:opacity-50"
@@ -178,7 +178,7 @@ function TokenCapsInput({
         onClick={handleSave}
         disabled={saving || !dirty}
         className={clsx(
-          "text-xs px-2.5 py-1 rounded-lg font-medium transition-colors",
+          "text-xs px-2.5 py-1 rounded-lg font-medium transition-colors touch-manipulation",
           saved
             ? "bg-green-100 text-green-700"
             : "bg-brand-orange text-white hover:bg-brand-orange/90 disabled:opacity-40"
@@ -408,7 +408,7 @@ export function CostPanel() {
             {agents.length === 0 ? (
               <p className="text-xs text-brand-muted text-center py-10">No usage recorded yet</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-brand-border bg-brand-offwhite">
@@ -469,7 +469,7 @@ export function CostPanel() {
             {daily.length === 0 ? (
               <p className="text-xs text-brand-muted text-center py-10">No usage recorded yet</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-brand-border bg-brand-offwhite">

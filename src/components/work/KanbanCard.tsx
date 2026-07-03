@@ -65,7 +65,7 @@ export function KanbanCard({ item, onMove, allowedTargets, statusLabel }: Props)
   return (
     <div
       onClick={() => router.push(`/work/${item.ref}`)}
-      className="bg-white rounded border border-brand-border p-3 hover:shadow-sm hover:border-brand-orange/40 cursor-pointer transition relative"
+      className="bg-white rounded border border-brand-border p-3 hover:shadow-sm hover:border-brand-orange/40 cursor-pointer transition relative touch-manipulation"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 flex-wrap">
