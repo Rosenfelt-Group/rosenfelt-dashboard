@@ -2,23 +2,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { KickTransaction } from "@/app/api/kick/transactions/route";
+import { parseKickPnL } from "@/lib/parseKickSummary";
 
-type PnL = { income: string; expenses: string; net: string; start: string | null; end: string | null } | null;
+type PnL = { income: number; expenses: number; net: number; start: string | null; end: string | null } | null;
 type FilterType = "all" | "income" | "expense";
 type ChatMessage = { role: "user" | "sam"; content: string };
 
-function parseKickPnL(summary: string | null | undefined): PnL {
-  if (!summary) return null;
-  const money = summary.match(/income=\$([\d,.-]+), expenses=\$([\d,.-]+), net=\$([\d,.-]+)/);
+function parseKickPeriod(summary: string | null | undefined): { start: string | null; end: string | null } {
+  if (!summary) return { start: null, end: null };
   const period = summary.match(/\(([^,]+), ([\d-]+)\.\.([\d-]+)\)/);
+  return { start: period?.[2] ?? null, end: period?.[3] ?? null };
+}
+
+function parseKickBookkeeping(summary: string | null | undefined): PnL {
+  const money = parseKickPnL(summary);
   if (!money) return null;
-  return {
-    income: money[1],
-    expenses: money[2],
-    net: money[3],
-    start: period?.[2] ?? null,
-    end: period?.[3] ?? null,
-  };
+  const { start, end } = parseKickPeriod(summary);
+  return { ...money, start, end };
+}
+
+function fmtMoney(n: number): string {
+  const sign = n < 0 ? "-" : "";
+  return `${sign}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function BookkeepingPanel() {
@@ -50,7 +55,7 @@ export function BookkeepingPanel() {
     setPnlError(false);
     try {
       const d = await fetch("/api/kick/status").then(r => r.json());
-      setPnl(parseKickPnL(d?.summary));
+      setPnl(parseKickBookkeeping(d?.summary));
       if (!d?.connected) setPnlError(true);
     } catch {
       setPnlError(true);
@@ -125,9 +130,9 @@ export function BookkeepingPanel() {
               )}
               <div className="grid grid-cols-3 gap-3 mb-5">
                 {[
-                  { label: "Income",   value: `$${pnl.income}`, color: "text-brand-orange" },
-                  { label: "Expenses", value: `$${pnl.expenses}`, color: "text-brand-black" },
-                  { label: "Net",      value: `$${pnl.net}`,     color: pnl.net.startsWith("-") ? "text-brand-muted" : "text-brand-orange" },
+                  { label: "Income",   value: fmtMoney(pnl.income),   color: "text-green-700" },
+                  { label: "Expenses", value: fmtMoney(pnl.expenses), color: "text-brand-black" },
+                  { label: "Net",      value: fmtMoney(pnl.net),      color: pnl.net < 0 ? "text-red-700" : "text-green-700" },
                 ].map(tile => (
                   <div key={tile.label} className="card text-center py-4">
                     <p className={`text-xl font-semibold ${tile.color}`}>{tile.value}</p>
@@ -187,7 +192,7 @@ export function BookkeepingPanel() {
                   </span>
                   <span className={clsx(
                     "text-sm font-medium w-20 text-right flex-shrink-0",
-                    tx.type === "income" ? "text-brand-orange" : "text-brand-black"
+                    tx.type === "income" ? "text-green-700" : "text-brand-black"
                   )}>
                     {tx.type === "income" ? "+" : "−"}${tx.amount.toFixed(2)}
                   </span>

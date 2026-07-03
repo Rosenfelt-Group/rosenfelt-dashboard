@@ -8,20 +8,22 @@ import { BillingPanel }      from "@/components/finance/BillingPanel";
 import { CostPanel }         from "@/components/finance/CostPanel";
 import { SamActionsPanel }   from "@/components/finance/SamActionsPanel";
 
-type Tab = "overview" | "bookkeeping" | "stripe" | "cost" | "sam-actions";
-
-const TABS: { id: Tab; label: string }[] = [
+const TABS = [
   { id: "overview",     label: "Overview"     },
   { id: "bookkeeping",  label: "Bookkeeping"  },
   { id: "stripe",       label: "Stripe"       },
   { id: "cost",         label: "AI Cost"      },
   { id: "sam-actions",  label: "Sam Actions"  },
-];
+] as const;
+
+type Tab = typeof TABS[number]["id"];
+const VALID_TABS: readonly Tab[] = TABS.map(t => t.id);
 
 function FinanceShell() {
   const searchParams = useSearchParams();
   const router       = useRouter();
-  const activeTab    = (searchParams.get("tab") as Tab | null) ?? "overview";
+  const rawTab       = searchParams.get("tab");
+  const activeTab: Tab = VALID_TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
 
   function setTab(id: Tab) {
     const params = new URLSearchParams(searchParams.toString());

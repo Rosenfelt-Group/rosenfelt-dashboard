@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { PendingApproval } from "@/types";
+import { parseKickPnL } from "@/lib/parseKickSummary";
 
 interface StatCard {
   label: string;
@@ -10,12 +11,6 @@ interface StatCard {
   sub: string;
   error: boolean;
   href?: string;
-}
-
-function parseKickNet(summary: string | null | undefined): string | null {
-  if (!summary) return null;
-  const m = summary.match(/net=\$([\d,.-]+)/);
-  return m ? `$${m[1]}` : null;
 }
 
 export function OverviewPanel() {
@@ -45,7 +40,10 @@ export function OverviewPanel() {
       ? allApps.filter((a: PendingApproval) => a.agent === "sam" && a.status === "pending")
       : [];
 
-    const kickNet = kick?.connected ? parseKickNet(kick.summary) : null;
+    const kickPnL = kick?.connected ? parseKickPnL(kick.summary) : null;
+    const kickNet = kickPnL != null
+      ? `$${kickPnL.net.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+      : null;
     const mrr     = stripe?.mrr != null
       ? `$${(stripe.mrr / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`
       : null;
