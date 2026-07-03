@@ -8,6 +8,12 @@ type PnL = { income: number; expenses: number; net: number; start: string | null
 type FilterType = "all" | "income" | "expense";
 type ChatMessage = { role: "user" | "sam"; content: string };
 
+const PERIOD_OPTIONS = [
+  { label: "Last 30d", prompt: "Show me the P&L for the last 30 days." },
+  { label: "Last 90d", prompt: "Show me the P&L for the last 90 days." },
+  { label: "MTD", prompt: "Show me the P&L for month to date." },
+] as const;
+
 function parseKickPeriod(summary: string | null | undefined): { start: string | null; end: string | null } {
   if (!summary) return { start: null, end: null };
   const period = summary.match(/\(([^,]+), ([\d-]+)\.\.([\d-]+)\)/);
@@ -82,10 +88,8 @@ export function BookkeepingPanel() {
     Promise.allSettled([loadPnL(), loadTransactions()]);
   }, [loadPnL, loadTransactions]);
 
-  async function sendChat() {
-    const text = chatInput.trim();
+  async function sendMessage(text: string) {
     if (!text || chatLoading) return;
-    setChatInput("");
     setMessages(prev => [...prev, { role: "user", content: text }]);
     setChatLoading(true);
     try {
@@ -103,6 +107,13 @@ export function BookkeepingPanel() {
     }
   }
 
+  async function sendChat() {
+    const text = chatInput.trim();
+    if (!text || chatLoading) return;
+    setChatInput("");
+    await sendMessage(text);
+  }
+
   const visibleTx = transactions.filter(t =>
     filter === "all" ? true : t.type === filter
   );
@@ -115,6 +126,21 @@ export function BookkeepingPanel() {
         <div className="min-w-0">
 
           {/* P&L strip */}
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium text-brand-black">P&L Summary</p>
+            <div className="flex gap-1">
+              {PERIOD_OPTIONS.map(opt => (
+                <button
+                  key={opt.label}
+                  onClick={() => sendMessage(opt.prompt)}
+                  disabled={chatLoading}
+                  className="px-2.5 py-1 rounded-md text-xs font-medium text-brand-muted border border-brand-border hover:text-brand-black hover:border-brand-orange transition-colors disabled:opacity-50"
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
           {pnlLoading ? (
             <div className="grid grid-cols-3 gap-3 mb-5">
               {[1,2,3].map(i => <div key={i} className="card animate-pulse h-20" />)}
