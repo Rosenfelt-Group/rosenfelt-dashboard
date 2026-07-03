@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { KickTransaction } from "@/app/api/kick/transactions/route";
 import { parseKickPnL } from "@/lib/parseKickSummary";
+import { SamMarkdown } from "@/components/SamMarkdown";
 
 type PnL = { income: number; expenses: number; net: number; start: string | null; end: string | null } | null;
 type FilterType = "all" | "income" | "expense";
@@ -245,13 +246,13 @@ export function BookkeepingPanel() {
               <div
                 key={i}
                 className={clsx(
-                  "rounded-xl px-3 py-2 text-xs leading-relaxed max-w-[90%] whitespace-pre-wrap",
+                  "rounded-xl px-3 py-2 text-xs leading-relaxed max-w-[90%]",
                   m.role === "user"
-                    ? "bg-brand-orange text-white ml-auto"
+                    ? "bg-brand-orange text-white ml-auto whitespace-pre-wrap"
                     : "bg-brand-offwhite text-brand-black border border-brand-border"
                 )}
               >
-                {m.content}
+                {m.role === "sam" ? <SamMarkdown content={m.content} /> : m.content}
               </div>
             ))}
             {chatLoading && (

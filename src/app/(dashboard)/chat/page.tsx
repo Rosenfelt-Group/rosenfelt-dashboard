@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { AgentBadge } from "@/components/AgentBadge";
+import { SamMarkdown } from "@/components/SamMarkdown";
 import { Agent } from "@/types";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
@@ -31,6 +32,8 @@ const CHAT_ID = "dashboard_brian";
 
 function MessageBubble({ msg, agent }: { msg: Message; agent: Agent }) {
   const isUser = msg.role === "user";
+  // Sam's prompt emits Markdown; the other four still speak Telegram HTML — see SamMarkdown.tsx
+  const isSamMarkdown = agent === "sam" && !isUser;
 
   const formatted = msg.content
     .replace(/<b>(.*?)<\/b>/g, "$1")
@@ -45,12 +48,13 @@ function MessageBubble({ msg, agent }: { msg: Message; agent: Agent }) {
         </div>
       )}
       <div className={clsx(
-        "rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap max-w-xl",
+        "rounded-2xl px-4 py-3 text-sm leading-relaxed max-w-xl",
+        !isSamMarkdown && "whitespace-pre-wrap",
         isUser
           ? "bg-brand-orange text-white rounded-tr-sm"
           : "bg-white border border-brand-border text-brand-black rounded-tl-sm"
       )}>
-        {formatted}
+        {isSamMarkdown ? <SamMarkdown content={msg.content} /> : formatted}
       </div>
     </div>
   );

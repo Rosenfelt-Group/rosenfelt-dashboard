@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
 import { ApprovalCard } from "@/components/ApprovalCard";
+import { SamMarkdown } from "@/components/SamMarkdown";
 import { PendingApproval } from "@/types";
 
 type HistoryRow = PendingApproval & { status: "approved" | "rejected" | "revision_requested" };
@@ -137,7 +138,7 @@ export function SamActionsPanel() {
         {composeReply && !composeSending && (
           <div className="mt-3 p-3 rounded-lg bg-brand-offwhite border border-brand-border text-sm text-brand-black leading-relaxed">
             <div className="flex items-start justify-between gap-2">
-              <p className="whitespace-pre-wrap flex-1">{composeReply}</p>
+              <div className="flex-1"><SamMarkdown content={composeReply} /></div>
               <button onClick={() => setComposeReply(null)} className="text-brand-muted hover:text-brand-black text-lg flex-shrink-0 leading-none">✕</button>
             </div>
           </div>
