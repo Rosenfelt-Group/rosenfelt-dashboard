@@ -1535,13 +1535,13 @@ export default function StatusPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-brand-border mb-6">
+      <div className="flex gap-1 border-b border-brand-border mb-6 overflow-x-auto [-webkit-overflow-scrolling:touch]">
         {TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={clsx(
-              "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
+              "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex-shrink-0 touch-manipulation",
               tab === t.id
                 ? "border-brand-orange text-brand-orange"
                 : "border-transparent text-brand-muted hover:text-brand-black"

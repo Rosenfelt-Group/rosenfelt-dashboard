@@ -14,7 +14,7 @@ const TABS = [
 export function CRMNav() {
   const pathname = usePathname();
   return (
-    <div className="flex items-center gap-0 border-b border-brand-border mb-6">
+    <div className="flex items-center gap-0 border-b border-brand-border mb-6 overflow-x-auto [-webkit-overflow-scrolling:touch]">
       {TABS.map(tab => {
         const active = tab.href === "/crm"
           ? pathname === "/crm"
@@ -24,7 +24,7 @@ export function CRMNav() {
             key={tab.href}
             href={tab.href}
             className={clsx(
-              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors",
+              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap flex-shrink-0 touch-manipulation transition-colors",
               active
                 ? "border-brand-orange text-brand-orange"
                 : "border-transparent text-brand-muted hover:text-brand-black hover:border-brand-border"
