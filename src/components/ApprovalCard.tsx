@@ -12,6 +12,20 @@ interface ApprovalCardProps {
 
 interface RemItem { item: string; current?: string; available?: string; severity?: string; source?: string }
 
+// date-fns throws RangeError on an invalid date (e.g. a null/malformed
+// created_at) — that's uncaught render-phase throw with no error boundary
+// anywhere in the app, which kills the whole React tree, not just this card.
+function safeTimeAgo(value: string | null | undefined): string {
+  if (!value) return "unknown time";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "unknown time";
+  try {
+    return formatDistanceToNow(d, { addSuffix: true });
+  } catch {
+    return "unknown time";
+  }
+}
+
 function PatchRemediationDetail({ payload, selected, onToggle }: {
   payload?: Record<string, unknown>;
   selected: Set<string>;
@@ -285,7 +299,7 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
           )}
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="text-xs text-brand-muted">
-              {approval.agent} · {formatDistanceToNow(new Date(approval.created_at), { addSuffix: true })}
+              {approval.agent} · {safeTimeAgo(approval.created_at)}
             </span>
             {editUrl && (
               <a
