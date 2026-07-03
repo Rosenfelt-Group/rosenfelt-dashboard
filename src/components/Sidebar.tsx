@@ -170,7 +170,7 @@ function NavStrip({ pathname, approvalsCount, onLogout }: {
       <div className="flex items-center gap-2 pl-4 pr-2 shrink-0">
         <RosablyIcon size={24} />
       </div>
-      <nav className="flex-1 min-w-0 h-full flex items-center gap-1 overflow-x-auto no-scrollbar px-1">
+      <nav className="flex-1 min-w-0 h-full flex items-center gap-1 overflow-x-auto no-scrollbar px-1 [-webkit-overflow-scrolling:touch]">
         {ALL_NAV_ITEMS.map(item => {
           const active = isActiveSection(item, pathname);
           return (
@@ -178,7 +178,7 @@ function NavStrip({ pathname, approvalsCount, onLogout }: {
               key={item.id}
               href={item.href}
               className={clsx(
-                "flex items-center gap-1.5 px-3 h-10 rounded-lg text-[13px] whitespace-nowrap shrink-0 transition-colors",
+                "flex items-center gap-1.5 px-3 h-10 rounded-lg text-[13px] whitespace-nowrap shrink-0 transition-colors touch-manipulation",
                 active
                   ? "bg-orange-50 text-brand-orange font-semibold"
                   : "text-brand-muted hover:text-brand-black hover:bg-brand-cream"

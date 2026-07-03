@@ -36,13 +36,13 @@ function FinanceShell() {
       {/* Tab bar */}
       <div className="px-4 md:px-8 pt-6">
         <h1 className="text-xl font-semibold text-brand-black mb-4">Finance</h1>
-        <div className="flex gap-0 border-b border-brand-border overflow-x-auto">
+        <div className="flex gap-0 border-b border-brand-border overflow-x-auto [-webkit-overflow-scrolling:touch]">
           {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
               className={clsx(
-                "px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors",
+                "px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors touch-manipulation",
                 activeTab === t.id
                   ? "border-brand-orange text-brand-orange"
                   : "border-transparent text-brand-muted hover:text-brand-black"
