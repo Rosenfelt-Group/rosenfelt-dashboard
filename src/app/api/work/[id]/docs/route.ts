@@ -57,6 +57,10 @@ export async function POST(
       path,
       description,
       audience,
+      // This route attaches a doc as a generic work-item output artifact.
+      // "logs" is the closest new-vocabulary fit for "transaction/output record."
+      // Flag for Brian to override toward a different bucket (e.g. "marketing")
+      // if this specific path should default differently.
       doc_type: "logs",
       work_item_id: id,
     })
