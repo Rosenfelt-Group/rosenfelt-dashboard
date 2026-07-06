@@ -1,3 +1,5 @@
+import type { DocType, DocAudience, DocStatus } from "@/lib/doc-types";
+
 export type TaskPriority = "high" | "medium" | "low";
 export type Agent = "riley" | "jordan" | "avery" | "brian" | "sam" | "casey";
 
@@ -420,8 +422,10 @@ export interface WorkItemDoc {
   name: string;
   path: string;
   description: string | null;
-  doc_type: string | null;
-  audience: string | null;
+  doc_type: DocType | null;
+  audience: DocAudience | null;
+  status: DocStatus;
+  client_id: string | null;
   updated_at: string | null;
   work_item_id: string;
 }

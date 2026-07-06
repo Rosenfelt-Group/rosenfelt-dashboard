@@ -26,7 +26,7 @@ export async function POST(
   const name = String(body.name || "").trim();
   const path = String(body.path || "").trim();
   const description = body.description ? String(body.description) : null;
-  const audience = body.audience === "client-facing" ? "client-facing" : "internal";
+  const audience = body.audience === "client" ? "client" : "internal";
 
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
   if (!path) return NextResponse.json({ error: "path required" }, { status: 400 });
@@ -57,7 +57,7 @@ export async function POST(
       path,
       description,
       audience,
-      doc_type: "client_deliverable",
+      doc_type: "logs",
       work_item_id: id,
     })
     .select()
