@@ -55,6 +55,7 @@ export default function MetadataDrawer({ doc, clients, onClose, onSaved }: Metad
     if (description !== (doc.description ?? "")) patch.description = description || null;
 
     if (Object.keys(patch).length === 0) {
+      setSaving(false);
       onClose();
       return;
     }
@@ -71,6 +72,7 @@ export default function MetadataDrawer({ doc, clients, onClose, onSaved }: Metad
         setSaving(false);
         return;
       }
+      setSaving(false);
       onSaved({ ...doc, ...data });
     } catch {
       setSaveError("Network error saving changes");
