@@ -18,6 +18,7 @@ export const MANAGE_PERMISSIONS = [
   "use_chat",
   "manage_users",
   "manage_rbac",
+  "manage_documents",
 ] as const;
 
 export const ALL_PERMISSIONS = [...VIEW_PERMISSIONS, ...MANAGE_PERMISSIONS] as const;
@@ -40,6 +41,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   use_chat:         "Use Chat",
   manage_users:     "Manage Users",
   manage_rbac:      "Manage Roles",
+  manage_documents: "Manage Documents",
 };
 
 export const PERMISSION_GROUPS = {
