@@ -32,14 +32,15 @@ export interface Filters {
 
 export const EMPTY_FILTERS: Filters = { status: "", doc_type: "", audience: "", client: "", health: "" };
 
-function matchesFilters(doc: FacetDoc, filters: Filters, q: string, skip?: keyof Filters): boolean {
-  if (filters.status && skip !== "status" && doc.status !== filters.status) return false;
-  if (filters.doc_type && skip !== "doc_type" && doc.doc_type !== filters.doc_type) return false;
-  if (filters.audience && skip !== "audience" && doc.audience !== filters.audience) return false;
-  if (filters.client && skip !== "client") {
+function matchesFilters(doc: FacetDoc, filters: Filters, q: string, skip?: keyof Filters | (keyof Filters)[]): boolean {
+  const skipped = new Set(Array.isArray(skip) ? skip : skip ? [skip] : []);
+  if (filters.status && !skipped.has("status") && doc.status !== filters.status) return false;
+  if (filters.doc_type && !skipped.has("doc_type") && doc.doc_type !== filters.doc_type) return false;
+  if (filters.audience && !skipped.has("audience") && doc.audience !== filters.audience) return false;
+  if (filters.client && !skipped.has("client")) {
     if (filters.client === "unassigned" ? doc.client_id !== null : doc.client_id !== filters.client) return false;
   }
-  if (filters.health && skip !== "health" && computeHealth(doc) !== filters.health) return false;
+  if (filters.health && !skipped.has("health") && computeHealth(doc) !== filters.health) return false;
   if (q.trim()) {
     const needle = q.trim().toLowerCase();
     if (!doc.name.toLowerCase().includes(needle) && !doc.path.toLowerCase().includes(needle)) return false;
@@ -117,11 +118,19 @@ function KpiCard({ label, count, active, onClick }: { label: string; count: numb
 export function KpiRow({ docs, filters, q, onChange }: {
   docs: FacetDoc[]; filters: Filters; q: string; onChange: (patch: Partial<Filters>) => void;
 }) {
-  const total = docs.length;
-  const active = docs.filter((d) => d.status === "active").length;
-  const drafts = docs.filter((d) => d.status === "draft").length;
-  const archived = docs.filter((d) => d.status === "archived").length;
-  const issues = docs.filter((d) => {
+  // Scoped by every OTHER active filter/search term, same as the facet-rail
+  // counts (countBy) — each card skips only the dimension(s) it itself
+  // controls, so e.g. selecting a doc_type in the left rail narrows these
+  // counts too, without a card's own filter excluding itself from its count.
+  const statusScoped = docs.filter((d) => matchesFilters(d, filters, q, "status"));
+  const healthScoped = docs.filter((d) => matchesFilters(d, filters, q, "health"));
+  const totalScoped = docs.filter((d) => matchesFilters(d, filters, q, ["status", "health"]));
+
+  const total = totalScoped.length;
+  const active = statusScoped.filter((d) => d.status === "active").length;
+  const drafts = statusScoped.filter((d) => d.status === "draft").length;
+  const archived = statusScoped.filter((d) => d.status === "archived").length;
+  const issues = healthScoped.filter((d) => {
     const h = computeHealth(d);
     return h === "stale" || h === "not_indexed";
   }).length;
