@@ -9,7 +9,7 @@ import {
   DOC_STATUS_COLORS, DocStatus, computeHealth, DOC_HEALTH_LABELS,
 } from "@/lib/doc-types";
 import { can } from "@/lib/permissions";
-import FacetRail, { KpiRow, EMPTY_FILTERS, applyFilters, Filters, ClientOption, FacetDoc } from "./FacetRail";
+import FacetRail, { KpiRow, applyFilters, Filters, ClientOption, FacetDoc } from "./FacetRail";
 import Reader, { ReaderDoc } from "./Reader";
 import MetadataDrawer, { DrawerDoc } from "./MetadataDrawer";
 import BulkActionBar from "./BulkActionBar";
