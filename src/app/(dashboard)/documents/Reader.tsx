@@ -28,7 +28,19 @@ export default function Reader({ doc, mode, onClose, onToggleMode, onEditMetadat
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // URL-backed docs (e.g. PDFs proxied through dashboard routes like
+  // /api/work/[id]/deliverable.pdf) are rendered directly via an iframe,
+  // never through the /api/docs JSON content fetch below — /api/docs would
+  // either 404 (no doc_registry.content/storage_path for these rows) or,
+  // for a real storage_path-backed binary file, return raw bytes that
+  // ReactMarkdown can't render.
+  const isUrlBacked = doc.path.startsWith("/api/") || doc.path.endsWith(".pdf");
+
   useEffect(() => {
+    if (isUrlBacked) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -54,7 +66,7 @@ export default function Reader({ doc, mode, onClose, onToggleMode, onEditMetadat
       .catch(() => { if (!cancelled) setError("Network error loading file"); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [doc.path]);
+  }, [doc.path, isUrlBacked]);
 
   useEffect(() => {
     if (mode !== "fullscreen") return;
@@ -96,31 +108,52 @@ export default function Reader({ doc, mode, onClose, onToggleMode, onEditMetadat
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-[900px] mx-auto px-8 py-8">
-          {loading ? (
-            <div className="space-y-3">
-              {[1, 2, 3, 4].map((i) => <div key={i} className="animate-pulse h-4 bg-brand-offwhite rounded" style={{ width: `${60 + i * 8}%` }} />)}
+        {isUrlBacked ? (
+          /* PDFs and other URL-proxied docs render inline via the browser's
+             PDF viewer rather than through the /api/docs content fetch. */
+          <div className="flex flex-col gap-2 h-full p-4">
+            <div className="flex items-center justify-between gap-3 text-xs text-brand-muted flex-shrink-0">
+              <span>{doc.name}</span>
+              <a href={doc.path} target="_blank" rel="noopener noreferrer" className="text-brand-orange hover:underline">
+                Open in new tab ↗
+              </a>
             </div>
-          ) : error ? (
-            <div className="text-sm text-red-600 bg-red-50 rounded-lg p-4">{error}</div>
-          ) : !content ? (
-            <div className="text-center py-16">
-              <p className="text-sm text-brand-muted">No indexed content yet.</p>
-            </div>
-          ) : (
-            <div className="prose prose-sm max-w-none
-              prose-headings:font-semibold prose-headings:text-brand-black
-              prose-p:text-brand-black prose-p:leading-relaxed
-              prose-a:text-brand-orange prose-a:no-underline hover:prose-a:underline
-              prose-strong:text-brand-black prose-li:text-brand-black
-              prose-code:bg-gray-200 prose-code:text-gray-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs
-              prose-pre:bg-gray-200 prose-pre:text-gray-800 prose-pre:rounded-lg prose-pre:text-xs">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+            <iframe src={doc.path} title={doc.name} className="flex-1 w-full border border-brand-border rounded-lg" />
+          </div>
+        ) : (
+          <div className="max-w-[900px] mx-auto px-8 py-8">
+            {loading ? (
+              <div className="space-y-3">
+                {[1, 2, 3, 4].map((i) => <div key={i} className="animate-pulse h-4 bg-brand-offwhite rounded" style={{ width: `${60 + i * 8}%` }} />)}
+              </div>
+            ) : error ? (
+              <div className="text-sm text-red-600 bg-red-50 rounded-lg p-4">{error}</div>
+            ) : !content ? (
+              <div className="text-center py-16">
+                <p className="text-sm text-brand-muted">No indexed content yet.</p>
+              </div>
+            ) : doc.path.endsWith(".md") ? (
+              <div className="prose prose-sm max-w-none
+                prose-headings:font-semibold prose-headings:text-brand-black
+                prose-p:text-brand-black prose-p:leading-relaxed
+                prose-a:text-brand-orange prose-a:no-underline hover:prose-a:underline
+                prose-strong:text-brand-black prose-li:text-brand-black
+                prose-code:bg-gray-200 prose-code:text-gray-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs
+                prose-pre:bg-gray-200 prose-pre:text-gray-800 prose-pre:rounded-lg prose-pre:text-xs">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+                  {content}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              /* Non-markdown content (e.g. a storage-backed binary file) is
+                 shown as raw text rather than risking a markdown-parse of
+                 arbitrary bytes. */
+              <pre className="text-xs text-brand-black font-mono whitespace-pre-wrap break-words bg-brand-offwhite rounded-lg p-4">
                 {content}
-              </ReactMarkdown>
-            </div>
-          )}
-        </div>
+              </pre>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
