@@ -34,11 +34,19 @@ export default function Reader({ doc, mode, onClose, onToggleMode, onEditMetadat
     setError(null);
     setContent(null);
     fetch(`/api/docs?path=${encodeURIComponent(doc.path)}`)
-      .then((r) => r.json())
-      .then((data) => {
+      .then((r) => r.json().then((data) => ({ ok: r.ok, status: r.status, data })))
+      .then(({ ok, status, data }) => {
         if (cancelled) return;
-        if (data.error) setError(data.error);
-        else setContent(data.content ?? "");
+        if (!ok) {
+          // A path opened here always came from an already-fetched doc_registry
+          // row, so a 404 means "no content available" (no inline content, no
+          // storage fallback), not "row doesn't exist" — render the empty
+          // state rather than an error for that specific case.
+          if (status === 404) setContent("");
+          else setError(data.error ?? "Failed to load file");
+        } else {
+          setContent(data.content ?? "");
+        }
       })
       .catch(() => { if (!cancelled) setError("Network error loading file"); })
       .finally(() => { if (!cancelled) setLoading(false); });

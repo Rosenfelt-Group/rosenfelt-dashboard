@@ -35,8 +35,14 @@ export default function BulkActionBar({ selectedIds, clients, onClear, onApplied
         return;
       }
       setMessage(`Updated ${data.updated} document${data.updated === 1 ? "" : "s"}`);
-      onApplied();
-      setTimeout(() => setMessage(null), 3000);
+      // Delay onApplied (which the parent uses to clear selection, unmounting
+      // this bar) until the message has actually been visible for a beat —
+      // calling it immediately batched with setMessage above and unmounted
+      // this component before the toast ever painted.
+      setTimeout(() => {
+        setMessage(null);
+        onApplied();
+      }, 3000);
     } catch {
       setMessage("Network error applying bulk update");
     } finally {
