@@ -27,6 +27,7 @@ export default function Reader({ doc, mode, onClose, onToggleMode, onEditMetadat
   const [content, setContent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   // URL-backed docs (e.g. PDFs proxied through dashboard routes like
   // /api/work/[id]/deliverable.pdf) are rendered directly via an iframe,
@@ -45,6 +46,7 @@ export default function Reader({ doc, mode, onClose, onToggleMode, onEditMetadat
     setLoading(true);
     setError(null);
     setContent(null);
+    setDownloadUrl(null);
     fetch(`/api/docs?path=${encodeURIComponent(doc.path)}`)
       .then((r) => r.json().then((data) => ({ ok: r.ok, status: r.status, data })))
       .then(({ ok, status, data }) => {
@@ -59,6 +61,10 @@ export default function Reader({ doc, mode, onClose, onToggleMode, onEditMetadat
           // data-integrity error and must still surface, not be hidden.
           if (status === 404 && data.error === "Document not found") setContent("");
           else setError(data.error ?? "Failed to load file");
+        } else if (data.binary) {
+          // Storage-backed non-text file (e.g. .pptx) — never decoded as
+          // text, since arbitrary binary bytes aren't valid UTF-8.
+          setDownloadUrl(data.downloadUrl);
         } else {
           setContent(data.content ?? "");
         }
@@ -128,6 +134,13 @@ export default function Reader({ doc, mode, onClose, onToggleMode, onEditMetadat
               </div>
             ) : error ? (
               <div className="text-sm text-red-600 bg-red-50 rounded-lg p-4">{error}</div>
+            ) : downloadUrl ? (
+              <div className="text-center py-16">
+                <p className="text-sm text-brand-muted mb-3">This file type can&apos;t be previewed here.</p>
+                <a href={downloadUrl} className="text-sm text-brand-orange hover:underline">
+                  Download {doc.name} ↓
+                </a>
+              </div>
             ) : !content ? (
               <div className="text-center py-16">
                 <p className="text-sm text-brand-muted">No indexed content yet.</p>
@@ -161,5 +174,10 @@ export default function Reader({ doc, mode, onClose, onToggleMode, onEditMetadat
   if (mode === "fullscreen") {
     return <div className="fixed inset-0 z-50">{body}</div>;
   }
-  return <div className="w-[45%] flex-shrink-0 border-l border-brand-border h-full">{body}</div>;
+  // Self-positioned (matches the fullscreen branch above) rather than relying
+  // on a wrapper div in the caller: a percentage width on a plain in-flow div
+  // placed inside a `fixed` container with no explicit `left`/width is
+  // undefined per the CSS shrink-to-fit rules, which is what let this panel
+  // render off-center instead of docked to the right at a fixed width.
+  return <div className="fixed inset-y-0 right-0 z-40 w-[45%] flex-shrink-0 border-l border-brand-border">{body}</div>;
 }

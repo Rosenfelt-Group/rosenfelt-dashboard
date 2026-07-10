@@ -356,15 +356,13 @@ function DocumentsPageInner() {
       </div>
 
       {readerDoc && readerMode === "panel" && (
-        <div className="fixed inset-y-0 right-0 z-40 flex" style={{ top: 0 }}>
-          <Reader
-            doc={readerDocFromEntry(readerDoc)}
-            mode="panel"
-            onClose={() => setReaderDoc(null)}
-            onToggleMode={() => setReaderMode("fullscreen")}
-            onEditMetadata={() => setDrawerDoc(readerDoc)}
-          />
-        </div>
+        <Reader
+          doc={readerDocFromEntry(readerDoc)}
+          mode="panel"
+          onClose={() => setReaderDoc(null)}
+          onToggleMode={() => setReaderMode("fullscreen")}
+          onEditMetadata={() => setDrawerDoc(readerDoc)}
+        />
       )}
       {readerDoc && readerMode === "fullscreen" && (
         <Reader
