@@ -38,11 +38,14 @@ export default function Reader({ doc, mode, onClose, onToggleMode, onEditMetadat
       .then(({ ok, status, data }) => {
         if (cancelled) return;
         if (!ok) {
-          // A path opened here always came from an already-fetched doc_registry
-          // row, so a 404 means "no content available" (no inline content, no
-          // storage fallback), not "row doesn't exist" — render the empty
-          // state rather than an error for that specific case.
-          if (status === 404) setContent("");
+          // /api/docs returns 404 for three distinct cases: row not found,
+          // no content and no storage_path (this is the one we treat as an
+          // empty state — a path opened here always came from an
+          // already-fetched doc_registry row, so this specific message can
+          // only mean "no content available"), or a broken Storage object
+          // fetch ("Storage object not found") — that one is a real
+          // data-integrity error and must still surface, not be hidden.
+          if (status === 404 && data.error === "Document not found") setContent("");
           else setError(data.error ?? "Failed to load file");
         } else {
           setContent(data.content ?? "");

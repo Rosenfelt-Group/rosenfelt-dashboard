@@ -58,7 +58,7 @@ function DocTable({ docs, selectedIds, onToggleSelect, onToggleSelectAll, onOpen
   docs: DocEntry[];
   selectedIds: Set<number>;
   onToggleSelect: (id: number) => void;
-  onToggleSelectAll: () => void;
+  onToggleSelectAll: (docs: DocEntry[]) => void;
   onOpenReader: (doc: DocEntry) => void;
   onOpenDrawer: (doc: DocEntry) => void;
   clientNameById: Map<string, string>;
@@ -72,7 +72,7 @@ function DocTable({ docs, selectedIds, onToggleSelect, onToggleSelectAll, onOpen
         <tr className="border-b border-brand-border text-left text-[10px] uppercase tracking-wide text-brand-muted">
           {canManage && (
             <th className="w-8 px-2 py-2">
-              <input type="checkbox" checked={allSelected} onChange={onToggleSelectAll} />
+              <input type="checkbox" checked={allSelected} onChange={() => onToggleSelectAll(docs)} />
             </th>
           )}
           <th className="px-2 py-2">Document</th>
@@ -244,10 +244,15 @@ function DocumentsPageInner() {
     });
   }
 
-  function toggleSelectAll() {
+  function toggleSelectAll(docs: DocEntry[]) {
     setSelectedIds((prev) => {
-      if (filteredDocs.every((d) => prev.has(d.id))) return new Set();
-      return new Set(filteredDocs.map((d) => d.id));
+      const next = new Set(prev);
+      const allSelected = docs.every((d) => next.has(d.id));
+      for (const d of docs) {
+        if (allSelected) next.delete(d.id);
+        else next.add(d.id);
+      }
+      return next;
     });
   }
 
