@@ -40,7 +40,13 @@ function matchesFilters(doc: FacetDoc, filters: Filters, q: string, skip?: keyof
   if (filters.client && !skipped.has("client")) {
     if (filters.client === "unassigned" ? doc.client_id !== null : doc.client_id !== filters.client) return false;
   }
-  if (filters.health && !skipped.has("health") && computeHealth(doc) !== filters.health) return false;
+  if (filters.health && !skipped.has("health")) {
+    const h = computeHealth(doc);
+    // "issues" is a synthetic value (not a real DocHealth) meaning the union
+    // of the two problem states — used only by the "Index issues" KPI card,
+    // which can't be expressed as a single left-nav facet value.
+    if (filters.health === "issues" ? !(h === "stale" || h === "not_indexed") : h !== filters.health) return false;
+  }
   if (q.trim()) {
     const needle = q.trim().toLowerCase();
     if (!doc.name.toLowerCase().includes(needle) && !doc.path.toLowerCase().includes(needle)) return false;
@@ -141,7 +147,7 @@ export function KpiRow({ docs, filters, q, onChange }: {
       <KpiCard label="Active" count={active} active={filters.status === "active"} onClick={() => onChange({ status: filters.status === "active" ? "" : "active" })} />
       <KpiCard label="Drafts" count={drafts} active={filters.status === "draft"} onClick={() => onChange({ status: filters.status === "draft" ? "" : "draft" })} />
       <KpiCard label="Archived" count={archived} active={filters.status === "archived"} onClick={() => onChange({ status: filters.status === "archived" ? "" : "archived" })} />
-      <KpiCard label="Index issues" count={issues} active={filters.health === "stale" || filters.health === "not_indexed"} onClick={() => onChange({ health: filters.health ? "" : "stale" })} />
+      <KpiCard label="Index issues" count={issues} active={filters.health === "issues"} onClick={() => onChange({ health: filters.health === "issues" ? "" : "issues" })} />
     </div>
   );
 }
