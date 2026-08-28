@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { OverviewPanel }     from "@/components/finance/OverviewPanel";
 import { BookkeepingPanel }  from "@/components/finance/BookkeepingPanel";
 import { BillingPanel }      from "@/components/finance/BillingPanel";
+import { MercuryPanel }      from "@/components/finance/MercuryPanel";
 import { CostPanel }         from "@/components/finance/CostPanel";
 import { SamActionsPanel }   from "@/components/finance/SamActionsPanel";
 
@@ -12,6 +13,7 @@ const TABS = [
   { id: "overview",     label: "Overview"     },
   { id: "bookkeeping",  label: "Bookkeeping"  },
   { id: "stripe",       label: "Stripe"       },
+  { id: "mercury",      label: "Mercury"      },
   { id: "cost",         label: "AI Cost"      },
   { id: "sam-actions",  label: "Sam Actions"  },
 ] as const;
@@ -59,6 +61,7 @@ function FinanceShell() {
         {activeTab === "overview"    && <OverviewPanel />}
         {activeTab === "bookkeeping" && <BookkeepingPanel />}
         {activeTab === "stripe"      && <BillingPanel />}
+        {activeTab === "mercury"     && <MercuryPanel />}
         {activeTab === "cost"        && <CostPanel />}
         {activeTab === "sam-actions" && <SamActionsPanel />}
       </div>
