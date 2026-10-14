@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { PrototypeRequestSchema } from "@/lib/rooms/schemas";
 import { buildPrototypeBrief } from "@/lib/rooms/brief";
+import { dispatchBeginWork, dispatchBaseUrl } from "@/lib/rooms/dispatch";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -81,5 +82,11 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }).select("id").single();
   if (wErr) return NextResponse.json({ error: wErr.message }, { status: 500 });
 
-  return NextResponse.json({ work_item_id: item.id, deliverable_id: deliverableId }, { status: 201 });
+  // The work item exists now: a dispatch failure is reported in the body, never as an error status.
+  const d = await dispatchBeginWork(dispatchBaseUrl(), item.id, req.headers.get("cookie") ?? "");
+
+  return NextResponse.json(
+    { work_item_id: item.id, deliverable_id: deliverableId, dispatched: d.dispatched, dispatch_error: d.error },
+    { status: 201 },
+  );
 }
