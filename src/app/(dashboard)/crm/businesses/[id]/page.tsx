@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { CRMBusiness, CRMContact, CRMContactRole, CRMBusinessResearch } from "@/types";
 import { CRMNav } from "@/components/CRMNav";
+import { EngagementsPanel } from "@/components/crm/EngagementsPanel";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { safeHref } from "@/lib/safe-url";
@@ -271,6 +272,8 @@ export default function BusinessDetailPage() {
           )}
         </div>
       </div>
+
+      <EngagementsPanel businessId={id} />
     </div>
   );
 }
