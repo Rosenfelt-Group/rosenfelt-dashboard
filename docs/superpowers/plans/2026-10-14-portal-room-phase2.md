@@ -1330,7 +1330,7 @@ No new code. Do these in order; each needs Brian's explicit go-ahead.
 
 - [ ] **Step 1: Apply the migration** (`apply_migration`, name `rooms_portal`) using the Task 1 file; re-run the assertion script against production **inside a rolled-back transaction**; confirm `portal_app` exists and `anon` cannot execute the functions (`has_function_privilege('anon', 'rooms.portal_open_room(text)', 'execute')` is `false`).
 - [ ] **Step 2: Brian sets the role password** in the Supabase dashboard (Database -> Roles -> `portal_app`) and copies the **pooler** connection string (Connect -> Transaction pooler); the user part must read `portal_app.<project ref>`. Test it with `psql` or a one-line script that runs `select * from rooms.portal_open_room(repeat('0',64))` (expect zero rows) and `select count(*) from rooms.engagements` (expect `permission denied`).
-- [ ] **Step 3: Portal Vercel env (Production only):** `PORTAL_DATABASE_URL`, `ROOM_SESSION_SECRET` (new `openssl rand -base64 32`), `ROOM_GRANT_SECRET` (same as the dashboard's), `NEXT_PUBLIC_PREVIEW_URL=https://preview.rosably.com`, `PORTAL_ORIGIN=https://portal.rosably.com`. Redeploy.
+- [ ] **Step 3: Portal Vercel env (Production only):** `PORTAL_DATABASE_URL`, `ROOM_SESSION_SECRET` (new `openssl rand -base64 32`), `ROOM_GRANT_SECRET` (same as the dashboard's), `NEXT_PUBLIC_PREVIEW_URL=https://preview.rosably.com`, `PORTAL_ORIGIN=https://portal.rosably.com`. Redeploy. **Also on the preview-host Vercel project:** set `FRAME_ANCESTORS=https://portal.rosably.com` (space-separated list; keep any existing origins) and redeploy it, otherwise every prototype frame is blocked by the preview host's CSP.
 - [ ] **Step 4: Vercel Firewall rule** on the portal: rate limit `/r/*` and `/api/room/*` per IP (suggest 30 requests/minute).
 - [ ] **Step 5: Merge the dashboard and portal PRs** (dashboard first, so Share exists).
 - [ ] **Step 6: Manual end-to-end:**
@@ -1340,7 +1340,8 @@ No new code. Do these in order; each needs Brian's explicit go-ahead.
   4. Dashboard **Activity** tab shows the open, the introduction and the view.
   5. **Revoke** the link; reload the private window: the friendly expired page.
   6. Open `https://portal.rosably.com/r/<43 random characters>` and an old/garbage link: identical friendly expired page.
-  7. Confirm a draft version is not listed in the room, and that `view-source` on `/room` contains no `storage_prefix`.
+  7. If the frame is blank, check the browser console for a `frame-ancestors` CSP error: `FRAME_ANCESTORS` on the preview host is missing the portal origin.
+  8. Confirm a draft version is not listed in the room, and that `view-source` on `/room` contains no `storage_prefix`.
 
 ---
 
