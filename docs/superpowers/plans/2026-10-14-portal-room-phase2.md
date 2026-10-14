@@ -315,6 +315,17 @@ begin
   begin perform rooms.share_version(gen_random_uuid()); exception when sqlstate 'P0002' then v_ok := true; end;
   if not v_ok then raise exception 'FAIL share unknown'; end if;
 
+  -- function-level EXECUTE must be absent for anon/authenticated (independent of schema USAGE)
+  for r in select p.oid::regprocedure as sig from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+            where ns.nspname = 'rooms' and (p.proname like 'portal\_%' or p.proname in ('share_version', '_portal_access_ok')) loop
+    if has_function_privilege('anon', r.sig, 'execute') or has_function_privilege('authenticated', r.sig, 'execute') then
+      raise exception 'FAIL function-level execute for anon/authenticated on %', r.sig;
+    end if;
+  end loop;
+  select count(*) into n from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+   where ns.nspname = 'rooms' and (p.proname like 'portal\_%' or p.proname in ('share_version', '_portal_access_ok'));
+  if n <> 7 then raise exception 'FAIL expected 7 portal functions, found %', n; end if;
+
   -- privileges: anon / authenticated may execute nothing
   begin set local role anon; perform rooms.portal_open_room(v_hash); reset role; raise exception 'FAIL anon executes open_room';
   exception when insufficient_privilege then reset role; end;
