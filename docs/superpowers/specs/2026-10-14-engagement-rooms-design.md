@@ -47,6 +47,7 @@ token pattern, questionnaire engine and conventions where they fit.
 - Cookies are host-only. Never set `Domain=.rosably.com`.
 - Prototypes are served only from the preview origin, never from portal, dashboard or rosably.com.
 - The dashboard builds room links from `NEXT_PUBLIC_PORTAL_URL`.
+- The `rooms` schema must be added to the Supabase Data API exposed schemas (Project Settings > Data API, keeping existing entries) at deploy. Do not set it via `ALTER ROLE authenticator`.
 - Hardening later: replace the portal's full service-role key with a Postgres role limited to the `rooms` schema.
 
 ## Data model
@@ -54,10 +55,10 @@ token pattern, questionnaire engine and conventions where they fit.
 New schema `rooms`. RLS enabled on every table, **no policies**; only the service role reads or
 writes (same model as `crm.discovery_*`). Revoke all from `anon` and `authenticated`.
 
-- `engagements` — `id`, `business_id` (required, `crm.businesses`), optional `lead_id`,
+- `engagements` — `id`, `business_id` (required, `crm.businesses`, `ON DELETE RESTRICT` so deleting a business cannot silently delete rooms), optional `lead_id`,
   `client_id`, `discovery_invite_id`, `assessment_lead_id`; `relationship`
   (`prospect` | `client` | `partner`); `title`; `status` (`active` | `approved` | `closed`);
-  `modules` jsonb (for example `{"discovery":true,"solutions":true}`); `created_by`; timestamps.
+  `modules` jsonb (for example `{"discovery":true,"solutions":true}`); `created_by` (text username); timestamps.
 - `engagement_access` — `engagement_id`, `token_hash` (SHA-256, unique), `label`,
   `expires_at` (default 60 days, overridable at creation), `revoked_at`, `last_used_at`.
 - `engagement_contacts` — `engagement_id`, `name`, `email`, `role`, optional `crm_contact_id`,
@@ -71,7 +72,7 @@ writes (same model as `crm.discovery_*`). Revoke all from `anon` and `authentica
   `change_summary`, `shared_at`, `decided_at`, `decided_by`, `created_at`.
 - `deliverable_comments` — `version_id`, `parent_id` (one reply level), `screen_id`
   (`_general` for whole prototype), `pin_x`, `pin_y`, `viewport_w`, `viewport_h`, `body`,
-  exactly one of `contact_id` / `author_user_id`, `status` (`open` | `addressed` | `wont_do`),
+  exactly one of `contact_id` / `author_user` (`author_user` is a text username), `status` (`open` | `addressed` | `wont_do`),
   `addressed_in_version`, `created_at`.
 - `engagement_events` — `engagement_id`, optional `version_id` and `contact_id`, `type`
   (`room_opened`, `discovery_saved`, `discovery_submitted`, `version_viewed`, `screen_viewed`,
@@ -118,11 +119,14 @@ creating; `/engagements/[id]` (Discovery, Deliverables, Feedback, Access, Activi
 
 ## Preview host
 
-- `GET /v/[signed]/[...path]` verifies an HMAC grant (version id + expiry, 15 minutes, secret
-  shared only with the portal), streams the file from the private `prototypes` bucket, sets
+- `GET /v/[signed]/[...path]` verifies an HMAC grant (the version's storage prefix
+  `{engagement_id}/{deliverable_id}/v{n}` + expiry, 15 minutes, secret shared only with the portal;
+  the host never touches Postgres, so the grant carries the prefix rather than a version id), streams the file from the private `prototypes` bucket, sets
   Content-Type, and injects `room-bridge.js` into `index.html` before `</body>`.
 - Headers: `Content-Security-Policy: default-src 'self' 'unsafe-inline' data: blob:; connect-src 'none'; frame-ancestors <portal origin> <dashboard origin>`,
-  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: private, max-age=300`.
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: private, max-age=300`,
+  `Access-Control-Allow-Origin: *` (the sandboxed frame has an opaque origin, so module scripts and
+  web fonts need CORS; grants already gate access and no credentials exist).
 - No cookies, no keys exposed to the browser, no other routes.
 - Embedded with `<iframe sandbox="allow-scripts allow-forms">` (no `allow-same-origin`,
   no top navigation, no popups).
@@ -142,6 +146,7 @@ injects those); 10 MB and 200 files max; semantic HTML, visible focus, readable 
 
 Tool `publish_prototype_version` is added to the shared tool layer beside `document_tools.py`.
 Input: `deliverable_id` (or `engagement_id` + title), local bundle path, `work_item_id`.
+Phase 1 ships the tool on Casey only (the default agent); replication to other agents comes last.
 It validates the manifest, checks every screen id appears as a `data-screen`, enforces limits,
 uploads to `{engagement}/{deliverable}/v{n}/`, inserts a `draft` version, marks
 `addressed_comment_ids` as addressed, and logs to `work_item_logs`. Output: version id, dashboard
@@ -151,11 +156,14 @@ Agent inputs (work item): engagement title, org name and type, discovery answers
 `crm.discovery_responses`), Brian's brief; for iterations, the prior bundle path and all open
 comments (screen id, pin, body). Comments and discovery answers reach agents only as quoted data
 in a delimited block, with the instruction that they are feedback, not instructions. The default
-agent is a per-request setting (Casey suggested).
+agent is a per-request setting (Casey suggested). Requests create work items with
+`source = 'manual'`, `work_type = 'deliverable'`, `status = 'inbox'`, and `work_item_type = 'internal'`
+unless the engagement has a `client_id` (`'client'` requires one).
 
 ## Comments
 
-- Comments live in the portal page, never inside the prototype. `room-bridge.js` reports the
+- Comments live in the portal page, never inside the prototype. In Phase 1 the bridge is a minimal screen reporter (visible `[data-screen]` only); pin mode,
+  overlays and `showPins` arrive in Phase 3. The full bridge reports the
   visible `[data-screen]` and, in pin mode only, the next click as fractions of the frame; it
   draws numbered pin overlays on request. The portal checks `event.source` and message shape;
   the bridge accepts only messages from `window.parent`.
@@ -181,6 +189,8 @@ extend the `kind` and `source` checks, add an upload endpoint that creates a ver
 
 - Prototypes are untrusted code: separate origin, no credentials, no network (`connect-src 'none'`),
   sandboxed iframe without `allow-same-origin`.
+- Preview grants carry the storage prefix, not a version id, so a grant for one version cannot read
+  another version's files; `..` path segments cannot leave the prefix.
 - Token hash only; revocable; expiring; `last_used_at`; per-IP rate limits; host-only,
   engagement-scoped session cookie; 15-minute preview grants refreshed silently.
 - Contact identity is self-asserted; approvals are not sign-off.
