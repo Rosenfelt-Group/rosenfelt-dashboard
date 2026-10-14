@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { dispatchBeginWork } from "./dispatch";
+import { dispatchBeginWork, dispatchBaseUrl } from "./dispatch";
 
 const ok = (body: unknown, status = 200) =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
@@ -72,5 +72,26 @@ describe("dispatchBeginWork", () => {
     expect(await dispatchBeginWork("https://d", ID, "", timeout)).toEqual({ dispatched: false, error: "network error" });
     const abort = (() => Promise.reject(new DOMException("aborted", "AbortError"))) as unknown as typeof fetch;
     expect(await dispatchBeginWork("https://d", ID, "", abort)).toEqual({ dispatched: false, error: "network error" });
+  });
+
+  it("never follows redirects with the cookie, and a redirect rejection is a network error", async () => {
+    const f = vi.fn(() => ok({ dispatched: true }));
+    await dispatchBeginWork("https://d", ID, "c=1", f as unknown as typeof fetch);
+    expect((f.mock.calls[0] as unknown as [string, RequestInit])[1].redirect).toBe("error");
+    const redir = (() => Promise.reject(new TypeError("fetch failed: redirect"))) as unknown as typeof fetch;
+    expect(await dispatchBeginWork("https://d", ID, "c=1", redir)).toEqual({ dispatched: false, error: "network error" });
+  });
+});
+
+describe("dispatchBaseUrl", () => {
+  it("uses the configured value with trailing slashes stripped", () => {
+    expect(dispatchBaseUrl({ DASHBOARD_BASE_URL: "https://dash.example.com//" })).toBe("https://dash.example.com");
+  });
+  it("defaults when unset", () => {
+    expect(dispatchBaseUrl({})).toBe("https://dashboard.rosably.com");
+  });
+  it("falls back to the default for a non-http(s) or invalid value", () => {
+    expect(dispatchBaseUrl({ DASHBOARD_BASE_URL: "javascript:alert(1)" })).toBe("https://dashboard.rosably.com");
+    expect(dispatchBaseUrl({ DASHBOARD_BASE_URL: "nope" })).toBe("https://dashboard.rosably.com");
   });
 });

@@ -59,7 +59,7 @@ export default function EngagementPage() {
     if (!r.ok) { setMsg(r.error); return; }
     setMsg(
       r.data.dispatched
-        ? `Casey is working on it (work item ${r.data.work_item_id}). The draft appears under this deliverable when she publishes.`
+        ? `Casey was started on work item ${r.data.work_item_id}. The draft appears under this deliverable when she publishes.`
         : `Work item ${r.data.work_item_id} was created, but starting Casey failed (${r.data.dispatch_error ?? "unknown error"}). Dispatch it from the Work page.`,
     );
     setBrief(""); setDelivTitle(""); setDelivId(""); await load();
