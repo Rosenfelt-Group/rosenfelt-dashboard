@@ -121,10 +121,12 @@ creating; `/engagements/[id]` (Discovery, Deliverables, Feedback, Access, Activi
 
 - `GET /v/[signed]/[...path]` verifies an HMAC grant (the version's storage prefix
   `{engagement_id}/{deliverable_id}/v{n}` + expiry, 15 minutes, secret shared only with the portal;
-  the host never touches Postgres, so the grant carries the prefix rather than a version id), streams the file from the private `prototypes` bucket, sets
-  Content-Type, and injects `room-bridge.js` into `index.html` before `</body>`.
-- Headers: `Content-Security-Policy: default-src 'self' 'unsafe-inline' data: blob:; connect-src 'none'; frame-ancestors <portal origin> <dashboard origin>`,
-  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: private, max-age=300`,
+  the host never touches Postgres, so the grant carries the prefix rather than a version id), buffers the file from the private `prototypes` bucket (it does not stream), sets
+  Content-Type, and injects `room-bridge.js` into every served `.html`/`.htm` file (not only `index.html`) before `</body>`.
+  Known limit: Vercel's ~4.5 MB response-body limit; follow-up: cap per-file size at 4 MB in the Casey validator.
+- Headers: `Content-Security-Policy: default-src 'self' 'unsafe-inline' data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; sandbox allow-scripts allow-forms; frame-ancestors <room origin> <dashboard origin>`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-DNS-Prefetch-Control: off`,
+  `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`, `Cache-Control: private, max-age=300`,
   `Access-Control-Allow-Origin: *` (the sandboxed frame has an opaque origin, so module scripts and
   web fonts need CORS; grants already gate access and no credentials exist).
 - No cookies, no keys exposed to the browser, no other routes.
@@ -196,6 +198,23 @@ extend the `kind` and `source` checks, add an upload endpoint that creates a ver
 - Contact identity is self-asserted; approvals are not sign-off.
 - Prototypes use synthetic data only. Deleting an engagement cascades, including its storage prefix.
 - Keep discovery answers out of agent logs beyond the work item.
+- Phase 1 uses the full service-role key in the preview host; narrowing to a storage-read-only credential is a tracked follow-up (pending decision).
+
+### Embedding pages must
+
+- Use `<iframe sandbox="allow-scripts allow-forms">` pointing only at `https://preview.rosably.com`.
+- Never add `allow-same-origin`, `allow-top-navigation*`, `allow-popups*`, `allow-modals` or `allow-downloads`.
+- Set no `allow=` permissions.
+- Set `referrerpolicy="no-referrer"`.
+- Fetch the grant URL just in time and never persist or log it (it is a 15-minute bearer token).
+- In the Phase 3 message listener, check `event.source === iframe.contentWindow` (the origin will be the string `"null"`), validate message type, shape and length, check screen ids against the manifest, never render message data as HTML, and debounce.
+- Send parent-to-frame messages that carry only pin coordinates/numbers, never comment text, names, emails or tokens.
+- Never offer "open in new tab" of the raw preview URL.
+
+### Residual risks (accepted)
+
+- A prototype can navigate its own frame to an external URL (CSP and sandbox cannot prevent self-navigation) and can draw fake sign-in UI. Mitigated by the visible untrusted-content label next to the preview and the Casey validator's external-URL checks.
+- Grants are bearer tokens; revocation lag is up to the 15-minute grant TTL plus 5 minutes of browser private cache.
 
 ## Testing
 
