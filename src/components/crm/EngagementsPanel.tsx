@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
+import { fetchJson } from "@/lib/rooms/fetch-json";
 
 type Eng = { id: string; title: string; relationship: string; status: string; created_at: string };
 
@@ -13,20 +14,24 @@ export function EngagementsPanel({ businessId }: { businessId: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const load = () =>
-    fetch(`/api/engagements?business_id=${businessId}`)
-      .then(r => r.json()).then(d => setRows(Array.isArray(d) ? d : []));
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+
+  const load = async () => {
+    const r = await fetchJson<Eng[]>(`/api/engagements?business_id=${businessId}`);
+    if (r.ok) { setRows(Array.isArray(r.data) ? r.data : []); setLoadErr(null); }
+    else setLoadErr(r.error);
+  };
   useEffect(() => { load(); }, [businessId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function create() {
+    if (busy) return;
     setBusy(true); setErr(null);
-    const res = await fetch("/api/engagements", {
+    const r = await fetchJson("/api/engagements", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ business_id: businessId, relationship, title }),
     });
-    const body = await res.json();
     setBusy(false);
-    if (!res.ok) { setErr(body.error ?? "Failed"); return; }
+    if (!r.ok) { setErr(r.error); return; }
     setOpen(false); setTitle(""); load();
   }
 
@@ -57,7 +62,12 @@ export function EngagementsPanel({ businessId }: { businessId: string }) {
         </div>
       )}
 
-      {rows.length === 0 ? (
+      {loadErr ? (
+        <p className="text-sm text-red-600">
+          Couldn&apos;t load rooms: {loadErr}{" "}
+          <button onClick={load} className="underline">Retry</button>
+        </p>
+      ) : rows.length === 0 ? (
         <p className="text-sm text-brand-muted">No rooms yet.</p>
       ) : (
         <ul className="divide-y divide-brand-border border border-brand-border rounded">

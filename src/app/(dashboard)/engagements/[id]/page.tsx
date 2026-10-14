@@ -1,7 +1,8 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
+import { fetchJson } from "@/lib/rooms/fetch-json";
 
 type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string };
 type Deliverable = { id: string; title: string; versions: Version[] };
@@ -22,52 +23,73 @@ export default function EngagementPage() {
   const [delivId, setDelivId] = useState("");
   const [label, setLabel] = useState("");
 
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
+  const inFlight = useRef(false);
+
   const load = useCallback(async () => {
     const [d, a] = await Promise.all([
-      fetch(`/api/engagements/${id}`).then(r => r.json()),
-      fetch(`/api/engagements/${id}/access`).then(r => r.json()),
+      fetchJson<Detail>(`/api/engagements/${id}`),
+      fetchJson<Access[]>(`/api/engagements/${id}/access`),
     ]);
-    setDetail(d.engagement ? d : null);
-    setAccess(Array.isArray(a) ? a : []);
+    if (!d.ok) { setLoadErr(d.error); return; }
+    if (!d.data.engagement) { setLoadErr("Engagement not found"); return; }
+    setLoadErr(null);
+    setDetail(d.data);
+    if (a.ok) setAccess(Array.isArray(a.data) ? a.data : []);
+    else setMsg(`Couldn't load access links: ${a.error}`);
   }, [id]);
   useEffect(() => { load(); }, [load]);
 
-  async function requestPrototype() {
-    setMsg(null);
-    const res = await fetch(`/api/engagements/${id}/prototype-request`, {
+  async function guarded(key: string, fn: () => Promise<void>) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setPending(key); setMsg(null);
+    try { await fn(); } finally { inFlight.current = false; setPending(null); }
+  }
+
+  const requestPrototype = () => guarded("proto", async () => {
+    const r = await fetchJson<{ work_item_id: string }>(`/api/engagements/${id}/prototype-request`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         agent: "casey", brief,
         ...(delivId ? { deliverable_id: delivId } : { deliverable_title: delivTitle }),
       }),
     });
-    const body = await res.json();
-    if (!res.ok) { setMsg(body.error ?? "Failed"); return; }
-    setMsg(`Work item created (${body.work_item_id}). Casey will pick it up from the inbox.`);
-    setBrief(""); setDelivTitle(""); setDelivId(""); load();
-  }
+    if (!r.ok) { setMsg(r.error); return; }
+    setMsg(`Work item created (${r.data.work_item_id}). Casey will pick it up from the inbox.`);
+    setBrief(""); setDelivTitle(""); setDelivId(""); await load();
+  });
 
-  async function preview(versionId: string) {
-    const res = await fetch(`/api/versions/${versionId}/preview`);
-    const body = await res.json();
-    setPreviewUrl(res.ok ? body.url : null);
-    if (!res.ok) setMsg(body.error ?? "Preview failed");
-  }
+  const preview = (versionId: string) => guarded("preview", async () => {
+    const r = await fetchJson<{ url: string }>(`/api/versions/${versionId}/preview`);
+    if (r.ok) setPreviewUrl(r.data.url);
+    else { setPreviewUrl(null); setMsg(r.error); }
+  });
 
-  async function issue() {
-    const res = await fetch(`/api/engagements/${id}/access`, {
+  const issue = () => guarded("issue", async () => {
+    const r = await fetchJson<{ link: string }>(`/api/engagements/${id}/access`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label: label || undefined }),
     });
-    const body = await res.json();
-    if (res.ok) { setNewLink(body.link); setLabel(""); load(); } else setMsg(body.error ?? "Failed");
-  }
+    if (!r.ok) { setMsg(r.error); return; }
+    setNewLink(r.data.link); setLabel(""); await load();
+  });
 
-  async function revoke(accessId: string) {
-    await fetch(`/api/engagements/${id}/access?access_id=${accessId}`, { method: "DELETE" });
-    load();
-  }
+  const revoke = (accessId: string) => guarded("revoke", async () => {
+    const r = await fetchJson(`/api/engagements/${id}/access?access_id=${accessId}`, { method: "DELETE" });
+    if (!r.ok) { setMsg(`Revoke failed: ${r.error}`); return; }
+    await load();
+  });
 
+  if (loadErr && !detail) {
+    return (
+      <div className="p-6 text-sm">
+        <p className="text-red-600 mb-2">Couldn&apos;t load engagement: {loadErr}</p>
+        <button onClick={load} className="px-3 py-1.5 rounded border border-brand-border">Retry</button>
+      </div>
+    );
+  }
   if (!detail) return <p className="p-6 text-sm text-brand-muted">Loading…</p>;
   const { engagement, business, deliverables } = detail;
 
@@ -101,7 +123,7 @@ export default function EngagementPage() {
             )}
             <textarea value={brief} onChange={e => setBrief(e.target.value)} rows={5} placeholder="What should the prototype show?"
               className="w-full border border-brand-border rounded px-2 py-1.5 text-sm" />
-            <button disabled={!brief.trim() || (!delivId && !delivTitle.trim())} onClick={requestPrototype}
+            <button disabled={!!pending || !brief.trim() || (!delivId && !delivTitle.trim())} onClick={requestPrototype}
               className="px-3 py-1.5 text-sm rounded bg-brand-orange text-white disabled:opacity-50">
               Send to Casey
             </button>
@@ -117,7 +139,7 @@ export default function EngagementPage() {
                       <span>v{v.version_no} · {v.status}{v.change_summary ? ` · ${v.change_summary}` : ""}
                         <span className="text-brand-muted"> · {formatDistanceToNow(new Date(v.created_at), { addSuffix: true })}</span>
                       </span>
-                      <button onClick={() => preview(v.id)} className="text-brand-orange">Preview</button>
+                      <button disabled={!!pending} onClick={() => preview(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>
                     </li>
                   ))}
                 </ul>
@@ -137,7 +159,7 @@ export default function EngagementPage() {
           <div className="flex gap-2">
             <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Label (e.g. ED + board chair)"
               className="border border-brand-border rounded px-2 py-1.5 text-sm flex-1" />
-            <button onClick={issue} className="px-3 py-1.5 text-sm rounded bg-brand-orange text-white">Create link</button>
+            <button disabled={!!pending} onClick={issue} className="px-3 py-1.5 text-sm rounded bg-brand-orange text-white disabled:opacity-50">Create link</button>
           </div>
           {newLink && (
             <div className="border border-amber-300 bg-amber-50 rounded p-3 text-sm break-all">
@@ -151,7 +173,7 @@ export default function EngagementPage() {
                 <span>{a.label ?? "Unlabelled"} · expires {new Date(a.expires_at).toLocaleDateString()}
                   {a.revoked_at ? " · revoked" : ""}{a.last_used_at ? ` · last used ${formatDistanceToNow(new Date(a.last_used_at), { addSuffix: true })}` : ""}
                 </span>
-                {!a.revoked_at && <button onClick={() => revoke(a.id)} className="text-red-600">Revoke</button>}
+                {!a.revoked_at && <button disabled={!!pending} onClick={() => revoke(a.id)} className="text-red-600 disabled:opacity-50">Revoke</button>}
               </li>
             ))}
             {access.length === 0 && <li className="px-3 py-2 text-sm text-brand-muted">No links yet.</li>}
