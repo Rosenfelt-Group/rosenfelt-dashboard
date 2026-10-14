@@ -7,7 +7,7 @@ const ITEM = "22222222-2222-4222-8222-222222222222";
 // Per-test knobs for the stubbed tables.
 const state = vi.hoisted(() => ({
   engagement: { id: "e", status: "active", business_id: "b", title: "T", relationship: "client", client_id: null, discovery_invite_id: null } as Record<string, unknown> | null,
-  insertResult: { data: { id: "x" }, error: null } as { data: { id: string } | null; error: { message: string } | null },
+  insertResult: { data: { id: "x", ref: 1 }, error: null } as { data: { id: string; ref?: number } | null; error: { message: string } | null },
 }));
 
 // Chainable stub: every filter returns the same builder; single/maybeSingle/insert resolve per table.
@@ -58,7 +58,7 @@ const call = () =>
 beforeEach(() => {
   mockDispatch.mockReset();
   state.engagement = { id: ENG, status: "active", business_id: "b", title: "T", relationship: "client", client_id: null, discovery_invite_id: null };
-  state.insertResult = { data: { id: ITEM }, error: null };
+  state.insertResult = { data: { id: ITEM, ref: 1288 }, error: null };
   process.env.DASHBOARD_BASE_URL = "https://dash.example.com";
 });
 
@@ -71,6 +71,7 @@ describe("POST prototype-request", () => {
     expect(body.dispatched).toBe(false);
     expect(body.dispatch_error).toBe("HTTP 500");
     expect(body.work_item_id).toBe(ITEM);
+    expect(body.work_item_ref).toBe(1288);
   });
 
   it("dispatches to the configured base URL (not the request host) with the item id and cookie", async () => {

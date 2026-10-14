@@ -77,7 +77,7 @@ export default function EngagementPage() {
   }
 
   const requestPrototype = () => guarded("proto", async () => {
-    const r = await fetchJson<{ work_item_id: string; dispatched: boolean; dispatch_error?: string }>(`/api/engagements/${id}/prototype-request`, {
+    const r = await fetchJson<{ work_item_id: string; work_item_ref?: number | null; dispatched: boolean; dispatch_error?: string }>(`/api/engagements/${id}/prototype-request`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         agent: "casey", brief,
@@ -85,10 +85,11 @@ export default function EngagementPage() {
       }),
     });
     if (!r.ok) { setMsg(r.error); return; }
+    const itemLabel = r.data.work_item_ref != null ? `#${r.data.work_item_ref}` : r.data.work_item_id;
     setMsg(
       r.data.dispatched
-        ? `Casey was started on work item ${r.data.work_item_id}. The draft appears under this deliverable when she publishes.`
-        : `Work item ${r.data.work_item_id} was created, but starting Casey failed (${r.data.dispatch_error ?? "unknown error"}). Dispatch it from the Work page.`,
+        ? `Casey was started on work item ${itemLabel}. The draft appears under this deliverable when she publishes.`
+        : `Work item ${itemLabel} was created, but starting Casey failed (${r.data.dispatch_error ?? "unknown error"}). Dispatch it from the Work page.`,
     );
     setBrief(""); setDelivTitle(""); setDelivId(""); await load();
   });
