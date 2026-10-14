@@ -10,6 +10,7 @@ interface Props {
 const SOURCE_OPTIONS: { value: CRMSource; label: string }[] = [
   { value: "manual", label: "Manual" },
   { value: "referral", label: "Referral" },
+  { value: "pro_bono", label: "Pro bono" },
   { value: "website_contact", label: "Contact form" },
   { value: "website_assessment", label: "Assessment" },
 ];

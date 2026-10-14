@@ -10,6 +10,8 @@ import { CRMNav } from "@/components/CRMNav";
 import { STAGES } from "@/lib/crm/stages";
 import { Agent } from "@/types";
 import { safeHref } from "@/lib/safe-url";
+import { DiscoveryInvite } from "@/types";
+import { STATUS_META } from "@/lib/discovery";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝",
@@ -43,6 +45,7 @@ export default function LeadDetailPage() {
   const [lead, setLead] = useState<CRMLead | null>(null);
   const [activities, setActivities] = useState<CRMActivity[]>([]);
   const [assessment, setAssessment] = useState<CRMAssessmentResult | null>(null);
+  const [discovery, setDiscovery] = useState<DiscoveryInvite[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Edit form state
@@ -96,7 +99,9 @@ export default function LeadDetailPage() {
       fetch(`/api/crm/leads/${id}`).then(r => r.json()),
       fetch(`/api/crm/leads/${id}/activities`).then(r => r.json()),
       fetch(`/api/crm/assessment/${id}`).then(r => r.json()),
-    ]).then(([l, a, s]) => {
+      fetch(`/api/crm/discovery?lead_id=${id}`).then(r => r.json()).catch(() => []),
+    ]).then(([l, a, s, disc]) => {
+      setDiscovery(Array.isArray(disc) ? disc : []);
       setLead(l?.id ? l : null);
       setActivities(Array.isArray(a) ? a : []);
       setAssessment(s?.id ? s : null);
@@ -355,6 +360,26 @@ export default function LeadDetailPage() {
               )}
             </div>
           )}
+
+          {/* Discovery questionnaires */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-medium text-brand-muted uppercase tracking-wide">Discovery</h3>
+              <Link href={`/crm/discovery?new=1&lead_id=${id}`} className="text-xs text-brand-orange hover:underline">+ New</Link>
+            </div>
+            {discovery.length === 0 ? (
+              <p className="text-xs text-brand-muted">No questionnaire sent yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {discovery.map(inv => (
+                  <Link key={inv.id} href={`/crm/discovery/${inv.id}`} className="block group">
+                    <p className="text-sm text-brand-black group-hover:text-brand-orange truncate">{inv.project_title}</p>
+                    <span className={clsx("badge text-xs mt-0.5", STATUS_META[inv.status].color)}>{STATUS_META[inv.status].label}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Assessment results */}
           {assessment && (

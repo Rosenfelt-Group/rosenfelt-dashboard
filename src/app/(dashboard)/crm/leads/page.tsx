@@ -190,6 +190,7 @@ export default function LeadsPage() {
               >
                 <option value="manual">Manual</option>
                 <option value="referral">Referral</option>
+                <option value="pro_bono">Pro bono</option>
                 <option value="website_contact">Contact form</option>
                 <option value="website_assessment">Assessment</option>
               </select>

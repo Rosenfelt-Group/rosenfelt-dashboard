@@ -179,7 +179,7 @@ export interface DashboardRole {
 export type CRMStage = "quiz_started" | "quiz_completed" | "snapshot_viewed" | "new" | "qualification" | "engaged" | "proposal" | "won" | "lost";
 export type CRMEntryStage = "quiz_started" | "new";
 export type CRMContactRole = "decision_maker" | "champion" | "billing" | "influencer" | "technical";
-export type CRMSource = "website_contact" | "website_assessment" | "manual" | "referral";
+export type CRMSource = "website_contact" | "website_assessment" | "manual" | "referral" | "pro_bono";
 export type CRMActivityType = "note" | "email_sent" | "email_received" | "stage_change" | "assessment" | "system";
 export type CRMBillingStatus = "active" | "paused" | "cancelled";
 export type CRMServiceTier = "newsroom" | "operations" | "finance_ops" | "growth_stack" | "full_stack";
@@ -428,4 +428,92 @@ export interface WorkItemDoc {
   client_id: string | null;
   updated_at: string | null;
   work_item_id: string;
+}
+
+// ─── Discovery questionnaires (crm.discovery_*) ──────────────────────────────
+
+export type DiscoveryProjectType = "content_social" | "operations" | "fundraising" | "data_reporting" | "other";
+export type DiscoveryStatus = "sent" | "opened" | "in_progress" | "submitted" | "archived";
+export type DiscoveryBriefStatus = "pending" | "ready" | "failed" | "superseded";
+
+export interface DiscoveryFieldDef {
+  id: string;
+  type: "text" | "email" | "textarea" | "single" | "multi" | "scale" | "tool_rows";
+  label: string;
+  help?: string;
+  required?: boolean;
+  options?: string[];
+  other?: boolean;
+  showIf?: { field: string; in?: string[]; notIn?: string[] };
+  columns?: { id: string; label: string }[];
+  min?: number;
+  max?: number;
+  minLabel?: string;
+  maxLabel?: string;
+}
+
+export interface DiscoverySectionDef {
+  id: string;
+  title: string;
+  intro?: string;
+  modules?: DiscoveryProjectType[];
+  fields: DiscoveryFieldDef[];
+}
+
+export interface DiscoveryQuestionnaireDef {
+  version: string;
+  title: string;
+  project_types: Record<DiscoveryProjectType, string>;
+  sections: DiscoverySectionDef[];
+}
+
+export interface DiscoveryBrief {
+  id: string;
+  invite_id: string;
+  status: DiscoveryBriefStatus;
+  model?: string;
+  content_md?: string;
+  error?: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  created_at: string;
+  completed_at?: string;
+}
+
+export interface DiscoveryResponse {
+  id: string;
+  invite_id: string;
+  answers: Record<string, unknown>;
+  current_section?: string;
+  schema_snapshot?: DiscoveryQuestionnaireDef;
+  respondent_name?: string;
+  respondent_email?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DiscoveryInvite {
+  id: string;
+  token: string;
+  lead_id: string;
+  business_id?: string;
+  contact_id?: string;
+  project_title: string;
+  project_brief?: string;
+  project_type: DiscoveryProjectType;
+  engagement_type: "pro_bono" | "paid";
+  questionnaire_version: string;
+  status: DiscoveryStatus;
+  sent_at: string;
+  opened_at?: string;
+  last_saved_at?: string;
+  submitted_at?: string;
+  expires_at: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+  business?: Pick<CRMBusiness, "id" | "name" | "website">;
+  contact?: Pick<CRMContact, "id" | "first_name" | "last_name" | "email">;
+  response?: DiscoveryResponse | null;
+  briefs?: DiscoveryBrief[];
 }

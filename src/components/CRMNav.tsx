@@ -9,6 +9,7 @@ const TABS = [
   { label: "Contacts",   href: "/crm/contacts" },
   { label: "Businesses", href: "/crm/businesses" },
   { label: "Clients",    href: "/crm/clients" },
+  { label: "Discovery",  href: "/crm/discovery" },
 ];
 
 export function CRMNav() {
