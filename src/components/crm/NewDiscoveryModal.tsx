@@ -1,0 +1,199 @@
+"use client";
+import { useEffect, useState } from "react";
+import clsx from "clsx";
+import { CRMLead, DiscoveryProjectType } from "@/types";
+import { PROJECT_TYPES } from "@/lib/discovery";
+import { CopyButton } from "@/components/crm/CopyButton";
+
+interface Props {
+  initialLeadId?: string;
+  onClose: () => void;
+  onCreated: () => void;
+}
+
+const INPUT = "w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange";
+const LABEL = "text-xs text-brand-muted mb-1 block";
+
+export function inviteEmail(opts: { firstName?: string; orgName?: string; projectTitle: string; link: string }) {
+  return `Hi ${opts.firstName || "there"},
+
+Thanks again for the chance to help${opts.orgName ? ` ${opts.orgName}` : ""} with "${opts.projectTitle}". Before our first call, could you fill out this short questionnaire? It covers the tools you use today, who's involved, and what you've already tried, so we can spend the call on solutions instead of background.
+
+${opts.link}
+
+It takes about 15 minutes and saves as you go, so you can stop and come back with the same link.
+
+Thanks,
+Brian`;
+}
+
+export function NewDiscoveryModal({ initialLeadId, onClose, onCreated }: Props) {
+  const [leads, setLeads] = useState<CRMLead[]>([]);
+  const [mode, setMode] = useState<"existing" | "new">(initialLeadId ? "existing" : "new");
+  const [leadId, setLeadId] = useState(initialLeadId ?? "");
+  const [org, setOrg] = useState({ name: "", website: "" });
+  const [contact, setContact] = useState({ first_name: "", last_name: "", email: "" });
+  const [project, setProject] = useState({ title: "", brief: "", type: "content_social" as DiscoveryProjectType });
+  const [engagement, setEngagement] = useState<"pro_bono" | "paid">("pro_bono");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [created, setCreated] = useState<{ link: string; email: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/crm/leads").then(r => r.json()).then(d => setLeads(Array.isArray(d) ? d : []));
+  }, []);
+
+  const lead = leads.find(l => l.id === leadId);
+  const canSubmit = project.title.trim() &&
+    (mode === "existing" ? !!leadId : org.name.trim() && contact.first_name.trim() && contact.email.trim());
+
+  async function create() {
+    setSaving(true);
+    setError("");
+    const body: Record<string, unknown> = {
+      project_title: project.title,
+      project_brief: project.brief || undefined,
+      project_type: project.type,
+      engagement_type: engagement,
+    };
+    if (mode === "existing") body.lead_id = leadId;
+    else {
+      body.org = { name: org.name, website: org.website || undefined };
+      body.contact = { first_name: contact.first_name, last_name: contact.last_name || undefined, email: contact.email };
+    }
+    const res = await fetch("/api/crm/discovery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    setSaving(false);
+    if (!res.ok) { setError(data.error ?? "Could not create"); return; }
+    setCreated({
+      link: data.link,
+      email: inviteEmail({
+        firstName: mode === "existing" ? lead?.contact?.first_name : contact.first_name,
+        orgName: mode === "existing" ? lead?.business?.name : org.name,
+        projectTitle: project.title,
+        link: data.link,
+      }),
+    });
+    onCreated();
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
+      <div className="bg-white rounded-xl w-full max-w-lg p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-base font-semibold text-brand-black">{created ? "Discovery link ready" : "New discovery"}</h2>
+          <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg" aria-label="Close">✕</button>
+        </div>
+
+        {created ? (
+          <div className="space-y-4">
+            <div>
+              <label className={LABEL}>Link</label>
+              <div className="flex gap-2">
+                <input readOnly className={clsx(INPUT, "bg-brand-offwhite")} value={created.link} onFocus={e => e.target.select()} />
+                <CopyButton text={created.link} />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-brand-muted">Invite email</label>
+                <CopyButton text={created.email} label="Copy email" />
+              </div>
+              <textarea readOnly className={clsx(INPUT, "h-56 bg-brand-offwhite")} value={created.email} />
+            </div>
+            <button onClick={onClose} className="btn-primary w-full">Done</button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex gap-1 p-1 bg-brand-offwhite rounded-lg">
+              {(["new", "existing"] as const).map(m => (
+                <button key={m} onClick={() => setMode(m)}
+                  className={clsx("flex-1 text-xs py-1.5 rounded-md font-medium", mode === m ? "bg-white shadow-sm text-brand-black" : "text-brand-muted")}>
+                  {m === "new" ? "New organization" : "Existing lead"}
+                </button>
+              ))}
+            </div>
+
+            {mode === "existing" ? (
+              <div>
+                <label className={LABEL}>Lead *</label>
+                <select className={INPUT} value={leadId} onChange={e => setLeadId(e.target.value)}>
+                  <option value="">Choose a lead…</option>
+                  {leads.map(l => (
+                    <option key={l.id} value={l.id}>
+                      {l.business?.name ?? "—"}{l.contact ? ` — ${l.contact.first_name} ${l.contact.last_name ?? ""}` : ""}
+                    </option>
+                  ))}
+                </select>
+                {lead && !lead.contact?.email && (
+                  <p className="text-xs text-amber-700 mt-1">This lead's contact has no email — the form won't be able to prefill it.</p>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="col-span-2">
+                    <label className={LABEL}>Organization *</label>
+                    <input className={INPUT} value={org.name} onChange={e => setOrg({ ...org, name: e.target.value })} placeholder="Her Promise Circle Foundation" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={LABEL}>Website</label>
+                    <input className={INPUT} value={org.website} onChange={e => setOrg({ ...org, website: e.target.value })} placeholder="https://…" />
+                  </div>
+                  <div>
+                    <label className={LABEL}>Contact first name *</label>
+                    <input className={INPUT} value={contact.first_name} onChange={e => setContact({ ...contact, first_name: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={LABEL}>Last name</label>
+                    <input className={INPUT} value={contact.last_name} onChange={e => setContact({ ...contact, last_name: e.target.value })} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={LABEL}>Contact email *</label>
+                    <input type="email" className={INPUT} value={contact.email} onChange={e => setContact({ ...contact, email: e.target.value })} />
+                  </div>
+                </div>
+                <p className="text-xs text-brand-muted -mt-2">Creates the business, contact and a lead in Qualification.</p>
+              </>
+            )}
+
+            <div className="border-t border-brand-border pt-4 space-y-4">
+              <div>
+                <label className={LABEL}>Project title *</label>
+                <input className={INPUT} value={project.title} onChange={e => setProject({ ...project, title: e.target.value })}
+                  placeholder="Social media content workflow audit" />
+              </div>
+              <div>
+                <label className={LABEL}>Project type *</label>
+                <select className={INPUT} value={project.type} onChange={e => setProject({ ...project, type: e.target.value as DiscoveryProjectType })}>
+                  {PROJECT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <p className="text-xs text-brand-muted mt-1">Decides which workflow section they see.</p>
+              </div>
+              <div>
+                <label className={LABEL}>Project description</label>
+                <textarea className={clsx(INPUT, "h-32")} value={project.brief} onChange={e => setProject({ ...project, brief: e.target.value })}
+                  placeholder="Paste their description (e.g. from Taproot). They'll see it first and only need to correct it." />
+              </div>
+              <div>
+                <label className={LABEL}>Engagement</label>
+                <select className={INPUT} value={engagement} onChange={e => setEngagement(e.target.value as "pro_bono" | "paid")}>
+                  <option value="pro_bono">Pro bono</option>
+                  <option value="paid">Paid</option>
+                </select>
+              </div>
+            </div>
+
+            {error && <p className="text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2 pt-2">
+              <button onClick={onClose} className="btn-ghost flex-1">Cancel</button>
+              <button onClick={create} disabled={!canSubmit || saving} className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed">
+                {saving ? "Creating…" : "Create link"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
