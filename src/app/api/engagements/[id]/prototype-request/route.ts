@@ -79,14 +79,14 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     client_id: hasClient ? eng.client_id : null,
     source: "manual",
     due_date: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10),
-  }).select("id").single();
+  }).select("id, ref").single();
   if (wErr) return NextResponse.json({ error: wErr.message }, { status: 500 });
 
   // The work item exists now: a dispatch failure is reported in the body, never as an error status.
   const d = await dispatchBeginWork(dispatchBaseUrl(), item.id, req.headers.get("cookie") ?? "");
 
   return NextResponse.json(
-    { work_item_id: item.id, deliverable_id: deliverableId, dispatched: d.dispatched, dispatch_error: d.error },
+    { work_item_id: item.id, work_item_ref: item.ref ?? null, deliverable_id: deliverableId, dispatched: d.dispatched, dispatch_error: d.error },
     { status: 201 },
   );
 }
