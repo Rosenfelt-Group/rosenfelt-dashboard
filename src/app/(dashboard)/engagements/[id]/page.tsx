@@ -148,8 +148,13 @@ export default function EngagementPage() {
           ))}
 
           {previewUrl && (
-            <iframe src={previewUrl} sandbox="allow-scripts allow-forms" title="Prototype preview"
-              className="w-full h-[70vh] border border-brand-border rounded" />
+            <>
+              <p className="text-xs text-brand-muted mb-1">
+                Prototype preview — untrusted content. Do not enter real passwords or personal data.
+              </p>
+              <iframe src={previewUrl} sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" title="Prototype preview"
+                className="w-full h-[70vh] border border-brand-border rounded" />
+            </>
           )}
         </div>
       )}

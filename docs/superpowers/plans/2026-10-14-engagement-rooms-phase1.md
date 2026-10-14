@@ -19,7 +19,7 @@ Copied from the spec; every task includes these.
 - Access tokens: 32 random bytes, base64url; store only the SHA-256 hash; raw link shown once; default expiry 60 days.
 - Preview grants: HMAC-signed, expire in 15 minutes, secret shared only between the dashboard (and later portal) and the preview host.
 - Prototypes are served only from `preview.rosably.com`; embedded with `<iframe sandbox="allow-scripts allow-forms">` (no `allow-same-origin`, no top navigation, no popups).
-- Preview response headers: `Content-Security-Policy: default-src 'self' 'unsafe-inline' data: blob:; connect-src 'none'; frame-ancestors <room origin> <dashboard origin>`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: private, max-age=300`. No cookies, no Supabase keys to the browser, no other routes.
+- Preview response headers: `Content-Security-Policy: default-src 'self' 'unsafe-inline' data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; sandbox allow-scripts allow-forms; frame-ancestors <room origin> <dashboard origin>`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-DNS-Prefetch-Control: off`, `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`, `Cache-Control: private, max-age=300`. No cookies, no Supabase keys to the browser, no other routes.
 - Bundle contract v1: `manifest.json` + `index.html` + `assets/`; manifest fields `contract_version`, `title`, `summary`, `entry`, `screens[{id,name}]`, `change_summary`, `addressed_comment_ids`, `data: "synthetic"`; every screen id appears as `data-screen` in `index.html`; limits 10 MB total and 200 files; no external resources.
 - Comments and discovery answers reach agents only as quoted data in a delimited block.
 - Cookies are host-only; never `Domain=.rosably.com`.
@@ -1370,6 +1370,8 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
 
 ### Task 8: Preview host — scaffold and pure modules
 
+> **Amended after review:** the CSP and header list below match the built preview host (adds `form-action 'none'`, `base-uri 'none'`, `sandbox allow-scripts allow-forms`, `X-DNS-Prefetch-Control: off`, `Permissions-Policy`). The bridge is injected into every served `.html`/`.htm` file, not only `index.html`.
+
 **Files (new repo `preview-host`):**
 - Create: `package.json`, `tsconfig.json`, `next.config.ts`, `vitest.config.ts`
 - Create: `lib/grant.ts` (**byte-for-byte copy of the dashboard's `src/lib/rooms/grant.ts`**), `lib/grant.test.ts` (copy of its test, import path `./grant`)
@@ -1453,12 +1455,14 @@ describe("securityHeaders", () => {
   const h = securityHeaders(["https://portal.rosably.com", "https://dashboard.rosably.com"]);
   it("blocks all network from the prototype and restricts framing", () => {
     expect(h["Content-Security-Policy"]).toBe(
-      "default-src 'self' 'unsafe-inline' data: blob:; connect-src 'none'; frame-ancestors https://portal.rosably.com https://dashboard.rosably.com",
+      "default-src 'self' 'unsafe-inline' data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; sandbox allow-scripts allow-forms; frame-ancestors https://portal.rosably.com https://dashboard.rosably.com",
     );
   });
   it("sets the fixed hardening headers", () => {
     expect(h["X-Content-Type-Options"]).toBe("nosniff");
     expect(h["Referrer-Policy"]).toBe("no-referrer");
+    expect(h["X-DNS-Prefetch-Control"]).toBe("off");
+    expect(h["Permissions-Policy"]).toBe("camera=(), microphone=(), geolocation=(), payment=(), usb=()");
     expect(h["Cache-Control"]).toBe("private, max-age=300");
   });
   it("allows opaque-origin sandboxed frames to load subresources (no credentials exist)", () => {
@@ -1581,9 +1585,11 @@ export function securityHeaders(frameAncestors: string[]): Record<string, string
   const ancestors = frameAncestors.length > 0 ? frameAncestors.join(" ") : "'none'";
   return {
     "Content-Security-Policy":
-      `default-src 'self' 'unsafe-inline' data: blob:; connect-src 'none'; frame-ancestors ${ancestors}`,
+      `default-src 'self' 'unsafe-inline' data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; sandbox allow-scripts allow-forms; frame-ancestors ${ancestors}`,
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
+    "X-DNS-Prefetch-Control": "off",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
     "Cache-Control": "private, max-age=300",
     // The sandboxed frame has an opaque origin, so module scripts and fonts need CORS.
     // Access is already gated by the signed grant in the URL and no credentials exist here.
@@ -1638,6 +1644,8 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
 ---
 
 ### Task 9: Preview host — request handler and route
+
+> **Amended after review:** the handler buffers objects (it does not stream) and injects the bridge into every `.html`/`.htm` file. Known limit: Vercel's ~4.5 MB response-body limit; follow-up: cap per-file size at 4 MB in the Casey validator. Phase 1 uses the full service-role key in the preview host; narrowing to a storage-read-only credential is a tracked follow-up (pending decision).
 
 **Files (preview-host):**
 - Create: `lib/handler.ts`, `lib/handler.test.ts`, `app/v/[grant]/[...path]/route.ts`, `lib/storage.ts`
