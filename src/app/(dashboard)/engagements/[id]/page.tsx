@@ -7,14 +7,20 @@ import { fetchJson } from "@/lib/rooms/fetch-json";
 type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string };
 type Deliverable = { id: string; title: string; versions: Version[] };
 type Access = { id: string; label: string | null; expires_at: string; revoked_at: string | null; last_used_at: string | null };
+type ActivityEvent = { id: number; type: string; created_at: string; contact: { name: string; email: string } | null; version: { deliverable_title: string; version_no: number } | null };
+type ActivityContact = { id: string; name: string; email: string; first_seen_at: string };
+type Activity = { events: ActivityEvent[]; contacts: ActivityContact[] };
 type Detail = { engagement: { id: string; title: string; relationship: string; status: string }; business: { name: string } | null; deliverables: Deliverable[] };
 
 export default function EngagementPage() {
   const { id } = useParams<{ id: string }>();
-  const [tab, setTab] = useState<"deliverables" | "access">("deliverables");
+  const [tab, setTab] = useState<"deliverables" | "access" | "activity">("deliverables");
   const [detail, setDetail] = useState<Detail | null>(null);
   const [access, setAccess] = useState<Access[]>([]);
+  const [activity, setActivity] = useState<Activity | null>(null);
+  const [activityErr, setActivityErr] = useState<string | null>(null);
   const [newLink, setNewLink] = useState<string | null>(null);
+  const [confirmShare, setConfirmShare] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -40,6 +46,28 @@ export default function EngagementPage() {
     else setMsg(`Couldn't load access links: ${a.error}`);
   }, [id]);
   useEffect(() => { load(); }, [load]);
+
+  const loadActivity = useCallback(async () => {
+    setActivityErr(null);
+    const r = await fetchJson<Activity>(`/api/engagements/${id}/activity`);
+    if (!r.ok) { setActivityErr(r.error); return; }
+    setActivity({
+      events: Array.isArray(r.data?.events) ? r.data.events : [],
+      contacts: Array.isArray(r.data?.contacts) ? r.data.contacts : [],
+    });
+  }, [id]);
+  useEffect(() => {
+    if (tab === "activity" && !activity && !activityErr) loadActivity();
+  }, [tab, activity, activityErr, loadActivity]);
+
+  const describeEvent = (e: ActivityEvent): string => {
+    if (e.type === "room_opened") return "Someone opened the room";
+    if (e.type === "contact_identified") return `${e.contact?.name ?? "A visitor"} introduced themselves`;
+    if (e.type === "version_viewed") {
+      return `${e.contact?.name ?? "A visitor"} viewed ${e.version ? `${e.version.deliverable_title} v${e.version.version_no}` : "a version"}`;
+    }
+    return e.type;
+  };
 
   async function guarded(key: string, fn: () => Promise<void>) {
     if (inFlight.current) return;
@@ -69,6 +97,14 @@ export default function EngagementPage() {
     const r = await fetchJson<{ url: string }>(`/api/versions/${versionId}/preview`);
     if (r.ok) setPreviewUrl(r.data.url);
     else { setPreviewUrl(null); setMsg(r.error); }
+  });
+
+  const share = (versionId: string, versionNo: number) => guarded("share", async () => {
+    const r = await fetchJson(`/api/versions/${versionId}/share`, { method: "POST" });
+    setConfirmShare(null);
+    if (!r.ok) { setMsg(r.error); return; }
+    setMsg(`v${versionNo} is now visible in the room.`);
+    await load();
   });
 
   const issue = () => guarded("issue", async () => {
@@ -103,7 +139,7 @@ export default function EngagementPage() {
       <p className="text-sm text-brand-muted mb-4">{business?.name} · {engagement.relationship} · {engagement.status}</p>
 
       <div className="flex gap-4 border-b border-brand-border mb-4">
-        {(["deliverables", "access"] as const).map(t => (
+        {(["deliverables", "access", "activity"] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`pb-2 text-sm capitalize ${tab === t ? "border-b-2 border-brand-orange text-brand-orange" : "text-brand-muted"}`}>
             {t}
@@ -139,11 +175,25 @@ export default function EngagementPage() {
               {d.versions.length === 0 ? <p className="text-sm text-brand-muted">No versions yet.</p> : (
                 <ul className="divide-y divide-brand-border border border-brand-border rounded">
                   {d.versions.map(v => (
-                    <li key={v.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                      <span>v{v.version_no} · {v.status}{v.change_summary ? ` · ${v.change_summary}` : ""}
-                        <span className="text-brand-muted"> · {formatDistanceToNow(new Date(v.created_at), { addSuffix: true })}</span>
-                      </span>
-                      <button disabled={!!pending} onClick={() => preview(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>
+                    <li key={v.id} className="px-3 py-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span>v{v.version_no} · {v.status === "shared" ? <strong>Shared</strong> : v.status}{v.change_summary ? ` · ${v.change_summary}` : ""}
+                          <span className="text-brand-muted"> · {formatDistanceToNow(new Date(v.created_at), { addSuffix: true })}</span>
+                        </span>
+                        <span className="flex gap-3">
+                          {v.status === "draft" && (
+                            <button disabled={!!pending} onClick={() => setConfirmShare(v.id)} className="text-brand-orange disabled:opacity-50">Share with room</button>
+                          )}
+                          <button disabled={!!pending} onClick={() => preview(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>
+                        </span>
+                      </div>
+                      {confirmShare === v.id && (
+                        <div className="mt-2 border border-amber-300 bg-amber-50 rounded p-2 flex flex-wrap items-center gap-2">
+                          <span>Share v{v.version_no} with everyone who has a link to this room? The previous shared version will be marked as older.</span>
+                          <button disabled={!!pending} onClick={() => share(v.id, v.version_no)} className="px-2 py-1 rounded bg-brand-orange text-white disabled:opacity-50">Share</button>
+                          <button disabled={!!pending} onClick={() => setConfirmShare(null)} className="px-2 py-1 rounded border border-brand-border disabled:opacity-50">Cancel</button>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -187,6 +237,45 @@ export default function EngagementPage() {
             ))}
             {access.length === 0 && <li className="px-3 py-2 text-sm text-brand-muted">No links yet.</li>}
           </ul>
+        </div>
+      )}
+
+      {tab === "activity" && (
+        <div className="space-y-4">
+          {activityErr && (
+            <div className="text-sm">
+              <p className="text-red-600 mb-2">Couldn&apos;t load activity: {activityErr}</p>
+              <button onClick={loadActivity} className="px-3 py-1.5 rounded border border-brand-border">Retry</button>
+            </div>
+          )}
+          {!activityErr && !activity && <p className="text-sm text-brand-muted">Loading…</p>}
+          {activity && (
+            <>
+              {activity.contacts.length > 0 && (
+                <div>
+                  <h2 className="text-sm font-medium mb-1">People who opened this room</h2>
+                  <p className="text-xs text-brand-muted mb-2">Names and emails are provided by the visitor, not verified.</p>
+                  <ul className="divide-y divide-brand-border border border-brand-border rounded">
+                    {activity.contacts.map(c => (
+                      <li key={c.id} className="px-3 py-2 text-sm">{c.name} · {c.email}
+                        <span className="text-brand-muted"> · first seen {formatDistanceToNow(new Date(c.first_seen_at), { addSuffix: true })}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <ul className="divide-y divide-brand-border border border-brand-border rounded">
+                {activity.events.map(e => (
+                  <li key={e.id} className="px-3 py-2 text-sm">{describeEvent(e)}
+                    <span className="text-brand-muted"> · {formatDistanceToNow(new Date(e.created_at), { addSuffix: true })}</span>
+                  </li>
+                ))}
+                {activity.events.length === 0 && (
+                  <li className="px-3 py-2 text-sm text-brand-muted">No activity yet. Share a version and send the room link.</li>
+                )}
+              </ul>
+            </>
+          )}
         </div>
       )}
     </div>
