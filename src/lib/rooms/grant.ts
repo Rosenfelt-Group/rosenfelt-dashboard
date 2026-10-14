@@ -25,14 +25,18 @@ export function signGrant(
 ): string {
   if (!PREFIX_RE.test(prefix)) throw new Error("invalid storage prefix");
   if (!secret) throw new Error("grant secret missing");
+  if (!Number.isFinite(nowMs)) throw new Error("invalid nowMs");
+  if (!Number.isInteger(ttlSec) || ttlSec < 1 || ttlSec > GRANT_TTL_SEC) throw new Error("invalid ttlSec");
   const exp = Math.floor(nowMs / 1000) + ttlSec;
   const payload = `${b64(prefix)}.${exp}`;
   return `${payload}.${mac(secret, payload)}`;
 }
 
 export function verifyGrant(grant: string, secret: string, nowMs: number = Date.now()): GrantResult {
+  if (typeof grant !== "string" || grant.length === 0 || grant.length > 512) return { ok: false, reason: "malformed" };
+  if (typeof secret !== "string" || secret.length === 0) return { ok: false, reason: "malformed" };
   const parts = grant.split(".");
-  if (parts.length !== 3 || !secret) return { ok: false, reason: "malformed" };
+  if (parts.length !== 3) return { ok: false, reason: "malformed" };
   const [p, expStr, sig] = parts;
   if (!p || !sig || !/^\d{1,12}$/.test(expStr)) return { ok: false, reason: "malformed" };
 

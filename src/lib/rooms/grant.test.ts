@@ -36,9 +36,59 @@ describe("grant", () => {
     expect(verifyGrant(`${p}.${Number(exp) + 99999}.${sig}`, SECRET, NOW)).toEqual({ ok: false, reason: "bad_signature" });
   });
 
-  it("rejects malformed input", () => {
-    for (const bad of ["", "a.b", "a.b.c.d", "...", "x.notanumber.y"]) {
-      expect(verifyGrant(bad, SECRET, NOW).ok).toBe(false);
+  it("rejects structurally malformed input as malformed", () => {
+    for (const bad of ["", "a.b", "a.b.c.d", "...", "x.notanumber.y", "x..y", ".1.y", "x.1.", "x.1234567890123.y", "é"]) {
+      expect(verifyGrant(bad, SECRET, NOW)).toEqual({ ok: false, reason: "malformed" });
+    }
+  });
+
+  it("rejects well-shaped but unsigned input as bad_signature", () => {
+    for (const bad of ["a.1.c", "é.1.é", "x.0.y"]) {
+      expect(verifyGrant(bad, SECRET, NOW)).toEqual({ ok: false, reason: "bad_signature" });
+    }
+  });
+
+  it("rejects non-string and oversized grants without throwing", () => {
+    const bad: unknown[] = [undefined, null, 42, ["a", "b", "c"], {}, "a".repeat(513)];
+    for (const g of bad) {
+      expect(() => verifyGrant(g as string, SECRET, NOW)).not.toThrow();
+      expect(verifyGrant(g as string, SECRET, NOW)).toEqual({ ok: false, reason: "malformed" });
+    }
+  });
+
+  it("rejects an empty or non-string secret as malformed", () => {
+    const g = signGrant(PREFIX, SECRET, NOW);
+    expect(verifyGrant(g, "", NOW)).toEqual({ ok: false, reason: "malformed" });
+    expect(verifyGrant(g, undefined as unknown as string, NOW)).toEqual({ ok: false, reason: "malformed" });
+  });
+
+  it("treats the exact expiry instant as expired and one ms earlier as valid", () => {
+    const g = signGrant(PREFIX, SECRET, NOW);
+    const expMs = (NOW / 1000 + GRANT_TTL_SEC) * 1000;
+    expect(verifyGrant(g, SECRET, expMs)).toEqual({ ok: false, reason: "expired" });
+    expect(verifyGrant(g, SECRET, expMs - 1).ok).toBe(true);
+  });
+
+  it("rejects a correct-length wrong signature, and truncated or oversized signatures", () => {
+    const [p, exp, sig] = signGrant(PREFIX, SECRET, NOW).split(".");
+    const flipped = (sig[0] === "A" ? "B" : "A") + sig.slice(1);
+    expect(flipped).toHaveLength(sig.length);
+    for (const bad of [flipped, sig.slice(0, -1), sig + "A"]) {
+      expect(verifyGrant(`${p}.${exp}.${bad}`, SECRET, NOW)).toEqual({ ok: false, reason: "bad_signature" });
+    }
+  });
+
+  it("rejects a leading-zero expiry carrying the original signature", () => {
+    const [p, exp, sig] = signGrant(PREFIX, SECRET, NOW).split(".");
+    expect(verifyGrant(`${p}.0${exp}.${sig}`, SECRET, NOW)).toEqual({ ok: false, reason: "bad_signature" });
+  });
+
+  it("validates nowMs and ttlSec when signing", () => {
+    for (const n of [NaN, Infinity, -Infinity]) expect(() => signGrant(PREFIX, SECRET, n)).toThrow();
+    for (const t of [NaN, Infinity, 0, -5, 901, 1.5]) expect(() => signGrant(PREFIX, SECRET, NOW, t)).toThrow();
+    for (const t of [1, GRANT_TTL_SEC]) {
+      const g = signGrant(PREFIX, SECRET, NOW, t);
+      expect(verifyGrant(g, SECRET, NOW)).toEqual({ ok: true, prefix: PREFIX, exp: NOW / 1000 + t });
     }
   });
 
