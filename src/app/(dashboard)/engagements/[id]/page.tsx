@@ -15,6 +15,7 @@ export default function EngagementPage() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [access, setAccess] = useState<Access[]>([]);
   const [newLink, setNewLink] = useState<string | null>(null);
+  const [confirmShare, setConfirmShare] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -69,6 +70,14 @@ export default function EngagementPage() {
     const r = await fetchJson<{ url: string }>(`/api/versions/${versionId}/preview`);
     if (r.ok) setPreviewUrl(r.data.url);
     else { setPreviewUrl(null); setMsg(r.error); }
+  });
+
+  const share = (versionId: string, versionNo: number) => guarded("share", async () => {
+    const r = await fetchJson(`/api/versions/${versionId}/share`, { method: "POST" });
+    setConfirmShare(null);
+    if (!r.ok) { setMsg(r.error); return; }
+    setMsg(`v${versionNo} is now visible in the room.`);
+    await load();
   });
 
   const issue = () => guarded("issue", async () => {
@@ -139,11 +148,25 @@ export default function EngagementPage() {
               {d.versions.length === 0 ? <p className="text-sm text-brand-muted">No versions yet.</p> : (
                 <ul className="divide-y divide-brand-border border border-brand-border rounded">
                   {d.versions.map(v => (
-                    <li key={v.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                      <span>v{v.version_no} · {v.status}{v.change_summary ? ` · ${v.change_summary}` : ""}
-                        <span className="text-brand-muted"> · {formatDistanceToNow(new Date(v.created_at), { addSuffix: true })}</span>
-                      </span>
-                      <button disabled={!!pending} onClick={() => preview(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>
+                    <li key={v.id} className="px-3 py-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span>v{v.version_no} · {v.status === "shared" ? <strong>Shared</strong> : v.status}{v.change_summary ? ` · ${v.change_summary}` : ""}
+                          <span className="text-brand-muted"> · {formatDistanceToNow(new Date(v.created_at), { addSuffix: true })}</span>
+                        </span>
+                        <span className="flex gap-3">
+                          {v.status === "draft" && (
+                            <button disabled={!!pending} onClick={() => setConfirmShare(v.id)} className="text-brand-orange disabled:opacity-50">Share with room</button>
+                          )}
+                          <button disabled={!!pending} onClick={() => preview(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>
+                        </span>
+                      </div>
+                      {confirmShare === v.id && (
+                        <div className="mt-2 border border-amber-300 bg-amber-50 rounded p-2 flex flex-wrap items-center gap-2">
+                          <span>Share v{v.version_no} with everyone who has a link to this room? The previous shared version will be marked as older.</span>
+                          <button disabled={!!pending} onClick={() => share(v.id, v.version_no)} className="px-2 py-1 rounded bg-brand-orange text-white disabled:opacity-50">Share</button>
+                          <button disabled={!!pending} onClick={() => setConfirmShare(null)} className="px-2 py-1 rounded border border-brand-border disabled:opacity-50">Cancel</button>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
