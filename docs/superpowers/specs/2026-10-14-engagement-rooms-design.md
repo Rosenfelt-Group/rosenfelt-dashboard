@@ -47,7 +47,7 @@ token pattern, questionnaire engine and conventions where they fit.
 - Cookies are host-only. Never set `Domain=.rosably.com`.
 - Prototypes are served only from the preview origin, never from portal, dashboard or rosably.com.
 - The dashboard builds room links from `NEXT_PUBLIC_PORTAL_URL`.
-- The `rooms` schema must be added to PostgREST's exposed schemas (`pgrst.db_schemas`) at deploy.
+- The `rooms` schema must be added to the Supabase Data API exposed schemas (Project Settings > Data API, keeping existing entries) at deploy. Do not set it via `ALTER ROLE authenticator`.
 - Hardening later: replace the portal's full service-role key with a Postgres role limited to the `rooms` schema.
 
 ## Data model

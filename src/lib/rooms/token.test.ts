@@ -1,7 +1,8 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { generateToken, hashToken, isPlausibleToken, roomLink } from "./token";
 
 describe("token", () => {
+  beforeEach(() => { delete process.env.NEXT_PUBLIC_PORTAL_URL; });
   afterEach(() => { delete process.env.NEXT_PUBLIC_PORTAL_URL; });
 
   it("generates 43-char base64url tokens that differ each time", () => {

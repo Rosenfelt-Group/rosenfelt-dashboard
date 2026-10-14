@@ -57,7 +57,7 @@ export default function EngagementPage() {
       }),
     });
     if (!r.ok) { setMsg(r.error); return; }
-    setMsg(`Work item created (${r.data.work_item_id}). Casey will pick it up from the inbox.`);
+    setMsg(`Work item created (${r.data.work_item_id}). It is in the Work inbox — dispatch it to Casey from the Work page.`);
     setBrief(""); setDelivTitle(""); setDelivId(""); await load();
   });
 

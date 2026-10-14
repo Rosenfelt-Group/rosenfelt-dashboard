@@ -35,7 +35,7 @@ These resolve gaps found while reading the real code and schema. Task 1 updates 
 4. **`engagements.business_id` uses `ON DELETE RESTRICT`**, so deleting a business cannot silently delete rooms.
 5. **The Phase 1 bridge is a minimal screen reporter.** Pin mode, overlays and `showPins` arrive in Phase 3.
 6. **Preview responses add `Access-Control-Allow-Origin: *`.** A sandboxed frame without `allow-same-origin` has an opaque origin, so module scripts and web fonts from the preview host need CORS. Grants already gate access and no credentials exist.
-7. **The `rooms` schema must be added to PostgREST's exposed schemas** (a deploy step, not in the spec).
+7. **The `rooms` schema must be added to the Supabase Data API exposed schemas** (Project Settings > Data API; a deploy step, not a role setting; not in the spec).
 8. **Phase 1 ships the tool on Casey only** (the default agent). `document_tools.py` is copied identically into each agent repo, so replication to the other agents is the last task.
 
 ## Review Focus
@@ -271,7 +271,7 @@ Expected: `rooms_absent = true`, `bucket_absent = true`. If the first call error
 
 - [ ] **Step 3: Update the spec for the amendments**
 
-In `docs/superpowers/specs/2026-10-14-engagement-rooms-design.md` make these edits, matching the "Spec amendments" list above: grant payload is the storage prefix (Preview host and Security sections); `created_by` and `author_user` are text usernames (Data model); `engagements.business_id` is `ON DELETE RESTRICT`; Phase 1 bridge is a minimal screen reporter; preview responses include `Access-Control-Allow-Origin: *`; the `rooms` schema is added to PostgREST exposed schemas; work-item defaults (`source='manual'`, `work_type='deliverable'`).
+In `docs/superpowers/specs/2026-10-14-engagement-rooms-design.md` make these edits, matching the "Spec amendments" list above: grant payload is the storage prefix (Preview host and Security sections); `created_by` and `author_user` are text usernames (Data model); `engagements.business_id` is `ON DELETE RESTRICT`; Phase 1 bridge is a minimal screen reporter; preview responses include `Access-Control-Allow-Origin: *`; the `rooms` schema is added to the Supabase Data API exposed schemas; work-item defaults (`source='manual'`, `work_type='deliverable'`).
 
 - [ ] **Step 4: Commit**
 
@@ -284,20 +284,15 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
 
 - [ ] **Step 5: Apply to production (only after Brian's go-ahead)**
 
-Use `apply_migration` with name `rooms_foundation` and the Step 1 SQL. Then expose the schema to PostgREST. First read the current setting:
+Use `apply_migration` with name `rooms_foundation` and the Step 1 SQL. Then expose the schema through the Supabase Data API settings: Supabase Dashboard > Project Settings > Data API > Exposed schemas. Add `rooms` and KEEP all existing entries (`public`, `crm`, etc.). Alternatively use the Management API postgrest config, sending the full list with the existing schemas preserved.
 
-```sql
-select rolconfig from pg_roles where rolname = 'authenticator';
-```
+**DO NOT run `ALTER ROLE authenticator SET pgrst.db_schemas`.** On this project the live `authenticator.rolconfig` has no `pgrst.db_schemas` (only `session_preload_libraries=safeupdate`, `statement_timeout=8s`, `lock_timeout=8s`); `crm` is exposed via the platform Data API settings. An ALTER ROLE would either do nothing or replace the platform list and take `public` and `crm` off the API, breaking the dashboard and agents.
 
-Take the existing `pgrst.db_schemas` value, append `,rooms`, and set it:
+Verify with a service-role REST call: `GET /rest/v1/engagements?limit=1` with header `Accept-Profile: rooms` must return `[]`, not a 404 or 406.
 
-```sql
-alter role authenticator set pgrst.db_schemas = '<existing list>,rooms';
-notify pgrst, 'reload config';
-```
+**Deploy order:** (1) apply the migration; (2) expose the `rooms` schema in Data API settings; (3) set `ROOM_GRANT_SECRET`, `NEXT_PUBLIC_PREVIEW_URL` and `NEXT_PUBLIC_PORTAL_URL` BEFORE the build, because `NEXT_PUBLIC_*` values are inlined at build time; (4) only then merge/deploy the dashboard. Otherwise every CRM business page shows "Couldn't load rooms".
 
-Verify with a service-role REST call (`Accept-Profile: rooms`) that `GET /rest/v1/engagements?limit=1` returns `[]`, not a 406 or 404.
+**Known gaps before Task 13:** Casey is not auto-dispatched (the work item needs `begin_work` from /work); Casey's kickoff instructions limit it to audits; Casey has no tool to write files to a local `bundle_path`, nor to read a prior version from the prototypes bucket. A decision on these is needed before the acceptance run.
 
 ---
 
