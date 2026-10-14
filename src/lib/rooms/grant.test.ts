@@ -56,10 +56,27 @@ describe("grant", () => {
     }
   });
 
+  it("enforces the 512-char length bound on well-shaped grants", () => {
+    const shaped = (len: number) => `${"a".repeat(255)}.1.${"b".repeat(len - 258)}`;
+    expect(verifyGrant(shaped(512), SECRET, NOW)).toEqual({ ok: false, reason: "bad_signature" });
+    expect(shaped(512)).toHaveLength(512);
+    expect(verifyGrant(shaped(513), SECRET, NOW)).toEqual({ ok: false, reason: "malformed" });
+    expect(verifyGrant(`${"a".repeat(300)}.1.${"b".repeat(300)}`, SECRET, NOW)).toEqual({ ok: false, reason: "malformed" });
+  });
+
+  it("fails closed when nowMs is not a finite number", () => {
+    const g = signGrant(PREFIX, SECRET, NOW);
+    for (const n of [NaN, Infinity, -Infinity, null, undefined as unknown as number]) {
+      expect(verifyGrant(g, SECRET, (n === undefined ? NaN : n) as number)).toEqual({ ok: false, reason: "malformed" });
+    }
+  });
+
   it("rejects an empty or non-string secret as malformed", () => {
     const g = signGrant(PREFIX, SECRET, NOW);
     expect(verifyGrant(g, "", NOW)).toEqual({ ok: false, reason: "malformed" });
-    expect(verifyGrant(g, undefined as unknown as string, NOW)).toEqual({ ok: false, reason: "malformed" });
+    for (const bad of [undefined, null, 42, {}]) {
+      expect(verifyGrant(g, bad as unknown as string, NOW)).toEqual({ ok: false, reason: "malformed" });
+    }
   });
 
   it("treats the exact expiry instant as expired and one ms earlier as valid", () => {

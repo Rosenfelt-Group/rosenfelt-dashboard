@@ -35,6 +35,7 @@ export function signGrant(
 export function verifyGrant(grant: string, secret: string, nowMs: number = Date.now()): GrantResult {
   if (typeof grant !== "string" || grant.length === 0 || grant.length > 512) return { ok: false, reason: "malformed" };
   if (typeof secret !== "string" || secret.length === 0) return { ok: false, reason: "malformed" };
+  if (!Number.isFinite(nowMs)) return { ok: false, reason: "malformed" };
   const parts = grant.split(".");
   if (parts.length !== 3) return { ok: false, reason: "malformed" };
   const [p, expStr, sig] = parts;
