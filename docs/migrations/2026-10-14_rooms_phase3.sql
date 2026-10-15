@@ -101,7 +101,7 @@ declare
 begin
   if v_mime is null or p_upload is null then raise exception 'unsupported document' using errcode = 'P0001'; end if;
   if p_filename is null or char_length(p_filename) not between 1 and 150
-     or p_filename ~ '[[:cntrl:]/\\"‎‏‪-‮⁦-⁩]'
+     or p_filename ~ '[[:cntrl:]/\\"\u200e\u200f\u202a-\u202e\u2066-\u2069]'
      or left(p_filename, 1) = '.' or p_filename <> btrim(p_filename) then
     raise exception 'invalid file name' using errcode = 'P0001'; end if;
   if p_change_summary is not null and char_length(p_change_summary) > 500 then

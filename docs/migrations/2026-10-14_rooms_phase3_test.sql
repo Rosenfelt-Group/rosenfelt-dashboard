@@ -59,7 +59,7 @@ begin
   insert into storage.objects (bucket_id, name, metadata)
     values ('room-documents', v_eng::text || '/' || v_doc::text || '/' || v_up3::text || '/document.md', '{"size": 20, "mimetype": "text/markdown"}');
   declare v_name text; begin
-    foreach v_name in array array['a/b.md', 'a"b.md', E'a\nb.md', '.hidden.md', ' padded.md', E'evil‮dm.txt', repeat('n', 151)] loop
+    foreach v_name in array array['a/b.md', 'a"b.md', E'a\nb.md', '.hidden.md', ' padded.md', E'evil\u202edm.txt', repeat('n', 151)] loop
       v_ok := false;
       begin perform rooms.add_document_version(v_doc, v_up3, 'md', v_name, null); exception when sqlstate 'P0001' then v_ok := true; end;
       if not v_ok then raise exception 'FAIL hostile file name accepted: %', v_name; end if;
