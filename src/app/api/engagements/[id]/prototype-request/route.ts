@@ -35,7 +35,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   } else {
     const { data: d, error } = await rooms.from("deliverables")
       .insert({ engagement_id: id, title: deliverableTitle }).select("id").single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return NextResponse.json({ error: "Could not create the deliverable." }, { status: 500 });
     deliverableId = d.id;
   }
 
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     source: "manual",
     due_date: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10),
   }).select("id").single();
-  if (wErr) return NextResponse.json({ error: wErr.message }, { status: 500 });
+  if (wErr) return NextResponse.json({ error: "Could not create the work item." }, { status: 500 });
 
   // The work item exists now: a dispatch failure is reported in the body, never as an error status.
   const d = await dispatchBeginWork(dispatchBaseUrl(), item.id, req.headers.get("cookie") ?? "");

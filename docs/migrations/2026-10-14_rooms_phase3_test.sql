@@ -1,3 +1,5 @@
+-- SAFETY: run only as:  begin;  <2026-10-14_rooms_phase3.sql>;  <this script>;  rollback;
+-- This script writes test data and always ends by raising an exception, so it can never commit.
 do $$
 declare
   v_biz uuid; v_eng uuid; v_eng2 uuid; v_acc uuid; v_acc2 uuid; v_new_acc uuid; v_contact uuid;
@@ -189,4 +191,5 @@ begin
   begin set local role anon; perform rooms.portal_document_for_download(v_new_acc, v_eng, null, v_pv); reset role; raise exception 'FAIL anon executes download';
   exception when insufficient_privilege then reset role; end;
   reset role;
+  raise exception 'ALL PHASE 3 ASSERTIONS PASSED (rolled back)';
 end $$;

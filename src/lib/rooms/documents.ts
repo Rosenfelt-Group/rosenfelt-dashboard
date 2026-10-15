@@ -13,7 +13,7 @@ export function docExt(name: string): DocExt | null {
 export function sanitizeDocFilename(name: string): string | null {
   const last = name.split(/[\\/]/).pop() ?? "";
   let s = last.normalize("NFC")
-    .replace(/[\x00-\x1f\x7f"\\\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029"\\\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
     .replace(/\s+/g, " ").trim().replace(/^\.+/, "").trim();
   if (!docExt(s)) return null;
   if (s.length > 150) {

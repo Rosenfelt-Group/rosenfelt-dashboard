@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { fetchJson } from "@/lib/rooms/fetch-json";
-import { DOC_ACCEPT, DOC_MAX_BYTES } from "@/lib/rooms/doc-limits";
+import { DOC_ACCEPT, DOC_MAX_BYTES, targetAfterPrep } from "@/lib/rooms/doc-limits";
 
 type Prep = { deliverable_id: string; upload_id: string; filename: string; signed_url: string; content_type: string };
 
@@ -30,19 +30,27 @@ export function DocumentUpload({ engagementId, documents, onDone }: {
         body: JSON.stringify({ filename: file.name, size: file.size, ...(targetId ? { deliverable_id: targetId } : { deliverable_title: title }) }),
       });
       if (!prep.ok) { setErr(prep.error); return; }
+      // A new document's deliverable now exists: keep it as the target so a retry reuses it, and refresh
+      // the page data so it is visible even if a later step fails.
+      const createdNew = !targetId;
+      if (createdNew) setTargetId(targetAfterPrep(targetId, prep.data.deliverable_id));
+      const fail = (m: string) => {
+        setErr(m);
+        if (createdNew) onDone(`Upload failed: ${m} The new document was created; retrying will reuse it.`);
+      };
       let put: Response;
       try {
         put = await fetch(prep.data.signed_url, {
           method: "PUT", headers: { "content-type": prep.data.content_type, "x-upsert": "false" }, body: file,
         });
-      } catch { setErr("Upload failed (network error). Try again."); return; }
-      if (!put.ok) { setErr(`Upload failed (HTTP ${put.status}). Check the file is 25 MB or smaller and an allowed type.`); return; }
+      } catch { fail("Upload failed (network error). Try again."); return; }
+      if (!put.ok) { fail(`Upload failed (HTTP ${put.status}). Check the file is 25 MB or smaller and an allowed type.`); return; }
       const fin = await fetchJson<{ version_no: number }>(`/api/engagements/${engagementId}/documents/finalize`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deliverable_id: prep.data.deliverable_id, upload_id: prep.data.upload_id, filename: file.name,
           ...(summary.trim() ? { change_summary: summary.trim() } : {}) }),
       });
-      if (!fin.ok) { setErr(fin.error); return; }
+      if (!fin.ok) { fail(fin.error); return; }
       setFile(null); setTitle(""); setSummary(""); setTargetId("");
       if (fileInput.current) fileInput.current.value = "";
       onDone(`Uploaded “${prep.data.filename}” as v${fin.data.version_no} (draft). Use “Share with room” to make it visible.`);

@@ -21,6 +21,10 @@ describe("sanitizeDocFilename", () => {
     expect(sanitizeDocFilename("a\r\nb.pdf")).toBe("ab.pdf");
     expect(sanitizeDocFilename("...hidden.pdf")).toBe("hidden.pdf");
   });
+  it("strips C1 controls and U+2028/U+2029 (the SQL rejects [[:cntrl:]])", () => {
+    expect(sanitizeDocFilename("a\u0085b\u009fc.pdf")).toBe("abc.pdf");
+    expect(sanitizeDocFilename("a\u2028b\u2029c.pdf")).toBe("abc.pdf");
+  });
   it("truncates long names but keeps the extension", () => {
     const s = sanitizeDocFilename("x".repeat(300) + ".docx")!;
     expect(s.length).toBe(150);

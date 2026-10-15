@@ -220,3 +220,5 @@ grant execute on function rooms.refresh_access(uuid, uuid, text, timestamptz) to
 grant execute on function rooms.add_document_version(uuid, uuid, text, text, text) to service_role;
 grant execute on function rooms.portal_document_for_download(uuid, uuid, uuid, uuid) to portal_app, service_role;
 grant execute on function rooms.portal_list_deliverables(uuid, uuid) to portal_app, service_role;
+
+notify pgrst, 'reload schema';

@@ -92,6 +92,9 @@ describe("POST prototype-request", () => {
     state.insertResult = { data: null, error: { message: "boom" } };
     const res = await call();
     expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe("Could not create the work item.");
+    expect(JSON.stringify(body)).not.toContain("boom");
     expect(mockDispatch).not.toHaveBeenCalled();
   });
 
