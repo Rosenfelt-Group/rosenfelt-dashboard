@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DOC_MAX_BYTES } from "./doc-limits";
 
 export const RELATIONSHIPS = ["prospect", "client", "partner"] as const;
 
@@ -27,4 +28,38 @@ export const PrototypeRequestSchema = z.object({
   deliverable_title: z.string().trim().min(1).max(200).optional(),
 }).refine(b => Boolean(b.deliverable_id) !== Boolean(b.deliverable_title), {
   message: "Provide either an existing deliverable or a new deliverable title.",
+});
+
+export const RefreshAccessSchema = z.object({
+  expires_days: z.number().int().min(1).max(365).default(60),
+});
+
+export const WELCOME_MAX = 1000;
+
+// Plain text only: CRLF/CR -> LF, control characters other than LF and TAB removed, trimmed; empty -> null.
+export function normalizeWelcome(raw: string | null): string | null {
+  if (raw === null) return null;
+  const s = raw.replace(/\r\n?/g, "\n").replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "").trim();
+  return s === "" ? null : s;
+}
+
+export const DeliverablePatchSchema = z.strictObject({
+  welcome_message: z.string().max(5000).nullable().transform(normalizeWelcome)
+    .refine(v => v === null || v.length <= WELCOME_MAX, { message: `Welcome message must be ${WELCOME_MAX} characters or fewer.` }),
+});
+
+export const DocumentUploadSchema = z.object({
+  filename: z.string().min(1).max(300),
+  size: z.number().int().min(1).max(DOC_MAX_BYTES),
+  deliverable_id: z.string().uuid().optional(),
+  deliverable_title: z.string().trim().min(1).max(200).optional(),
+}).refine(b => Boolean(b.deliverable_id) !== Boolean(b.deliverable_title), {
+  message: "Choose an existing document or give a new title.",
+});
+
+export const DocumentFinalizeSchema = z.object({
+  deliverable_id: z.string().uuid(),
+  upload_id: z.string().uuid(),
+  filename: z.string().min(1).max(300),
+  change_summary: z.string().trim().max(500).optional(),
 });

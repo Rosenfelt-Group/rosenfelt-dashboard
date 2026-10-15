@@ -8,6 +8,8 @@ const ITEM = "22222222-2222-4222-8222-222222222222";
 const state = vi.hoisted(() => ({
   engagement: { id: "e", status: "active", business_id: "b", title: "T", relationship: "client", client_id: null, discovery_invite_id: null } as Record<string, unknown> | null,
   insertResult: { data: { id: "x" }, error: null } as { data: { id: string } | null; error: { message: string } | null },
+  deliverableKind: "prototype",
+  workItemInserts: 0,
 }));
 
 // Chainable stub: every filter returns the same builder; single/maybeSingle/insert resolve per table.
@@ -17,16 +19,19 @@ function table(name: string) {
   b.single = async () => {
     if (name === "engagements") return { data: state.engagement, error: null };
     if (name === "businesses") return { data: { name: "Acme", industry: "retail" }, error: null };
-    if (name === "deliverables") return { data: { id: "d", title: "Deliverable" }, error: null };
+    if (name === "deliverables") return { data: { id: "d", title: "Deliverable", kind: state.deliverableKind }, error: null };
     return { data: null, error: null };
   };
   b.maybeSingle = async () => ({ data: null, error: null });
-  b.insert = () => ({
-    select: () => ({
-      single: async () =>
-        name === "work_items" ? state.insertResult : { data: { id: "33333333-3333-4333-8333-333333333333" }, error: null },
-    }),
-  });
+  b.insert = () => {
+    if (name === "work_items") state.workItemInserts++;
+    return {
+      select: () => ({
+        single: async () =>
+          name === "work_items" ? state.insertResult : { data: { id: "33333333-3333-4333-8333-333333333333" }, error: null },
+      }),
+    };
+  };
   return b;
 }
 
@@ -59,6 +64,8 @@ beforeEach(() => {
   mockDispatch.mockReset();
   state.engagement = { id: ENG, status: "active", business_id: "b", title: "T", relationship: "client", client_id: null, discovery_invite_id: null };
   state.insertResult = { data: { id: ITEM }, error: null };
+  state.deliverableKind = "prototype";
+  state.workItemInserts = 0;
   process.env.DASHBOARD_BASE_URL = "https://dash.example.com";
 });
 
@@ -85,6 +92,9 @@ describe("POST prototype-request", () => {
     state.insertResult = { data: null, error: { message: "boom" } };
     const res = await call();
     expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe("Could not create the work item.");
+    expect(JSON.stringify(body)).not.toContain("boom");
     expect(mockDispatch).not.toHaveBeenCalled();
   });
 
@@ -92,6 +102,20 @@ describe("POST prototype-request", () => {
     state.engagement = { ...state.engagement, status: "closed" };
     const res = await call();
     expect(res.status).toBe(409);
+    expect(mockDispatch).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 and creates no work item when the deliverable is a document", async () => {
+    state.deliverableKind = "document";
+    const res = await POST(
+      new NextRequest(`https://evil.example/api/engagements/${ENG}/prototype-request`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ agent: "casey", brief: "Make it", deliverable_id: "55555555-5555-4555-8555-555555555555" }),
+      }),
+      { params: Promise.resolve({ id: ENG }) },
+    );
+    expect(res.status).toBe(409);
+    expect(state.workItemInserts).toBe(0);
     expect(mockDispatch).not.toHaveBeenCalled();
   });
 });

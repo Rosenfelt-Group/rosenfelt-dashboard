@@ -3,11 +3,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { fetchJson } from "@/lib/rooms/fetch-json";
+import { WelcomeEditor } from "./WelcomeEditor";
+import { DocumentUpload } from "./DocumentUpload";
+import { formatVersionDate, formatRelativeTitle } from "@/lib/rooms/format";
 
-type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string };
-type Deliverable = { id: string; title: string; versions: Version[] };
+type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string; source: string; manifest: { filename?: string; size?: number } | null };
+type Deliverable = { id: string; title: string; kind: string; welcome_message: string | null; versions: Version[] };
 type Access = { id: string; label: string | null; expires_at: string; revoked_at: string | null; last_used_at: string | null };
-type ActivityEvent = { id: number; type: string; created_at: string; contact: { name: string; email: string } | null; version: { deliverable_title: string; version_no: number } | null };
+type ActivityEvent = { id: number; type: string; created_at: string; contact: { name: string; email: string } | null; version: { deliverable_title: string; version_no: number } | null; deliverable_title: string | null };
 type ActivityContact = { id: string; name: string; email: string; first_seen_at: string };
 type Activity = { events: ActivityEvent[]; contacts: ActivityContact[] };
 type Detail = { engagement: { id: string; title: string; relationship: string; status: string }; business: { name: string } | null; deliverables: Deliverable[] };
@@ -21,6 +24,8 @@ export default function EngagementPage() {
   const [activityErr, setActivityErr] = useState<string | null>(null);
   const [newLink, setNewLink] = useState<string | null>(null);
   const [confirmShare, setConfirmShare] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmRefresh, setConfirmRefresh] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -66,6 +71,11 @@ export default function EngagementPage() {
     if (e.type === "version_viewed") {
       return `${e.contact?.name ?? "A visitor"} viewed ${e.version ? `${e.version.deliverable_title} v${e.version.version_no}` : "a version"}`;
     }
+    if (e.type === "document_downloaded") {
+      return `${e.contact?.name ?? "A visitor"} downloaded ${e.version ? `${e.version.deliverable_title} v${e.version.version_no}` : "a document"}`;
+    }
+    if (e.type === "deliverable_deleted") return `Deleted \u201c${e.deliverable_title ?? "a deliverable"}\u201d`;
+    if (e.type === "link_refreshed") return "A room link was refreshed (the old link stopped working)";
     return e.type;
   };
 
@@ -99,6 +109,23 @@ export default function EngagementPage() {
     else { setPreviewUrl(null); setMsg(r.error); }
   });
 
+  const download = (versionId: string) => guarded("download", async () => {
+    const r = await fetchJson<{ url: string }>(`/api/versions/${versionId}/download`);
+    if (r.ok) window.location.assign(r.data.url);
+    else setMsg(r.error);
+  });
+
+  const deleteDeliverable = (deliverableId: string, title: string) => guarded("delete", async () => {
+    const r = await fetchJson<{ deleted: boolean; files_removed: number; files_left: number }>(`/api/deliverables/${deliverableId}`, { method: "DELETE" });
+    setConfirmDelete(null);
+    if (!r.ok) { setMsg(r.error); return; }
+    setPreviewUrl(null);
+    setMsg(r.data.files_left > 0
+      ? `Deleted “${title}”. ${r.data.files_left} file(s) could not be removed from storage; they are no longer reachable from any room.`
+      : `Deleted “${title}”.`);
+    await load();
+  });
+
   const share = (versionId: string, versionNo: number) => guarded("share", async () => {
     const r = await fetchJson(`/api/versions/${versionId}/share`, { method: "POST" });
     setConfirmShare(null);
@@ -119,6 +146,17 @@ export default function EngagementPage() {
   const revoke = (accessId: string) => guarded("revoke", async () => {
     const r = await fetchJson(`/api/engagements/${id}/access?access_id=${accessId}`, { method: "DELETE" });
     if (!r.ok) { setMsg(`Revoke failed: ${r.error}`); return; }
+    await load();
+  });
+
+  const refreshLink = (accessId: string) => guarded("refresh", async () => {
+    const r = await fetchJson<{ link: string }>(`/api/engagements/${id}/access/${accessId}/refresh`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    });
+    setConfirmRefresh(null);
+    if (!r.ok) { setMsg(`Refresh failed: ${r.error}`); return; }
+    setNewLink(r.data.link);
+    setMsg("The old link no longer works. Send the new link below.");
     await load();
   });
 
@@ -155,7 +193,7 @@ export default function EngagementPage() {
             <h2 className="text-sm font-semibold">Request prototype</h2>
             <select value={delivId} onChange={e => setDelivId(e.target.value)} className="border border-brand-border rounded px-2 py-1.5 text-sm">
               <option value="">New deliverable…</option>
-              {deliverables.map(d => <option key={d.id} value={d.id}>New version of: {d.title}</option>)}
+              {deliverables.filter(d => d.kind === "prototype").map(d => <option key={d.id} value={d.id}>New version of: {d.title}</option>)}
             </select>
             {!delivId && (
               <input value={delivTitle} onChange={e => setDelivTitle(e.target.value)} placeholder="Deliverable title"
@@ -169,22 +207,42 @@ export default function EngagementPage() {
             </button>
           </div>
 
+          <DocumentUpload engagementId={id} documents={deliverables.filter(d => d.kind === "document").map(d => ({ id: d.id, title: d.title }))}
+            onDone={(m) => { setMsg(m); void load(); }} />
+
           {deliverables.map(d => (
             <div key={d.id}>
-              <h3 className="text-sm font-semibold mb-1">{d.title}</h3>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-semibold">{d.title}</h3>
+                <button disabled={!!pending} onClick={() => setConfirmDelete(d.id)} className="text-xs text-red-600 disabled:opacity-50">Delete</button>
+              </div>
+              {confirmDelete === d.id && (
+                <div className="mb-2 border border-red-300 bg-red-50 rounded p-2 text-sm flex flex-wrap items-center gap-2">
+                  <span>
+                    Permanently delete “{d.title}” with its {d.versions.length} version(s), all comments and all files?
+                    Visitors lose access immediately. This cannot be undone. Casey&apos;s work items are kept.
+                  </span>
+                  <button disabled={!!pending} onClick={() => deleteDeliverable(d.id, d.title)} className="px-2 py-1 rounded bg-red-600 text-white disabled:opacity-50">Delete permanently</button>
+                  <button disabled={!!pending} onClick={() => setConfirmDelete(null)} className="px-2 py-1 rounded border border-brand-border disabled:opacity-50">Cancel</button>
+                </div>
+              )}
+              <WelcomeEditor key={`${d.id}:${d.welcome_message ?? ""}`} deliverableId={d.id} initial={d.welcome_message}
+                onSaved={(m) => { setMsg(m); void load(); }} />
               {d.versions.length === 0 ? <p className="text-sm text-brand-muted">No versions yet.</p> : (
                 <ul className="divide-y divide-brand-border border border-brand-border rounded">
                   {d.versions.map(v => (
                     <li key={v.id} className="px-3 py-2 text-sm">
                       <div className="flex items-center justify-between">
-                        <span>v{v.version_no} · {v.status === "shared" ? <strong>Shared</strong> : v.status}{v.change_summary ? ` · ${v.change_summary}` : ""}
-                          <span className="text-brand-muted"> · {formatDistanceToNow(new Date(v.created_at), { addSuffix: true })}</span>
+                        <span>v{v.version_no} · {v.status === "shared" ? <strong>Shared</strong> : v.status}{v.source === "upload" && v.manifest?.filename ? ` · ${v.manifest.filename}` : ""}{v.change_summary ? ` · ${v.change_summary}` : ""}
+                          <span className="text-brand-muted" title={formatRelativeTitle(v.created_at)}> · {formatVersionDate(v.created_at)}</span>
                         </span>
                         <span className="flex gap-3">
                           {v.status === "draft" && (
                             <button disabled={!!pending} onClick={() => setConfirmShare(v.id)} className="text-brand-orange disabled:opacity-50">Share with room</button>
                           )}
-                          <button disabled={!!pending} onClick={() => preview(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>
+                          {v.source === "upload"
+                            ? <button disabled={!!pending} onClick={() => download(v.id)} className="text-brand-orange disabled:opacity-50">Download</button>
+                            : <button disabled={!!pending} onClick={() => preview(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>}
                         </span>
                       </div>
                       {confirmShare === v.id && (
@@ -207,7 +265,7 @@ export default function EngagementPage() {
                 Prototype preview — untrusted content. Do not enter real passwords or personal data.
               </p>
               <iframe src={previewUrl} sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" title="Prototype preview"
-                className="w-full h-[70vh] border border-brand-border rounded" />
+                className="w-full h-[calc(100dvh-8rem)] min-h-[480px] border border-brand-border rounded" />
             </>
           )}
         </div>
@@ -228,11 +286,25 @@ export default function EngagementPage() {
           )}
           <ul className="divide-y divide-brand-border border border-brand-border rounded">
             {access.map(a => (
-              <li key={a.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                <span>{a.label ?? "Unlabelled"} · expires {new Date(a.expires_at).toLocaleDateString()}
-                  {a.revoked_at ? " · revoked" : ""}{a.last_used_at ? ` · last used ${formatDistanceToNow(new Date(a.last_used_at), { addSuffix: true })}` : ""}
-                </span>
-                {!a.revoked_at && <button disabled={!!pending} onClick={() => revoke(a.id)} className="text-red-600 disabled:opacity-50">Revoke</button>}
+              <li key={a.id} className="px-3 py-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span>{a.label ?? "Unlabelled"} · expires {new Date(a.expires_at).toLocaleDateString()}
+                    {a.revoked_at ? " · revoked" : ""}{a.last_used_at ? ` · last used ${formatDistanceToNow(new Date(a.last_used_at), { addSuffix: true })}` : ""}
+                  </span>
+                  {!a.revoked_at && (
+                    <span className="flex gap-3">
+                      <button disabled={!!pending} onClick={() => setConfirmRefresh(a.id)} className="text-brand-orange disabled:opacity-50">Refresh</button>
+                      <button disabled={!!pending} onClick={() => revoke(a.id)} className="text-red-600 disabled:opacity-50">Revoke</button>
+                    </span>
+                  )}
+                </div>
+                {confirmRefresh === a.id && (
+                  <div className="mt-2 border border-amber-300 bg-amber-50 rounded p-2 flex flex-wrap items-center gap-2">
+                    <span>Replace this link? The current link stops working immediately and a new one (60 days) is shown once.</span>
+                    <button disabled={!!pending} onClick={() => refreshLink(a.id)} className="px-2 py-1 rounded bg-brand-orange text-white disabled:opacity-50">Refresh link</button>
+                    <button disabled={!!pending} onClick={() => setConfirmRefresh(null)} className="px-2 py-1 rounded border border-brand-border disabled:opacity-50">Cancel</button>
+                  </div>
+                )}
               </li>
             ))}
             {access.length === 0 && <li className="px-3 py-2 text-sm text-brand-muted">No links yet.</li>}

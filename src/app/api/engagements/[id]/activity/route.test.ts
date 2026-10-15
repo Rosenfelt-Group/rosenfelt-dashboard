@@ -112,7 +112,20 @@ describe("GET activity", () => {
     const text = JSON.stringify(await (await call()).json());
     expect(text).not.toContain("access_id");
     expect(text).not.toContain("meta");
-    expect(state.selects.join(",")).not.toMatch(/access_id|meta/);
+    expect(state.selects.join(",")).not.toMatch(/access_id|(^|,\s*)meta\s*(,|$)/);
+    expect(state.selects[0]).toContain("deliverable_title:meta->>deliverable_title");
+  });
+
+  it("returns the deleted deliverable's title only for deliverable_deleted events", async () => {
+    state.events = { data: [
+      { id: 9, type: "deliverable_deleted", created_at: "2026-10-14T11:00:00Z", contact_id: null, version_id: null, deliverable_title: "Proposal" },
+      { id: 8, type: "link_refreshed", created_at: "2026-10-14T10:30:00Z", contact_id: null, version_id: null, deliverable_title: null },
+      { id: 7, type: "version_viewed", created_at: "2026-10-14T10:00:00Z", contact_id: C1, version_id: V1, deliverable_title: "ignored" },
+    ], error: null };
+    const body = await (await call()).json();
+    expect(body.events[0]).toMatchObject({ type: "deliverable_deleted", deliverable_title: "Proposal" });
+    expect(body.events[1].deliverable_title).toBeNull();
+    expect(body.events[2].deliverable_title).toBeNull();
   });
 
   it("fetches at most 100 events", async () => {

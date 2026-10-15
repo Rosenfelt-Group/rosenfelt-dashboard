@@ -96,7 +96,7 @@ begin
   end loop;
   select count(*) into n from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
    where ns.nspname = 'rooms' and (p.proname like 'portal\_%' or p.proname in ('share_version', '_portal_access_ok'));
-  if n <> 7 then raise exception 'FAIL expected 7 portal functions, found %', n; end if;
+  if n <> 8 then raise exception 'FAIL expected 8 portal functions (7 from Phase 2 + portal_document_for_download from Phase 3), found %', n; end if;
 
   -- privileges: anon / authenticated may execute nothing
   begin set local role anon; perform rooms.portal_open_room(v_hash); reset role; raise exception 'FAIL anon executes open_room';
