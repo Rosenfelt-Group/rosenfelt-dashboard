@@ -117,6 +117,18 @@ export default function EngagementPage() {
     else setMsg(r.error);
   });
 
+  // window.open must run synchronously inside the click, or the browser blocks it as a pop-up.
+  const openRoomPreview = () => {
+    const w = window.open("", "_blank");
+    if (!w) { setMsg("Your browser blocked the new tab. Allow pop-ups for this site and try again."); return; }
+    w.opener = null;
+    void guarded("room-preview", async () => {
+      const r = await fetchJson<{ url: string }>(`/api/engagements/${id}/room-preview`, { method: "POST" });
+      if (!r.ok) { w.close(); setMsg(r.error); return; }
+      w.location.href = r.data.url;
+    });
+  };
+
   const download = (versionId: string) => guarded("download", async () => {
     const r = await fetchJson<{ url: string }>(`/api/versions/${versionId}/download`);
     if (r.ok) window.location.assign(r.data.url);
@@ -182,7 +194,10 @@ export default function EngagementPage() {
 
   return (
     <div className="p-6 max-w-5xl">
-      <h1 className="text-lg font-semibold text-brand-black">{engagement.title}</h1>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h1 className="text-lg font-semibold text-brand-black">{engagement.title}</h1>
+        <button disabled={!!pending} onClick={openRoomPreview} className="px-3 py-1.5 text-sm rounded border border-brand-border disabled:opacity-50">Preview room</button>
+      </div>
       <p className="text-sm text-brand-muted mb-4">{business?.name} · {engagement.relationship} · {engagement.status}</p>
 
       <div className="flex gap-4 border-b border-brand-border mb-4">
