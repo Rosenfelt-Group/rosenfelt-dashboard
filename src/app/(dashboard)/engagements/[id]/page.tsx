@@ -5,9 +5,10 @@ import { formatDistanceToNow } from "date-fns";
 import { fetchJson } from "@/lib/rooms/fetch-json";
 import { WelcomeEditor } from "./WelcomeEditor";
 import { DocumentUpload } from "./DocumentUpload";
+import { canPreviewDoc } from "@/lib/rooms/doc-limits";
 import { formatVersionDate, formatRelativeTitle } from "@/lib/rooms/format";
 
-type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string; source: string; manifest: { filename?: string; size?: number } | null };
+type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string; source: string; manifest: { filename?: string; size?: number; ext?: string } | null };
 type Deliverable = { id: string; title: string; kind: string; welcome_message: string | null; versions: Version[] };
 type Access = { id: string; label: string | null; expires_at: string; revoked_at: string | null; last_used_at: string | null };
 type ActivityEvent = { id: number; type: string; created_at: string; contact: { name: string; email: string } | null; version: { deliverable_title: string; version_no: number } | null; deliverable_title: string | null };
@@ -27,6 +28,7 @@ export default function EngagementPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmRefresh, setConfirmRefresh] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [docPreview, setDocPreview] = useState<{ versionId: string; url: string } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const [brief, setBrief] = useState("");
@@ -105,8 +107,14 @@ export default function EngagementPage() {
 
   const preview = (versionId: string) => guarded("preview", async () => {
     const r = await fetchJson<{ url: string }>(`/api/versions/${versionId}/preview`);
-    if (r.ok) setPreviewUrl(r.data.url);
+    if (r.ok) { setDocPreview(null); setPreviewUrl(r.data.url); }
     else { setPreviewUrl(null); setMsg(r.error); }
+  });
+
+  const docPreviewOpen = (versionId: string) => guarded("docpreview", async () => {
+    const r = await fetchJson<{ url: string }>(`/api/versions/${versionId}/doc-preview`);
+    if (r.ok) { setPreviewUrl(null); setDocPreview({ versionId, url: r.data.url }); }
+    else setMsg(r.error);
   });
 
   const download = (versionId: string) => guarded("download", async () => {
@@ -120,6 +128,7 @@ export default function EngagementPage() {
     setConfirmDelete(null);
     if (!r.ok) { setMsg(r.error); return; }
     setPreviewUrl(null);
+    setDocPreview(null);
     setMsg(r.data.files_left > 0
       ? `Deleted “${title}”. ${r.data.files_left} file(s) could not be removed from storage; they are no longer reachable from any room.`
       : `Deleted “${title}”.`);
@@ -240,9 +249,14 @@ export default function EngagementPage() {
                           {v.status === "draft" && (
                             <button disabled={!!pending} onClick={() => setConfirmShare(v.id)} className="text-brand-orange disabled:opacity-50">Share with room</button>
                           )}
-                          {v.source === "upload"
-                            ? <button disabled={!!pending} onClick={() => download(v.id)} className="text-brand-orange disabled:opacity-50">Download</button>
-                            : <button disabled={!!pending} onClick={() => preview(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>}
+                          {v.source === "upload" ? (
+                            <>
+                              {canPreviewDoc(v.manifest?.ext) && (
+                                <button disabled={!!pending} onClick={() => docPreviewOpen(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>
+                              )}
+                              <button disabled={!!pending} onClick={() => download(v.id)} className="text-brand-orange disabled:opacity-50">Download</button>
+                            </>
+                          ) : <button disabled={!!pending} onClick={() => preview(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>}
                         </span>
                       </div>
                       {confirmShare === v.id && (
@@ -265,6 +279,20 @@ export default function EngagementPage() {
                 Prototype preview — untrusted content. Do not enter real passwords or personal data.
               </p>
               <iframe src={previewUrl} sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" title="Prototype preview"
+                className="w-full h-[calc(100dvh-8rem)] min-h-[480px] border border-brand-border rounded" />
+            </>
+          )}
+
+          {docPreview && (
+            <>
+              <div className="flex flex-wrap items-center gap-3 mb-1">
+                <p className="text-xs text-brand-muted">Document preview. The link lasts about two minutes; use Reload if it stops loading.</p>
+                <button disabled={!!pending} onClick={() => docPreviewOpen(docPreview.versionId)} className="text-xs text-brand-orange disabled:opacity-50">Reload preview</button>
+                <button onClick={() => setDocPreview(null)} className="text-xs text-brand-muted">Close</button>
+              </div>
+              {/* No sandbox attribute: it would disable the browser's PDF viewer. The frame is a separate,
+                  cookie-less origin that only this site may embed. */}
+              <iframe src={docPreview.url} referrerPolicy="no-referrer" title="Document preview"
                 className="w-full h-[calc(100dvh-8rem)] min-h-[480px] border border-brand-border rounded" />
             </>
           )}
