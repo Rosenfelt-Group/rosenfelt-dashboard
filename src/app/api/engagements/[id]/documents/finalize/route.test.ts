@@ -7,13 +7,15 @@ const s = vi.hoisted(() => ({
   downloads: 0,
   head: new Uint8Array(),
   downloadError: null as unknown,
+  fetchMode: "ok" as "ok" | "hang" | "status500" | "status404",
+  fetchInit: null as RequestInit | null,
   removed: [] as string[][],
   rpc: vi.fn(),
 }));
 vi.mock("@/lib/supabase-admin", () => ({
   supabaseAdmin: {
     schema: () => ({
-      rpc: s.rpc,
+      rpc: (...a: unknown[]) => { const p = s.rpc(...a); return Object.assign(Promise.resolve(p), { abortSignal: () => Promise.resolve(p) }); },
       from: (table: string) => {
         const b: Record<string, unknown> = {};
         const f: Record<string, unknown> = {};
@@ -30,13 +32,21 @@ vi.mock("@/lib/supabase-admin", () => ({
     }),
     storage: {
       from: () => ({
-        download: () => { s.downloads++; return ({ asStream: async () => (s.downloadError ? { data: null, error: s.downloadError } : { data: new Response(s.head).body, error: null }) }); },
+        createSignedUrl: async () => { s.downloads++; return s.downloadError ? { data: null, error: s.downloadError } : { data: { signedUrl: "https://storage.test/signed?token=t" }, error: null }; },
         remove: async (p: string[]) => { s.removed.push(p); return { data: p, error: null }; },
       }),
     },
   },
 }));
 import { POST } from "./route";
+
+vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+  s.fetchInit = init ?? null;
+  if (s.fetchMode === "hang") throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+  if (s.fetchMode === "status500") return new Response("x", { status: 500 });
+  if (s.fetchMode === "status404") return new Response("x", { status: 404 });
+  return new Response(s.head, { status: 206 });
+}));
 
 const ENG = "11111111-1111-4111-8111-111111111111";
 const DEL = "22222222-2222-4222-8222-222222222222";
@@ -52,12 +62,31 @@ beforeEach(() => {
   s.head = new TextEncoder().encode("%PDF-1.7\n");
   s.engagement = { data: { id: ENG, status: "active" }, error: null };
   s.downloads = 0;
-  s.downloadError = null; s.removed = [];
+  s.downloadError = null; s.removed = []; s.fetchMode = "ok"; s.fetchInit = null;
   s.rpc.mockReset();
   s.rpc.mockResolvedValue({ data: [{ version_id: "v", version_no: 3 }], error: null });
 });
 
 describe("POST documents/finalize", () => {
+  it("reads only the first bytes with a Range request and a deadline", async () => {
+    await call();
+    expect((s.fetchInit?.headers as Record<string, string>).Range).toBe("bytes=0-8191");
+    expect(s.fetchInit?.signal).toBeInstanceOf(AbortSignal);
+  });
+  it("504s fast and KEEPS the object when reading the upload times out", async () => {
+    s.fetchMode = "hang";
+    const r = await call();
+    expect(r.status).toBe(504);
+    expect(s.removed).toEqual([]);
+    expect(s.rpc).not.toHaveBeenCalled();
+  });
+  it("maps a storage 404 to 404 and a storage 5xx to 502, keeping the object", async () => {
+    s.fetchMode = "status404";
+    expect((await call()).status).toBe(404);
+    s.fetchMode = "status500";
+    expect((await call()).status).toBe(502);
+    expect(s.removed).toEqual([]);
+  });
   it("checks contents, then lets the database check size/type and create the draft", async () => {
     const r = await call({ deliverable_id: DEL, upload_id: UP, filename: "Proposal.pdf", change_summary: "Pricing updated" });
     expect(r.status).toBe(201);
