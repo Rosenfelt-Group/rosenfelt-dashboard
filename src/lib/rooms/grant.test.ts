@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { signGrant, verifyGrant, GRANT_TTL_SEC } from "./grant";
+import { createHmac } from "node:crypto";
+import { signGrant, verifyGrant, GRANT_TTL_SEC, signDocGrant, verifyDocGrant, isSafeDocFilename, DOC_GRANT_TTL_SEC, DOC_TYPES, DOC_EXTS } from "./grant";
 
 const E = "0b6f1c0e-2d3a-4b5c-8d7e-9f0a1b2c3d4e";
 const D = "1c7a2d1f-3e4b-4c6d-9e8f-0a1b2c3d4e5f";
@@ -117,5 +118,64 @@ describe("grant", () => {
 
   it("refuses to sign with an empty secret", () => {
     expect(() => signGrant(PREFIX, "", NOW)).toThrow();
+  });
+});
+
+describe("document grant", () => {
+  const U = "2d8b3e20-4f5c-4d7e-8f90-1b2c3d4e5f60";
+  const PATH = `${E}/${D}/${U}/document.pdf`;
+
+  it("round-trips path and filename", () => {
+    const g = signDocGrant(PATH, "Proposal – 2026.pdf", SECRET, NOW);
+    expect(verifyDocGrant(g, SECRET, NOW + 1000)).toEqual({ ok: true, path: PATH, filename: "Proposal – 2026.pdf", exp: NOW / 1000 + DOC_GRANT_TTL_SEC });
+  });
+
+  it("expires after 120 seconds and refuses a longer ttl", () => {
+    const g = signDocGrant(PATH, "a.pdf", SECRET, NOW);
+    expect(verifyDocGrant(g, SECRET, NOW + 121_000)).toEqual({ ok: false, reason: "expired" });
+    expect(() => signDocGrant(PATH, "a.pdf", SECRET, NOW, 121)).toThrow();
+  });
+
+  it("rejects a wrong secret and a tampered filename", () => {
+    const g = signDocGrant(PATH, "a.pdf", SECRET, NOW);
+    expect(verifyDocGrant(g, "other", NOW)).toEqual({ ok: false, reason: "bad_signature" });
+    const parts = g.split(".");
+    parts[2] = Buffer.from("b.pdf").toString("base64url");
+    expect(verifyDocGrant(parts.join("."), SECRET, NOW)).toEqual({ ok: false, reason: "bad_signature" });
+  });
+
+  it("is never interchangeable with a prototype grant", () => {
+    const proto = signGrant(PREFIX, SECRET, NOW);
+    const doc = signDocGrant(PATH, "a.pdf", SECRET, NOW);
+    expect(verifyDocGrant(proto, SECRET, NOW).ok).toBe(false);
+    expect(verifyGrant(doc, SECRET, NOW).ok).toBe(false);
+  });
+
+  it("uses a domain-separated MAC (a plain HMAC over the same payload does not verify)", () => {
+    const doc = signDocGrant(PATH, "a.pdf", SECRET, NOW);
+    const payload = doc.split(".").slice(0, 4).join(".");
+    const plain = createHmac("sha256", SECRET).update(payload).digest("base64url");
+    expect(verifyDocGrant(`${payload}.${plain}`, SECRET, NOW)).toEqual({ ok: false, reason: "bad_signature" });
+  });
+
+  it("only signs document paths in the expected shape", () => {
+    for (const bad of [PREFIX, `${E}/${D}/v3/document.pdf`, `${E}/${D}/${U}/document.exe`, `${E}/${D}/${U}/../document.pdf`,
+      `${E}/${D}/${U}/other.pdf`, `${E}/${D}/${U}/document.PDF`, ""]) {
+      expect(() => signDocGrant(bad, "a.pdf", SECRET, NOW)).toThrow();
+    }
+  });
+
+  it("only signs safe filenames", () => {
+    for (const bad of ["", ".hidden.pdf", "a/b.pdf", "a\\b.pdf", 'a"b.pdf', "a\r\nb.pdf", "evil\u202Efdp.pdf", " lead.pdf", "x".repeat(151)]) {
+      expect(isSafeDocFilename(bad)).toBe(false);
+      expect(() => signDocGrant(PATH, bad, SECRET, NOW)).toThrow();
+    }
+    expect(isSafeDocFilename("Résumé (final) – v2.pdf")).toBe(true);
+  });
+
+  it("maps every allowed extension to a MIME type", () => {
+    expect([...DOC_EXTS].sort()).toEqual(["csv", "docx", "jpg", "md", "pdf", "png", "pptx", "txt", "xlsx"]);
+    expect(DOC_TYPES.pdf).toBe("application/pdf");
+    expect(DOC_TYPES.jpg).toBe("image/jpeg");
   });
 });

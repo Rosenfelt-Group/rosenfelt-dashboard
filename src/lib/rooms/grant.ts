@@ -52,3 +52,76 @@ export function verifyGrant(grant: string, secret: string, nowMs: number = Date.
   if (!PREFIX_RE.test(prefix)) return { ok: false, reason: "malformed" };
   return { ok: true, prefix, exp };
 }
+
+// ---- Document download grants ----
+// Shape: "d1" . base64url(path) . base64url(filename) . expiry . MAC, where the MAC covers a
+// domain-prefixed string. A prototype grant (3 parts, plain MAC) can never verify as a document
+// grant, and a document grant can never verify as a prototype grant.
+export const DOC_GRANT_TTL_SEC = 120;
+
+export const DOC_TYPES = {
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  png: "image/png",
+  jpg: "image/jpeg",
+  txt: "text/plain",
+  csv: "text/csv",
+  md: "text/markdown",
+} as const;
+export type DocExt = keyof typeof DOC_TYPES;
+export const DOC_EXTS = Object.keys(DOC_TYPES) as DocExt[];
+
+const DOC_PATH_RE = new RegExp(`^${UUID}/${UUID}/${UUID}/document\\.(?:${Object.keys(DOC_TYPES).join("|")})$`);
+const DOC_MAC_DOMAIN = "rooms-document-grant-v1\n";
+// Control characters, path separators, quotes, backslash and bidi overrides (which can disguise an extension).
+const UNSAFE_NAME_RE = /[\x00-\x1f\x7f/\\"\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+
+export type DocGrantResult =
+  | { ok: true; path: string; filename: string; exp: number }
+  | { ok: false; reason: "malformed" | "bad_signature" | "expired" };
+
+export function isSafeDocFilename(name: unknown): name is string {
+  return typeof name === "string" && name.length >= 1 && name.length <= 150
+    && !UNSAFE_NAME_RE.test(name) && !name.startsWith(".") && name.trim() === name;
+}
+
+export function signDocGrant(
+  path: string,
+  filename: string,
+  secret: string,
+  nowMs: number = Date.now(),
+  ttlSec: number = DOC_GRANT_TTL_SEC,
+): string {
+  if (!DOC_PATH_RE.test(path)) throw new Error("invalid document path");
+  if (!isSafeDocFilename(filename)) throw new Error("invalid document filename");
+  if (!secret) throw new Error("grant secret missing");
+  if (!Number.isFinite(nowMs)) throw new Error("invalid nowMs");
+  if (!Number.isInteger(ttlSec) || ttlSec < 1 || ttlSec > DOC_GRANT_TTL_SEC) throw new Error("invalid ttlSec");
+  const exp = Math.floor(nowMs / 1000) + ttlSec;
+  const payload = `d1.${b64(path)}.${b64(filename)}.${exp}`;
+  return `${payload}.${mac(secret, DOC_MAC_DOMAIN + payload)}`;
+}
+
+export function verifyDocGrant(grant: string, secret: string, nowMs: number = Date.now()): DocGrantResult {
+  if (typeof grant !== "string" || grant.length === 0 || grant.length > 2048) return { ok: false, reason: "malformed" };
+  if (typeof secret !== "string" || secret.length === 0) return { ok: false, reason: "malformed" };
+  if (!Number.isFinite(nowMs)) return { ok: false, reason: "malformed" };
+  const parts = grant.split(".");
+  if (parts.length !== 5 || parts[0] !== "d1") return { ok: false, reason: "malformed" };
+  const [, p, f, expStr, sig] = parts;
+  if (!p || !f || !sig || !/^\d{1,12}$/.test(expStr)) return { ok: false, reason: "malformed" };
+
+  const a = Buffer.from(sig);
+  const b = Buffer.from(mac(secret, `${DOC_MAC_DOMAIN}d1.${p}.${f}.${expStr}`));
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return { ok: false, reason: "bad_signature" };
+
+  const exp = Number(expStr);
+  if (exp * 1000 <= nowMs) return { ok: false, reason: "expired" };
+
+  const path = unb64(p);
+  const filename = unb64(f);
+  if (!DOC_PATH_RE.test(path) || !isSafeDocFilename(filename)) return { ok: false, reason: "malformed" };
+  return { ok: true, path, filename, exp };
+}
