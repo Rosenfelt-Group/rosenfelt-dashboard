@@ -12,7 +12,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const [{ data: biz }, { data: deliverables, error: dErr }] = await Promise.all([
     supabaseAdmin.schema("crm").from("businesses").select("id, name, industry").eq("id", eng.business_id).single(),
     rooms.from("deliverables")
-      .select("id, title, description, kind, sort_order, versions:deliverable_versions(id, version_no, status, change_summary, built_by_agent, manifest, created_at)")
+      .select("id, title, description, kind, sort_order, welcome_message, versions:deliverable_versions(id, version_no, status, change_summary, built_by_agent, manifest, created_at)")
       .eq("engagement_id", id)
       .order("sort_order"),
   ]);

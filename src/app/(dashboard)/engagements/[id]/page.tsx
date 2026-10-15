@@ -3,10 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { fetchJson } from "@/lib/rooms/fetch-json";
+import { WelcomeEditor } from "./WelcomeEditor";
 import { formatVersionDate, formatRelativeTitle } from "@/lib/rooms/format";
 
 type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string };
-type Deliverable = { id: string; title: string; versions: Version[] };
+type Deliverable = { id: string; title: string; kind: string; welcome_message: string | null; versions: Version[] };
 type Access = { id: string; label: string | null; expires_at: string; revoked_at: string | null; last_used_at: string | null };
 type ActivityEvent = { id: number; type: string; created_at: string; contact: { name: string; email: string } | null; version: { deliverable_title: string; version_no: number } | null };
 type ActivityContact = { id: string; name: string; email: string; first_seen_at: string };
@@ -210,6 +211,8 @@ export default function EngagementPage() {
                   <button disabled={!!pending} onClick={() => setConfirmDelete(null)} className="px-2 py-1 rounded border border-brand-border disabled:opacity-50">Cancel</button>
                 </div>
               )}
+              <WelcomeEditor key={`${d.id}:${d.welcome_message ?? ""}`} deliverableId={d.id} initial={d.welcome_message}
+                onSaved={(m) => { setMsg(m); void load(); }} />
               {d.versions.length === 0 ? <p className="text-sm text-brand-muted">No versions yet.</p> : (
                 <ul className="divide-y divide-brand-border border border-brand-border rounded">
                   {d.versions.map(v => (

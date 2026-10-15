@@ -32,3 +32,17 @@ export const PrototypeRequestSchema = z.object({
 export const RefreshAccessSchema = z.object({
   expires_days: z.number().int().min(1).max(365).default(60),
 });
+
+export const WELCOME_MAX = 1000;
+
+// Plain text only: CRLF/CR -> LF, control characters other than LF and TAB removed, trimmed; empty -> null.
+export function normalizeWelcome(raw: string | null): string | null {
+  if (raw === null) return null;
+  const s = raw.replace(/\r\n?/g, "\n").replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "").trim();
+  return s === "" ? null : s;
+}
+
+export const DeliverablePatchSchema = z.strictObject({
+  welcome_message: z.string().max(5000).nullable().transform(normalizeWelcome)
+    .refine(v => v === null || v.length <= WELCOME_MAX, { message: `Welcome message must be ${WELCOME_MAX} characters or fewer.` }),
+});

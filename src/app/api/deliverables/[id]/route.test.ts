@@ -38,7 +38,7 @@ vi.mock("@/lib/supabase-admin", () => ({
 }));
 vi.mock("@/lib/rooms/session-user", () => ({ sessionUsername: async () => "brian" }));
 
-import { DELETE } from "./route";
+import { DELETE, PATCH } from "./route";
 
 const ID = "3e9c4f31-5a6d-4e8f-9aa1-2c3d4e5f6071";
 const del = (id = ID) => DELETE(new NextRequest(`https://d.test/api/deliverables/${id}`, { method: "DELETE" }), { params: Promise.resolve({ id }) });
@@ -82,5 +82,45 @@ describe("DELETE /api/deliverables/[id]", () => {
     expect(r.status).toBe(500);
     expect(JSON.stringify(await r.json())).not.toContain("secret detail");
     expect(s.removed).toEqual([]);
+  });
+});
+
+const patch = (body: unknown, id = ID) =>
+  PATCH(new NextRequest(`https://d.test/api/deliverables/${id}`, {
+    method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  }), { params: Promise.resolve({ id }) });
+
+describe("PATCH /api/deliverables/[id]", () => {
+  it("saves a normalized welcome message", async () => {
+    s.updateResult = { data: { id: ID, welcome_message: "Hi\nthere" }, error: null };
+    const r = await patch({ welcome_message: " Hi\r\nthere " });
+    expect(r.status).toBe(200);
+    expect(s.updates).toEqual([{ welcome_message: "Hi\nthere" }]);
+    expect(await r.json()).toEqual({ id: ID, welcome_message: "Hi\nthere" });
+  });
+  it("clears with null or whitespace", async () => {
+    s.updateResult = { data: { id: ID, welcome_message: null }, error: null };
+    await patch({ welcome_message: "   " });
+    expect(s.updates).toEqual([{ welcome_message: null }]);
+  });
+  it("stores markup literally", async () => {
+    s.updateResult = { data: { id: ID, welcome_message: "<script>x</script>" }, error: null };
+    await patch({ welcome_message: "<script>x</script>" });
+    expect(s.updates).toEqual([{ welcome_message: "<script>x</script>" }]);
+  });
+  it("rejects bad input and unknown ids", async () => {
+    expect((await patch({ welcome_message: "x".repeat(1001) })).status).toBe(400);
+    expect((await patch({ welcome_message: 5 })).status).toBe(400);
+    expect((await patch({ welcome_message: "x", title: "y" })).status).toBe(400);
+    expect((await patch({ welcome_message: "x" }, "nope")).status).toBe(400);
+    expect(s.updates).toEqual([]);
+    s.updateResult = { data: null, error: null };
+    expect((await patch({ welcome_message: "x" })).status).toBe(404);
+  });
+  it("returns a generic 500 on a database error", async () => {
+    s.updateResult = { data: null, error: { message: "secret" } };
+    const r = await patch({ welcome_message: "x" });
+    expect(r.status).toBe(500);
+    expect(JSON.stringify(await r.json())).not.toContain("secret");
   });
 });
