@@ -8,7 +8,7 @@ import React from "react";
 //     tools/finance/admin-ish pages). See Sidebar.tsx.
 //
 // NOTE: `/sales` (the old tabbed CRM/Content/Quiz/Research hub) is intentionally
-// not linked from nav anymore — Leads/Content/Reports below give direct access to
+// not linked from nav anymore — CRM/Content/Reports below give direct access to
 // the same data without the extra hop. The page itself hasn't been deleted.
 
 export interface NavItem {
@@ -28,7 +28,7 @@ export const NAV_GROUPS: { operations: NavItem[]; growth: NavItem[]; workspace: 
     { id: "agents",   label: "Agent Central",  href: "/agent-central",  icon: "brain",    active: ["/agent-central", "/agents", "/chat"] },
   ],
   growth: [
-    { id: "leads",    label: "Leads",   href: "/crm",       icon: "users",      active: ["/crm"] },
+    { id: "crm",      label: "CRM",     href: "/crm",     icon: "users",      active: ["/crm"] },
     { id: "content",  label: "Content", href: "/content",   icon: "edit",       active: ["/content"] },
     { id: "reports",  label: "Reports", href: "/analytics", icon: "barChart",   active: ["/analytics"] },
   ],

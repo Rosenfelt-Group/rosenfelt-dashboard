@@ -176,7 +176,7 @@ export interface DashboardRole {
 
 // ─── CRM Types ────────────────────────────────────────────────────────────────
 
-export type CRMStage = "quiz_started" | "quiz_completed" | "snapshot_viewed" | "new" | "qualification" | "engaged" | "proposal" | "won" | "lost";
+export type CRMStage = "quiz_started" | "quiz_completed" | "snapshot_viewed" | "new" | "qualification" | "engaged" | "call_demo_scheduled" | "proposal" | "won" | "lost";
 export type CRMEntryStage = "quiz_started" | "new";
 export type CRMContactRole = "decision_maker" | "champion" | "billing" | "influencer" | "technical";
 export type CRMSource = "website_contact" | "website_assessment" | "manual" | "referral" | "pro_bono";

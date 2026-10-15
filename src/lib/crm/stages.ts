@@ -14,6 +14,7 @@ export const STAGES: StageMeta[] = [
   { stage: "new",             label: "New",             color: "bg-blue-50 text-blue-700",       isQuizStage: false },
   { stage: "qualification",   label: "Qualification",   color: "bg-amber-50 text-amber-700",     isQuizStage: false },
   { stage: "engaged",         label: "Engaged",         color: "bg-purple-50 text-purple-700",   isQuizStage: false },
+  { stage: "call_demo_scheduled", label: "Call/Demo Scheduled", color: "bg-teal-50 text-teal-700", isQuizStage: false },
   { stage: "proposal",        label: "Proposal",        color: "bg-orange-50 text-brand-orange", isQuizStage: false },
   { stage: "won",             label: "Won",             color: "bg-green-50 text-green-700",     isQuizStage: false },
   { stage: "lost",            label: "Lost",            color: "bg-gray-100 text-gray-500",      isQuizStage: false },

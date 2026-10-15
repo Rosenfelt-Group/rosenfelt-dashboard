@@ -1,12 +1,16 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { CRMBusiness, CRMContact, CRMContactRole, CRMBusinessResearch } from "@/types";
+import { Suspense, useEffect, useState } from "react";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import clsx from "clsx";
+import { CRMBusiness, CRMContact, CRMContactRole, CRMBusinessResearch, CRMLead, DiscoveryInvite } from "@/types";
 import { CRMNav } from "@/components/CRMNav";
 import { EngagementsPanel } from "@/components/crm/EngagementsPanel";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { safeHref } from "@/lib/safe-url";
+import { STAGES } from "@/lib/crm/stages";
+import { STATUS_META } from "@/lib/discovery";
+import { BUSINESS_TABS, parseBusinessTab, BusinessTab } from "@/lib/crm/business-tabs";
 
 const ROLE_OPTIONS: { value: CRMContactRole; label: string }[] = [
   { value: "decision_maker", label: "Decision maker" },
@@ -25,13 +29,23 @@ const BLANK_CONTACT: ContactForm = {
   first_name: "", last_name: "", email: "", phone: "", title: "", role: "", is_primary: false, linkedin_url: "",
 };
 
-export default function BusinessDetailPage() {
+function BusinessDetail() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tab = parseBusinessTab(searchParams.get("tab"));
+
+  function selectTab(next: BusinessTab) {
+    router.replace(`${pathname}?tab=${next}`, { scroll: false });
+  }
 
   const [business, setBusiness] = useState<CRMBusiness | null>(null);
   const [contacts, setContacts] = useState<CRMContact[]>([]);
   const [research, setResearch] = useState<CRMBusinessResearch[]>([]);
+  const [leads, setLeads] = useState<CRMLead[]>([]);
+  const [invites, setInvites] = useState<(DiscoveryInvite & { link: string })[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [showAddContact, setShowAddContact] = useState(false);
@@ -46,10 +60,14 @@ export default function BusinessDetailPage() {
       fetch(`/api/crm/businesses/${id}`).then(r => r.json()),
       fetch("/api/crm/contacts").then(r => r.json()),
       fetch(`/api/crm/businesses/${id}/research`).then(r => r.json()),
-    ]).then(([b, allContacts, r]) => {
+      fetch("/api/crm/leads").then(r => r.json()),
+      fetch(`/api/crm/discovery?business_id=${id}`).then(r => r.json()),
+    ]).then(([b, allContacts, r, allLeads, inv]) => {
       setBusiness(b?.id ? b : null);
       setContacts(Array.isArray(allContacts) ? allContacts.filter((c: CRMContact) => c.business_id === id) : []);
       setResearch(Array.isArray(r) ? r : []);
+      setLeads(Array.isArray(allLeads) ? allLeads.filter((l: CRMLead) => l.business_id === id) : []);
+      setInvites(Array.isArray(inv) ? inv : []);
       setLoading(false);
     });
   }, [id]);
@@ -137,7 +155,26 @@ export default function BusinessDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div role="tablist" className="flex items-center border-b border-brand-border mb-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
+        {BUSINESS_TABS.map(t => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => selectTab(t.id)}
+            className={clsx(
+              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap flex-shrink-0 touch-manipulation transition-colors",
+              tab === t.id
+                ? "border-brand-orange text-brand-orange"
+                : "border-transparent text-brand-muted hover:text-brand-black hover:border-brand-border"
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "contacts" && (
         <div className="card">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-brand-black">Contacts ({contacts.length})</h2>
@@ -246,7 +283,9 @@ export default function BusinessDetailPage() {
             </div>
           )}
         </div>
+      )}
 
+      {tab === "research" && (
         <div className="card">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-brand-black">Research</h2>
@@ -271,9 +310,59 @@ export default function BusinessDetailPage() {
             </div>
           )}
         </div>
-      </div>
+      )}
 
-      <EngagementsPanel businessId={id} />
+      {tab === "rooms" && <EngagementsPanel businessId={id} />}
+
+      {tab === "discovery" && (
+        <div className="card p-0 overflow-hidden">
+          {invites.length === 0 ? (
+            <p className="text-xs text-brand-muted p-4">No discovery questionnaires for this business yet.</p>
+          ) : invites.map(r => {
+            const st = STATUS_META[r.status];
+            const last = r.submitted_at ?? r.last_saved_at ?? r.opened_at ?? r.sent_at;
+            return (
+              <Link key={r.id} href={`/crm/discovery/${r.id}`} className="flex items-center gap-3 px-4 py-3 border-b border-brand-border last:border-b-0 hover:bg-brand-offwhite">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-brand-black truncate">{r.project_title}</p>
+                  <p className="text-xs text-brand-muted">{formatDistanceToNow(new Date(last), { addSuffix: true })}</p>
+                </div>
+                <span className={clsx("badge text-xs", st.color)}>{st.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
+      {tab === "leads" && (
+        <div className="card p-0 overflow-hidden">
+          {leads.length === 0 ? (
+            <p className="text-xs text-brand-muted p-4">No leads linked to this business.</p>
+          ) : leads.map(l => {
+            const meta = STAGES.find(s => s.stage === l.stage);
+            return (
+              <Link key={l.id} href={`/crm/leads/${l.id}`} className="flex items-center gap-3 px-4 py-3 border-b border-brand-border last:border-b-0 hover:bg-brand-offwhite">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-brand-black truncate">
+                    {l.contact ? `${l.contact.first_name}${l.contact.last_name ? ` ${l.contact.last_name}` : ""}` : business.name}
+                  </p>
+                  <p className="text-xs text-brand-muted">{formatDistanceToNow(new Date(l.created_at), { addSuffix: true })}</p>
+                </div>
+                {meta && <span className={clsx("badge text-xs", meta.color)}>{meta.label}</span>}
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
+  );
+}
+
+// useSearchParams needs a Suspense boundary during prerender.
+export default function BusinessDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-8"><div className="card animate-pulse h-64" /></div>}>
+      <BusinessDetail />
+    </Suspense>
   );
 }

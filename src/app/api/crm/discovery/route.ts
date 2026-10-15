@@ -10,8 +10,10 @@ const LIST_SELECT =
 // GET /api/crm/discovery[?lead_id=…]
 export async function GET(req: NextRequest) {
   const leadId = req.nextUrl.searchParams.get("lead_id");
+  const businessId = req.nextUrl.searchParams.get("business_id");
   let q = supabaseAdmin.schema("crm").from("discovery_invites").select(LIST_SELECT).order("created_at", { ascending: false });
   if (leadId) q = q.eq("lead_id", leadId);
+  if (businessId) q = q.eq("business_id", businessId);
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const rows = (data ?? []) as unknown as ({ token: string } & Record<string, unknown>)[];
