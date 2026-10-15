@@ -1285,6 +1285,330 @@ export default async function PreviewPage() {
 
 ---
 
+### Task 9: Dashboard — Refresh button and "Casey is working" build status
+
+**Files (dashboard-p3, branch `feat/rooms-preview`):**
+- Create: `src/lib/rooms/builds.ts`, `src/lib/rooms/builds.test.ts`
+- Create: `src/app/api/engagements/[id]/builds/route.ts`, `src/app/api/engagements/[id]/builds/route.test.ts`
+- Modify: `src/app/(dashboard)/engagements/[id]/page.tsx`
+
+**Interfaces:**
+- Produces in `builds.ts` (no imports, safe for client components):
+  - `export const BUILD_CLOSED_STATUSES = ["done", "cancelled", "rejected", "deferred"] as const`
+  - `export const BUILD_STALL_MS = 10 * 60 * 1000`
+  - `export const BUILD_LOG_LIMIT = 5`
+  - `export interface BuildLog { at: string; author: string; type: string; message: string }`
+  - `export interface Build { deliverable_id: string; work_item_id: string; ref: number | null; status: string; agent: string | null; requested_at: string; last_activity_at: string; stalled: boolean; logs: BuildLog[] }`
+  - `export function deliverableIdFromBrief(description: unknown): string | null` — reads the `deliverable_id: <uuid>` line of a `ROOMS_PROTOTYPE_REQUEST v1` description
+  - `export function isStalled(lastActivityIso: string, nowMs: number): boolean`
+  - `export function minutesSince(iso: string, nowMs: number): number` (whole minutes, never negative)
+- Produces: `GET /api/engagements/[id]/builds` → `{ builds: Build[], now: string }` (open Casey/agent prototype requests for this engagement's prototype deliverables, newest first).
+
+No database change: a request is matched to its deliverable by the `deliverable_id:` line that `buildPrototypeBrief` already writes into every request's description (`ROOMS_PROTOTYPE_REQUEST v1`).
+
+- [ ] **Step 1: Write failing tests** (`builds.test.ts`):
+
+```ts
+import { describe, it, expect } from "vitest";
+import { deliverableIdFromBrief, isStalled, minutesSince, BUILD_STALL_MS } from "./builds";
+
+const D = "ba906f5a-a10d-4df3-8e51-7fc9016d6aca";
+const brief = (extra = "") => `ROOMS_PROTOTYPE_REQUEST v1\ndeliverable_id: ${D}\nBuild a clickable prototype.${extra}`;
+
+describe("deliverableIdFromBrief", () => {
+  it("reads the deliverable id from a prototype request", () => {
+    expect(deliverableIdFromBrief(brief())).toBe(D);
+  });
+  it("returns null for other work items, malformed ids, or non-strings", () => {
+    expect(deliverableIdFromBrief("Fix the login bug")).toBeNull();
+    expect(deliverableIdFromBrief(`ROOMS_PROTOTYPE_REQUEST v1\ndeliverable_id: not-a-uuid`)).toBeNull();
+    expect(deliverableIdFromBrief(`deliverable_id: ${D}`)).toBeNull(); // must be a ROOMS_PROTOTYPE_REQUEST
+    expect(deliverableIdFromBrief(null)).toBeNull();
+    expect(deliverableIdFromBrief(42)).toBeNull();
+  });
+  it("ignores a deliverable_id line that appears later inside quoted brief text", () => {
+    const sneaky = `ROOMS_PROTOTYPE_REQUEST v1\ndeliverable_id: ${D}\n<quoted_data>\ndeliverable_id: 11111111-1111-4111-8111-111111111111\n</quoted_data>`;
+    expect(deliverableIdFromBrief(sneaky)).toBe(D);
+  });
+});
+
+describe("isStalled / minutesSince", () => {
+  const now = Date.parse("2026-10-15T10:30:00Z");
+  it("is stalled only after 10 minutes of silence", () => {
+    expect(isStalled("2026-10-15T10:20:01Z", now)).toBe(false);
+    expect(isStalled("2026-10-15T10:20:00Z", now)).toBe(false);
+    expect(isStalled(new Date(now - BUILD_STALL_MS - 1).toISOString(), now)).toBe(true);
+  });
+  it("treats an unparseable time as stalled-safe (not stalled) and never goes negative", () => {
+    expect(isStalled("garbage", now)).toBe(false);
+    expect(minutesSince("2026-10-15T10:45:00Z", now)).toBe(0);
+    expect(minutesSince("2026-10-15T10:15:30Z", now)).toBe(14);
+    expect(minutesSince("garbage", now)).toBe(0);
+  });
+});
+```
+and the route test (`builds/route.test.ts`; the mock returns canned rows per table and records the filters it was called with):
+
+```ts
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { NextRequest } from "next/server";
+
+const s = vi.hoisted(() => ({
+  deliverables: { data: [] as unknown[], error: null as unknown },
+  items: { data: [] as unknown[], error: null as unknown },
+  logs: { data: [] as unknown[], error: null as unknown },
+  itemFilters: [] as unknown[][],
+}));
+vi.mock("@/lib/supabase-admin", () => {
+  const chain = (get: () => unknown, record?: unknown[][]) => {
+    const b: Record<string, unknown> = {};
+    for (const k of ["select", "eq", "like", "not", "in", "order", "limit"]) {
+      b[k] = (...a: unknown[]) => { record?.push([k, ...a]); return b; };
+    }
+    b.then = (res: (v: unknown) => unknown) => Promise.resolve(get()).then(res);
+    return b;
+  };
+  return {
+    supabaseAdmin: {
+      schema: () => ({ from: () => chain(() => s.deliverables) }),
+      from: (t: string) => (t === "work_items" ? chain(() => s.items, s.itemFilters) : chain(() => s.logs)),
+    },
+  };
+});
+import { GET } from "./route";
+
+const ENG = "11111111-1111-4111-8111-111111111111";
+const D1 = "ba906f5a-a10d-4df3-8e51-7fc9016d6aca";
+const D2 = "22222222-2222-4222-8222-222222222222";
+const W1 = "563fc43f-f6d6-478a-8478-158f5b09d313";
+const call = (id = ENG) => GET(new NextRequest(`https://d.test/api/engagements/${id}/builds`), { params: Promise.resolve({ id }) });
+const item = (id: string, did: string, over: Record<string, unknown> = {}) => ({
+  id, ref: 1297, title: "Prototype", status: "in_progress", assigned_agent: "casey",
+  description: `ROOMS_PROTOTYPE_REQUEST v1\ndeliverable_id: ${did}\nBuild it`, created_at: new Date(Date.now() - 120_000).toISOString(),
+  updated_at: new Date(Date.now() - 60_000).toISOString(), ...over,
+});
+const log = (wid: string, minsAgo: number, message: string) => ({
+  work_item_id: wid, created_at: new Date(Date.now() - minsAgo * 60_000).toISOString(), author: "casey", entry_type: "progress", message,
+});
+
+beforeEach(() => {
+  s.deliverables = { data: [{ id: D1 }], error: null };
+  s.items = { data: [item(W1, D1)], error: null };
+  s.logs = { data: [log(W1, 1, "Prototype iteration started.")], error: null };
+  s.itemFilters = [];
+});
+
+describe("GET engagements/[id]/builds", () => {
+  it("returns the open request for a prototype deliverable with its latest log and not stalled", async () => {
+    const r = await call();
+    expect(r.status).toBe(200);
+    const { builds, now } = await r.json();
+    expect(typeof now).toBe("string");
+    expect(builds).toHaveLength(1);
+    expect(builds[0]).toMatchObject({ deliverable_id: D1, work_item_id: W1, ref: 1297, status: "in_progress", agent: "casey", stalled: false });
+    expect(builds[0].logs[0]).toMatchObject({ author: "casey", type: "progress", message: "Prototype iteration started." });
+  });
+  it("asks the database only for open prototype requests (closed statuses excluded)", async () => {
+    await call();
+    const flat = JSON.stringify(s.itemFilters);
+    expect(flat).toContain("ROOMS_PROTOTYPE_REQUEST v1");
+    for (const st of ["done", "cancelled", "rejected", "deferred"]) expect(flat).toContain(st);
+  });
+  it("ignores requests for other engagements' deliverables and non-request work items", async () => {
+    s.items = { data: [item(W1, D2), item("w3", D1, { description: "Fix the login bug" })], error: null };
+    const { builds } = await (await call()).json();
+    expect(builds).toEqual([]);
+  });
+  it("flags a request with no activity for over 10 minutes as stalled, using the latest log time", async () => {
+    s.items = { data: [item(W1, D1, { created_at: new Date(Date.now() - 30 * 60_000).toISOString(), updated_at: new Date(Date.now() - 25 * 60_000).toISOString() })], error: null };
+    s.logs = { data: [log(W1, 20, "Working on screens")], error: null };
+    const { builds } = await (await call()).json();
+    expect(builds[0].stalled).toBe(true);
+  });
+  it("falls back to the work item's own timestamps when it has no logs, and keeps only the latest 5 logs newest first", async () => {
+    s.logs = { data: [], error: null };
+    expect((await (await call()).json()).builds[0].logs).toEqual([]);
+    s.logs = { data: Array.from({ length: 8 }, (_, i) => log(W1, 8 - i, `m${i}`)), error: null };
+    const { builds } = await (await call()).json();
+    expect(builds[0].logs).toHaveLength(5);
+    expect(builds[0].logs[0].message).toBe("m7");
+  });
+  it("truncates a long log message", async () => {
+    s.logs = { data: [log(W1, 1, "x".repeat(2000))], error: null };
+    const { builds } = await (await call()).json();
+    expect(builds[0].logs[0].message.length).toBeLessThanOrEqual(300);
+  });
+  it("returns an empty list when there are no prototype deliverables, 400 for a bad id, and a fixed 500 on database errors", async () => {
+    s.deliverables = { data: [], error: null };
+    expect((await (await call()).json()).builds).toEqual([]);
+    expect((await call("nope")).status).toBe(400);
+    s.deliverables = { data: [{ id: D1 }], error: null };
+    s.items = { data: [], error: { message: "secret_table" } };
+    const r = await call();
+    expect(r.status).toBe(500);
+    expect(JSON.stringify(await r.json())).not.toContain("secret_table");
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify failure.** `npx vitest run src/lib/rooms/builds.test.ts "src/app/api/engagements/[id]/builds"` → FAIL (modules missing).
+
+- [ ] **Step 3: Implement `builds.ts`:**
+
+```ts
+// No imports: safe to use from client components.
+export const BUILD_CLOSED_STATUSES = ["done", "cancelled", "rejected", "deferred"] as const;
+export const BUILD_STALL_MS = 10 * 60 * 1000;
+export const BUILD_LOG_LIMIT = 5;
+
+export interface BuildLog { at: string; author: string; type: string; message: string }
+export interface Build {
+  deliverable_id: string; work_item_id: string; ref: number | null; status: string; agent: string | null;
+  requested_at: string; last_activity_at: string; stalled: boolean; logs: BuildLog[];
+}
+
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const HEADER_RE = new RegExp(`^ROOMS_PROTOTYPE_REQUEST v1\\ndeliverable_id: (${UUID})(?:\\n|$)`);
+
+// The id is only read from the line right under the header, never from the quoted brief text further down.
+export function deliverableIdFromBrief(description: unknown): string | null {
+  if (typeof description !== "string") return null;
+  const m = HEADER_RE.exec(description);
+  return m ? m[1] : null;
+}
+
+export function isStalled(lastActivityIso: string, nowMs: number): boolean {
+  const t = Date.parse(lastActivityIso);
+  return Number.isFinite(t) && nowMs - t > BUILD_STALL_MS;
+}
+
+export function minutesSince(iso: string, nowMs: number): number {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? Math.max(0, Math.floor((nowMs - t) / 60_000)) : 0;
+}
+```
+(Adjust the regex flags only if a listed test needs it; the UUID in the header regex is lowercase because ids come from the database.)
+
+- [ ] **Step 4: Implement the route** (`builds/route.ts`):
+
+```ts
+import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+import { BUILD_CLOSED_STATUSES, BUILD_LOG_LIMIT, deliverableIdFromBrief, isStalled, type Build, type BuildLog } from "@/lib/rooms/builds";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MSG_MAX = 300;
+const fail = () => NextResponse.json({ error: "Could not load build status." }, { status: 500 });
+
+// GET — open agent prototype requests (work items) for this engagement's prototype deliverables, with
+// the agent's latest log lines. Read-only. Dashboard session required by the middleware.
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  if (!UUID.test(id)) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
+  const nowMs = Date.now();
+
+  const { data: dels, error: dErr } = await supabaseAdmin.schema("rooms").from("deliverables")
+    .select("id").eq("engagement_id", id).eq("kind", "prototype");
+  if (dErr) return fail();
+  const ids = new Set((dels ?? []).map((d: { id: string }) => d.id));
+  if (ids.size === 0) return NextResponse.json({ builds: [], now: new Date(nowMs).toISOString() });
+
+  const { data: items, error: wErr } = await supabaseAdmin.from("work_items")
+    .select("id, ref, status, assigned_agent, description, created_at, updated_at")
+    .eq("work_type", "deliverable")
+    .like("description", "ROOMS_PROTOTYPE_REQUEST v1%")
+    .not("status", "in", `(${BUILD_CLOSED_STATUSES.join(",")})`)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (wErr) return fail();
+
+  const mine = (items ?? [])
+    .map((w: Record<string, unknown>) => ({ w, did: deliverableIdFromBrief(w.description) }))
+    .filter((x): x is { w: Record<string, unknown>; did: string } => x.did !== null && ids.has(x.did));
+  if (mine.length === 0) return NextResponse.json({ builds: [], now: new Date(nowMs).toISOString() });
+
+  const { data: logs, error: lErr } = await supabaseAdmin.from("work_item_logs")
+    .select("work_item_id, created_at, author, entry_type, message")
+    .in("work_item_id", mine.map(x => x.w.id as string))
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (lErr) return fail();
+
+  const byItem = new Map<string, BuildLog[]>();
+  for (const l of (logs ?? []) as Record<string, unknown>[]) {
+    const key = l.work_item_id as string;
+    const list = byItem.get(key) ?? [];
+    if (list.length < BUILD_LOG_LIMIT) {
+      list.push({ at: String(l.created_at), author: String(l.author ?? ""), type: String(l.entry_type ?? ""), message: String(l.message ?? "").slice(0, MSG_MAX) });
+      byItem.set(key, list);
+    }
+  }
+
+  const builds: Build[] = mine.map(({ w, did }) => {
+    const wid = w.id as string;
+    const lg = byItem.get(wid) ?? [];
+    const last = lg[0]?.at ?? String(w.updated_at ?? w.created_at);
+    return {
+      deliverable_id: did, work_item_id: wid, ref: typeof w.ref === "number" ? w.ref : null,
+      status: String(w.status), agent: typeof w.assigned_agent === "string" ? w.assigned_agent : null,
+      requested_at: String(w.created_at), last_activity_at: last, stalled: isStalled(last, nowMs), logs: lg,
+    };
+  });
+  return NextResponse.json({ builds, now: new Date(nowMs).toISOString() }, { headers: { "Cache-Control": "private, no-store" } });
+}
+```
+
+- [ ] **Step 5: Page changes** (`page.tsx`, follow the file's existing patterns and class names):
+  1. State: `const [builds, setBuilds] = useState<Build[]>([]); const [updatedAt, setUpdatedAt] = useState<Date | null>(null);` and a loader beside `load`:
+
+```tsx
+const loadBuilds = useCallback(async () => {
+  const r = await fetchJson<{ builds: Build[] }>(`/api/engagements/${id}/builds`);
+  if (r.ok) setBuilds(Array.isArray(r.data.builds) ? r.data.builds : []);
+}, [id]);
+useEffect(() => { void loadBuilds(); }, [loadBuilds]);
+```
+  2. Refresh handler used by the button: reloads the deliverables (`load()`), the builds, and the access and activity data using whichever existing loaders the page has; then `setUpdatedAt(new Date())`. Disable the button while running (reuse `guarded`).
+  3. Auto-refresh: while `builds.length > 0`, poll every 15 s (only when `document.visibilityState === "visible"`) calling `load()` and `loadBuilds()`; clear the interval in the effect cleanup and when `builds` becomes empty.
+
+```tsx
+useEffect(() => {
+  if (builds.length === 0) return;
+  const t = setInterval(() => {
+    if (document.visibilityState === "visible") { void load(); void loadBuilds(); setUpdatedAt(new Date()); }
+  }, 15_000);
+  return () => clearInterval(t);
+}, [builds.length, load, loadBuilds]);
+```
+  4. Header: a **Refresh** button next to the **Preview room** button and a small `Updated hh:mm:ss` text (`updatedAt?.toLocaleTimeString()`), muted.
+  5. Per deliverable (prototype kind only), above its versions list, render one panel per build for that deliverable:
+
+```tsx
+{builds.filter(b => b.deliverable_id === d.id).map(b => (
+  <div key={b.work_item_id} role="status" className="mb-2 border border-blue-200 bg-blue-50 rounded p-2 text-sm">
+    <p>
+      <strong>{b.agent ? b.agent.charAt(0).toUpperCase() + b.agent.slice(1) : "The agent"} is working on a new version</strong>
+      {" · "}requested {formatVersionDate(b.requested_at)}{" · "}{b.status.replace(/_/g, " ")}
+      {b.ref !== null && <>{" · "}<a href={`/work/${b.ref}`} className="underline">work item #{b.ref}</a></>}
+    </p>
+    {b.stalled && (
+      <p className="text-amber-700">No update for {minutesSince(b.last_activity_at, Date.now())} minutes. The agent may be stuck; open the work item to check.</p>
+    )}
+    {b.logs.length === 0
+      ? <p className="text-xs text-brand-muted">No progress notes yet.</p>
+      : <ul className="mt-1 space-y-0.5 text-xs">{b.logs.map((l, i) => (
+          <li key={i}><span className="text-brand-muted">{formatVersionDate(l.at)}</span> · {l.message}</li>))}</ul>}
+  </div>
+))}
+```
+  (`formatVersionDate` is already imported in the page; import `minutesSince` and the `Build` type from `@/lib/rooms/builds`.) Log messages are plain text in React (escaped); never use `dangerouslySetInnerHTML`.
+
+- [ ] **Step 6: Verify.** `npx vitest run && npx tsc --noEmit`. Expected: all pass. The panel and polling are UI-only (no component test harness in this repo); the helper and route tests above are the automated coverage.
+
+- [ ] **Step 7: Commit** (`feat(rooms): Refresh button and Casey build status panel`, with trailer).
+
+---
+
 ### Task 8: Deploy and verify (needs Brian's explicit approval for each step)
 
 **Files:** none (operations). The agent never runs the production migration, merges, or deploys without Brian saying so.
@@ -1299,4 +1623,5 @@ export default async function PreviewPage() {
   3. Click **Preview room**: a new tab opens on the portal with the banner, the draft items marked "(draft)", the prototype loads in its frame, and the document's Download works. The dashboard Activity tab shows **no** new events from this.
   4. Open the preview URL again after 5+ minutes: it shows the link-expired page. In the same browser, `/room` still shows the visitor view only after the visitor link is opened (the preview cookie does not grant it).
   5. A visitor link still shows only shared versions.
+  6. **Refresh and build status:** request a new prototype version; a blue "is working" panel appears with progress notes and the work-item link, updates every ~15 s, and clears after the new draft version appears; the header **Refresh** button reloads everything and shows "Updated hh:mm:ss".
 - [ ] **Step 6: Clean up.** Remove the combined `preview_dry_run.sql`, the extra worktrees, and the SDD workspace once merged and deployed.
