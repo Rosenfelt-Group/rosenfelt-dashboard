@@ -21,6 +21,7 @@ export default function EngagementPage() {
   const [activityErr, setActivityErr] = useState<string | null>(null);
   const [newLink, setNewLink] = useState<string | null>(null);
   const [confirmShare, setConfirmShare] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -99,6 +100,17 @@ export default function EngagementPage() {
     else { setPreviewUrl(null); setMsg(r.error); }
   });
 
+  const deleteDeliverable = (deliverableId: string, title: string) => guarded("delete", async () => {
+    const r = await fetchJson<{ deleted: boolean; files_removed: number; files_left: number }>(`/api/deliverables/${deliverableId}`, { method: "DELETE" });
+    setConfirmDelete(null);
+    if (!r.ok) { setMsg(r.error); return; }
+    setPreviewUrl(null);
+    setMsg(r.data.files_left > 0
+      ? `Deleted “${title}”. ${r.data.files_left} file(s) could not be removed from storage; they are no longer reachable from any room.`
+      : `Deleted “${title}”.`);
+    await load();
+  });
+
   const share = (versionId: string, versionNo: number) => guarded("share", async () => {
     const r = await fetchJson(`/api/versions/${versionId}/share`, { method: "POST" });
     setConfirmShare(null);
@@ -171,7 +183,20 @@ export default function EngagementPage() {
 
           {deliverables.map(d => (
             <div key={d.id}>
-              <h3 className="text-sm font-semibold mb-1">{d.title}</h3>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-semibold">{d.title}</h3>
+                <button disabled={!!pending} onClick={() => setConfirmDelete(d.id)} className="text-xs text-red-600 disabled:opacity-50">Delete</button>
+              </div>
+              {confirmDelete === d.id && (
+                <div className="mb-2 border border-red-300 bg-red-50 rounded p-2 text-sm flex flex-wrap items-center gap-2">
+                  <span>
+                    Permanently delete “{d.title}” with its {d.versions.length} version(s), all comments and all files?
+                    Visitors lose access immediately. This cannot be undone. Casey&apos;s work items are kept.
+                  </span>
+                  <button disabled={!!pending} onClick={() => deleteDeliverable(d.id, d.title)} className="px-2 py-1 rounded bg-red-600 text-white disabled:opacity-50">Delete permanently</button>
+                  <button disabled={!!pending} onClick={() => setConfirmDelete(null)} className="px-2 py-1 rounded border border-brand-border disabled:opacity-50">Cancel</button>
+                </div>
+              )}
               {d.versions.length === 0 ? <p className="text-sm text-brand-muted">No versions yet.</p> : (
                 <ul className="divide-y divide-brand-border border border-brand-border rounded">
                   {d.versions.map(v => (
