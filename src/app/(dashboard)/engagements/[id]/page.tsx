@@ -143,13 +143,16 @@ export default function EngagementPage() {
 
   // window.open must run synchronously inside the click, or the browser blocks it as a pop-up.
   const openRoomPreview = () => {
+    if (inFlight.current) return;
     const w = window.open("", "_blank");
     if (!w) { setMsg("Your browser blocked the new tab. Allow pop-ups for this site and try again."); return; }
     w.opener = null;
     void guarded("room-preview", async () => {
-      const r = await fetchJson<{ url: string }>(`/api/engagements/${id}/room-preview`, { method: "POST" });
-      if (!r.ok) { w.close(); setMsg(r.error); return; }
-      w.location.href = r.data.url;
+      try {
+        const r = await fetchJson<{ url: string }>(`/api/engagements/${id}/room-preview`, { method: "POST" });
+        if (!r.ok) { w.close(); setMsg(r.error); return; }
+        w.location.href = r.data.url;
+      } catch (e) { w.close(); throw e; }
     });
   };
 

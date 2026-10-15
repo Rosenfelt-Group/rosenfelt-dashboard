@@ -5,6 +5,7 @@ const s = vi.hoisted(() => ({
   deliverables: { data: [] as unknown[], error: null as unknown },
   items: { data: [] as unknown[], error: null as unknown },
   logs: { data: [] as unknown[], error: null as unknown },
+  versions: { data: [] as unknown[], error: null as unknown },
   itemFilters: [] as unknown[][],
 }));
 vi.mock("@/lib/supabase-admin", () => {
@@ -18,7 +19,7 @@ vi.mock("@/lib/supabase-admin", () => {
   };
   return {
     supabaseAdmin: {
-      schema: () => ({ from: () => chain(() => s.deliverables) }),
+      schema: () => ({ from: (t: string) => chain(() => (t === "deliverable_versions" ? s.versions : s.deliverables)) }),
       from: (t: string) => (t === "work_items" ? chain(() => s.items, s.itemFilters) : chain(() => s.logs)),
     },
   };
@@ -43,6 +44,7 @@ beforeEach(() => {
   s.deliverables = { data: [{ id: D1 }], error: null };
   s.items = { data: [item(W1, D1)], error: null };
   s.logs = { data: [log(W1, 1, "Prototype iteration started.")], error: null };
+  s.versions = { data: [], error: null };
   s.itemFilters = [];
 });
 
@@ -95,5 +97,22 @@ describe("GET engagements/[id]/builds", () => {
     const r = await call();
     expect(r.status).toBe(500);
     expect(JSON.stringify(await r.json())).not.toContain("secret_table");
+  });
+  it("drops a build whose work item already produced a version, keeping the others", async () => {
+    const W2 = "33333333-3333-4333-8333-333333333333";
+    s.items = { data: [item(W1, D1), item(W2, D1)], error: null };
+    s.versions = { data: [{ work_item_id: W1 }], error: null };
+    const { builds } = await (await call()).json();
+    expect(builds.map((b: { work_item_id: string }) => b.work_item_id)).toEqual([W2]);
+  });
+  it("returns an empty list when every open request already has a version", async () => {
+    s.versions = { data: [{ work_item_id: W1 }], error: null };
+    expect((await (await call()).json()).builds).toEqual([]);
+  });
+  it("gives the fixed 500 when the versions lookup fails", async () => {
+    s.versions = { data: [], error: { message: "secret_versions" } };
+    const r = await call();
+    expect(r.status).toBe(500);
+    expect(JSON.stringify(await r.json())).not.toContain("secret_versions");
   });
 });

@@ -12,7 +12,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
   const secret = process.env.ROOM_GRANT_SECRET;
   if (!secret) return NextResponse.json({ error: "ROOM_GRANT_SECRET is not configured" }, { status: 500 });
-  const { data: eng } = await supabaseAdmin.schema("rooms").from("engagements").select("id").eq("id", id).maybeSingle();
+  const { data: eng, error } = await supabaseAdmin.schema("rooms").from("engagements").select("id").eq("id", id).maybeSingle();
+  if (error) return NextResponse.json({ error: "Could not create the preview link." }, { status: 500 });
   if (!eng) return NextResponse.json({ error: "Engagement not found" }, { status: 404 });
   let token: string;
   try { token = signPreviewToken(id, secret); }

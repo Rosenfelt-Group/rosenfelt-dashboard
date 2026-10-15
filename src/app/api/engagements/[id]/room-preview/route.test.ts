@@ -34,4 +34,16 @@ describe("POST engagements/[id]/room-preview", () => {
     delete process.env.ROOM_GRANT_SECRET;
     expect((await call()).status).toBe(500);
   });
+  it("returns a fixed 500 (not 404) on a database error, without leaking its text", async () => {
+    s.eng = { data: null, error: { message: "secret_table exploded" } };
+    const r = await call();
+    expect(r.status).toBe(500);
+    const body = JSON.stringify(await r.json());
+    expect(body).toContain("Could not create the preview link.");
+    expect(body).not.toContain("secret_table");
+  });
+  it("sends Cache-Control private, no-store and rejects an uppercase UUID", async () => {
+    expect((await call()).headers.get("cache-control")).toBe("private, no-store");
+    expect((await call("AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA")).status).toBe(400);
+  });
 });

@@ -28,9 +28,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .limit(50);
   if (wErr) return fail();
 
-  const mine = (items ?? [])
+  const candidates = (items ?? [])
     .map((w: Record<string, unknown>) => ({ w, did: deliverableIdFromBrief(w.description) }))
     .filter((x): x is { w: Record<string, unknown>; did: string } => x.did !== null && ids.has(x.did));
+
+  // A request is finished once its work item has produced a version, whether or not the agent closed the item.
+  let mine = candidates;
+  if (candidates.length > 0) {
+    const { data: vers, error: vErr } = await supabaseAdmin.schema("rooms").from("deliverable_versions")
+      .select("work_item_id").in("work_item_id", candidates.map(x => x.w.id as string));
+    if (vErr) return fail();
+    const done = new Set((vers ?? []).map((v: { work_item_id: string }) => v.work_item_id));
+    mine = candidates.filter(x => !done.has(x.w.id as string));
+  }
   if (mine.length === 0) return NextResponse.json({ builds: [], now: new Date(nowMs).toISOString() });
 
   const { data: logs, error: lErr } = await supabaseAdmin.from("work_item_logs")
