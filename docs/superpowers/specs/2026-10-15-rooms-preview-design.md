@@ -23,7 +23,7 @@ docx/xlsx/pptx: no preview button, a "Download" button only (the existing downlo
   (A visitor download grant opened on `/dp` shows a file they could already download.)
 - `Content-Disposition: inline`; Content-Type only from our extension map, except txt/csv/md are always
   `text/plain; charset=utf-8` (never html); `nosniff`, `private, no-store`, `Referrer-Policy: no-referrer`.
-- CSP: `default-src 'none'; frame-ancestors <FRAME_ANCESTORS>` — deliberately **no `sandbox`**, because a
+- CSP: `default-src 'none'; frame-ancestors <FRAME_ANCESTORS>` for images and text; PDFs get only `frame-ancestors <FRAME_ANCESTORS>` (plan ruling: a restrictive `default-src` can also break the PDF viewer). Deliberately **no `sandbox`**, because a
   sandboxed frame disables Chrome's PDF viewer. The preview host is a separate, cookie-less origin and
   only the dashboard may frame it, so an inline PDF cannot reach dashboard data.
 - Same error handling as `/d`: 403 bad grant, 404 missing, 502 storage failure; redirects refused.
@@ -77,8 +77,8 @@ previewing as a specific contact; commenting/approval.
 ## Deploy order
 Migration → preview-host (`/dp`, grant copy) → dashboard (buttons, two API routes) → portal (preview
 routes, banner). The dashboard buttons ship before the portal route exists only if deployed out of order,
-so the dashboard goes last-but-one and the Preview-room button is hidden unless
-`NEXT_PUBLIC_PORTAL_URL` is set (already used by link sharing; verified in plan).
+so the order is migration, preview-host, portal, then dashboard. The Preview-room button is always shown and
+uses the same portal base URL as link sharing (default `https://portal.rosably.com`; plan ruling).
 
 ## Risks / things verified at smoke test
 - Chrome renders a PDF in an unsandboxed cross-origin iframe under `default-src 'none'` (must be checked
