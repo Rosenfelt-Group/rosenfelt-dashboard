@@ -16,7 +16,13 @@ function chain(table: string) {
   b.eq = (...a: unknown[]) => { s.eqs.push([table, ...a]); return b; };
   b.insert = (row: unknown) => { s.inserts.push([table, row]); return b; };
   b.single = next;
-  b.maybeSingle = next;
+  // Honors the engagement filter: a deliverable of another engagement is not found.
+  b.maybeSingle = async () => {
+    const r = await next();
+    const d = r.data as { engagement_id?: string } | null;
+    const f = s.eqs.filter(e => e[0] === table && e[1] === "engagement_id").pop();
+    return d && d.engagement_id && f && f[2] !== d.engagement_id ? { data: null, error: null } : r;
+  };
   return b;
 }
 vi.mock("@/lib/supabase-admin", () => ({
@@ -82,5 +88,16 @@ describe("POST documents (prepare upload)", () => {
     const r = await call({ filename: "a.pdf", size: 1, deliverable_title: "x" });
     expect(r.status).toBe(500);
     expect(JSON.stringify(await r.json())).not.toContain("secret storage detail");
+  });
+  it("filters an existing deliverable by this engagement (another engagement's is 404, nothing signed)", async () => {
+    s.queue = { engagements: [{ data: { id: ENG, status: "active" }, error: null }],
+      deliverables: [{ data: { id: DEL, kind: "document", engagement_id: "99999999-9999-4999-8999-999999999999" }, error: null }] };
+    expect((await call({ filename: "a.pdf", size: 1, deliverable_id: DEL })).status).toBe(404);
+    expect(s.eqs).toContainEqual(["deliverables", "engagement_id", ENG]);
+    expect(s.signed).toEqual([]);
+  });
+  it("accepts exactly 26214400 bytes", async () => {
+    s.queue = { engagements: [{ data: { id: ENG, status: "active" }, error: null }], deliverables: [{ data: { id: DEL }, error: null }] };
+    expect((await call({ filename: "a.pdf", size: 26214400, deliverable_title: "x" })).status).toBe(201);
   });
 });

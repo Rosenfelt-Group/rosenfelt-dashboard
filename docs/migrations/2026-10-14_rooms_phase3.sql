@@ -119,7 +119,7 @@ begin
   if lower(btrim(split_part(coalesce(v_meta->>'mimetype', ''), ';', 1))) <> v_mime then
     raise exception 'file type mismatch' using errcode = 'P0001'; end if;
   if exists (select 1 from rooms.deliverable_versions x where x.storage_prefix = v_prefix) then
-    raise exception 'upload already added' using errcode = 'P0001'; end if;
+    raise exception 'upload already added' using errcode = '23505'; end if;
   select coalesce(max(x.version_no), 0) + 1 into v_no from rooms.deliverable_versions x where x.deliverable_id = d.id;
   insert into rooms.deliverable_versions (deliverable_id, version_no, status, source, storage_prefix, manifest, change_summary)
     values (d.id, v_no, 'draft', 'upload', v_prefix,

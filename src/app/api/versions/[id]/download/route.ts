@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { docExt } from "@/lib/rooms/documents";
 import { DOC_EXTS, isSafeDocFilename } from "@/lib/rooms/grant";
 import { DOC_BUCKET } from "@/lib/rooms/doc-limits";
 
@@ -14,7 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .select("storage_prefix, source, manifest").eq("id", id).maybeSingle();
   const file = v?.manifest?.file;
   if (!v || v.source !== "upload" || typeof file !== "string" || !FILE_RE.test(file)) return NextResponse.json({ error: "Document not found." }, { status: 404 });
-  const name = isSafeDocFilename(v.manifest.filename) ? v.manifest.filename : file;
+  const name = isSafeDocFilename(v.manifest.filename) && docExt(v.manifest.filename) === docExt(file) ? v.manifest.filename : file;
   const { data, error } = await supabaseAdmin.storage.from(DOC_BUCKET).createSignedUrl(`${v.storage_prefix}/${file}`, 60, { download: name });
   if (error || !data) return NextResponse.json({ error: "Could not create a download link." }, { status: 500 });
   return NextResponse.json({ url: data.signedUrl });

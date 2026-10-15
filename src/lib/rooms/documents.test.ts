@@ -36,7 +36,6 @@ describe("sanitizeDocFilename", () => {
 describe("sniffDocument", () => {
   it("accepts real signatures", () => {
     expect(sniffDocument("pdf", text("%PDF-1.7\n"))).toBe(true);
-    expect(sniffDocument("pdf", new Uint8Array([...new Uint8Array(100), ...text("%PDF-1.4")]))).toBe(true);
     expect(sniffDocument("png", bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0))).toBe(true);
     expect(sniffDocument("jpg", bytes(0xff, 0xd8, 0xff, 0xe0))).toBe(true);
     for (const e of ["docx", "xlsx", "pptx"] as const) expect(sniffDocument(e, bytes(0x50, 0x4b, 0x03, 0x04, 0x14))).toBe(true);
@@ -97,5 +96,20 @@ describe("hostile input", () => {
     expect(sniffDocument("pdf", text("<svg xmlns='http://www.w3.org/2000/svg'/>"))).toBe(false);
     expect(sniffDocument("csv", bytes(0x7f, 0x45, 0x4c, 0x46, 0, 0))).toBe(false);
     expect(sniffDocument("xlsx", bytes(0x50, 0x4b))).toBe(false);
+  });
+});
+
+describe("tightened checks", () => {
+  it("requires the PDF marker at offset 0", () => {
+    expect(sniffDocument("pdf", text("<html><!-- %PDF-1.4 --><script>"))).toBe(false);
+    expect(sniffDocument("pdf", new Uint8Array([...new Uint8Array(100), ...text("%PDF-1.4")]))).toBe(false);
+    expect(sniffDocument("pdf", bytes(0xef, 0xbb, 0xbf, ...text("%PDF-1.4")))).toBe(false);
+    expect(sniffDocument("pdf", text("%PDF-1.4\n"))).toBe(true);
+  });
+  it("truncates by code points, never splitting an emoji", () => {
+    const s = sanitizeDocFilename("x".repeat(145) + "😀😀" + ".pdf")!;
+    expect(s.length).toBeLessThanOrEqual(150);
+    expect(s.endsWith(".pdf")).toBe(true);
+    expect(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(s)).toBe(false);
   });
 });

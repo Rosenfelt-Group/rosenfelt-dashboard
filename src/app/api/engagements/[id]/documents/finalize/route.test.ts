@@ -3,6 +3,8 @@ import { NextRequest } from "next/server";
 
 const s = vi.hoisted(() => ({
   deliverable: { data: null as unknown, error: null as unknown },
+  engagement: { data: null as unknown, error: null as unknown },
+  downloads: 0,
   head: new Uint8Array(),
   downloadError: null as unknown,
   removed: [] as string[][],
@@ -12,16 +14,23 @@ vi.mock("@/lib/supabase-admin", () => ({
   supabaseAdmin: {
     schema: () => ({
       rpc: s.rpc,
-      from: () => {
+      from: (table: string) => {
         const b: Record<string, unknown> = {};
-        b.select = () => b; b.eq = () => b;
-        b.maybeSingle = async () => s.deliverable;
+        const f: Record<string, unknown> = {};
+        b.select = () => b; b.eq = (k: string, v: unknown) => { f[k] = v; return b; };
+        // Honors the filters: a deliverable of another engagement is not found.
+        const row = async () => {
+          if (table === "engagements") return s.engagement;
+          const d = s.deliverable.data as { engagement_id?: string } | null;
+          return d && f.engagement_id !== undefined && f.engagement_id !== d.engagement_id ? { data: null, error: null } : s.deliverable;
+        };
+        b.maybeSingle = row; b.single = row;
         return b;
       },
     }),
     storage: {
       from: () => ({
-        download: () => ({ asStream: async () => (s.downloadError ? { data: null, error: s.downloadError } : { data: new Response(s.head).body, error: null }) }),
+        download: () => { s.downloads++; return ({ asStream: async () => (s.downloadError ? { data: null, error: s.downloadError } : { data: new Response(s.head).body, error: null }) }); },
         remove: async (p: string[]) => { s.removed.push(p); return { data: p, error: null }; },
       }),
     },
@@ -41,6 +50,8 @@ const call = (body: unknown = { deliverable_id: DEL, upload_id: UP, filename: "P
 beforeEach(() => {
   s.deliverable = { data: { id: DEL, engagement_id: ENG, kind: "document" }, error: null };
   s.head = new TextEncoder().encode("%PDF-1.7\n");
+  s.engagement = { data: { id: ENG, status: "active" }, error: null };
+  s.downloads = 0;
   s.downloadError = null; s.removed = [];
   s.rpc.mockReset();
   s.rpc.mockResolvedValue({ data: [{ version_id: "v", version_no: 3 }], error: null });
@@ -113,5 +124,31 @@ describe("POST documents/finalize", () => {
     s.rpc.mockResolvedValue({ data: null, error: { code: "XX000", message: "relation secret_table" } });
     const r = await call();
     expect(JSON.stringify(await r.json())).not.toContain("secret_table");
+  });
+  it("409s on a duplicate upload (23505) and does NOT delete the object that backs the live version", async () => {
+    s.rpc.mockResolvedValue({ data: null, error: { code: "23505", message: "upload already added" } });
+    const r = await call();
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ error: "This upload was already added." });
+    expect(s.removed).toEqual([]);
+  });
+  it("still deletes the object on P0001", async () => {
+    s.rpc.mockResolvedValue({ data: null, error: { code: "P0001", message: "x" } });
+    expect((await call()).status).toBe(400);
+    expect(s.removed).toEqual([[PATH]]);
+  });
+  it("409s for a closed room and keeps the object", async () => {
+    s.engagement = { data: { id: ENG, status: "closed" }, error: null };
+    const r = await call();
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ error: "Engagement is closed" });
+    expect(s.removed).toEqual([]);
+    expect(s.rpc).not.toHaveBeenCalled();
+  });
+  it("404s a deliverable that belongs to another engagement without touching Storage", async () => {
+    s.deliverable = { data: { id: DEL, engagement_id: "99999999-9999-4999-8999-999999999999", kind: "document" }, error: null };
+    expect((await call()).status).toBe(404);
+    expect(s.downloads).toBe(0);
+    expect(s.removed).toEqual([]);
   });
 });

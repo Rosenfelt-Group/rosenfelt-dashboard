@@ -42,7 +42,7 @@ begin
   if r.status <> 'draft' or r.source <> 'upload' or r.storage_prefix <> v_prefix1 or r.change_summary <> 'First draft'
      or r.manifest->>'file' <> 'document.pdf' or r.manifest->>'filename' <> 'Proposal.pdf' or (r.manifest->>'size')::int <> 1234 then
     raise exception 'FAIL document version row %', row_to_json(r); end if;
-  v_ok := false; begin perform rooms.add_document_version(v_doc, v_up1, 'pdf', 'Proposal.pdf', null); exception when sqlstate 'P0001' then v_ok := true; end;
+  v_ok := false; begin perform rooms.add_document_version(v_doc, v_up1, 'pdf', 'Proposal.pdf', null); exception when sqlstate '23505' then v_ok := true; end;
   if not v_ok then raise exception 'FAIL same upload added twice'; end if;
   insert into storage.objects (bucket_id, name, metadata)
     values ('room-documents', v_eng::text || '/' || v_doc::text || '/' || v_up2::text || '/document.docx', '{"size": 10, "mimetype": "application/pdf"}');

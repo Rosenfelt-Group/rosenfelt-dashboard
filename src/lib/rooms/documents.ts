@@ -18,16 +18,14 @@ export function sanitizeDocFilename(name: string): string | null {
   if (!docExt(s)) return null;
   if (s.length > 150) {
     const dot = s.lastIndexOf(".");
-    s = s.slice(0, 150 - (s.length - dot)).trimEnd() + s.slice(dot);
+    const extPart = s.slice(dot);
+    const room = 150 - extPart.length;
+    // Cut by code points so a surrogate pair is never split; trimming can only shorten it.
+    s = Array.from(s.slice(0, dot)).reduce<string>((acc, ch) => (acc.length + ch.length <= room ? acc + ch : acc), "").trimEnd() + extPart;
   }
   return isSafeDocFilename(s) && s.lastIndexOf(".") > 0 ? s : null;
 }
 
-function indexOfSeq(h: Uint8Array, seq: number[], limit: number): number {
-  const end = Math.min(h.length, limit) - seq.length;
-  for (let i = 0; i <= end; i++) if (seq.every((b, j) => h[i + j] === b)) return i;
-  return -1;
-}
 const startsWith = (h: Uint8Array, seq: number[]) => h.length >= seq.length && seq.every((b, i) => h[i] === b);
 
 function isLikelyText(h: Uint8Array): boolean {
@@ -44,7 +42,7 @@ function isLikelyText(h: Uint8Array): boolean {
 export function sniffDocument(ext: DocExt, head: Uint8Array): boolean {
   if (head.length === 0) return false;
   switch (ext) {
-    case "pdf": return indexOfSeq(head, [0x25, 0x50, 0x44, 0x46, 0x2d], 1024) >= 0; // "%PDF-" within the first 1 KB
+    case "pdf": return startsWith(head, [0x25, 0x50, 0x44, 0x46, 0x2d]); // "%PDF-" at offset 0
     case "png": return startsWith(head, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     case "jpg": return startsWith(head, [0xff, 0xd8, 0xff]);
     case "docx": case "xlsx": case "pptx": return startsWith(head, [0x50, 0x4b, 0x03, 0x04]); // ZIP (OOXML)

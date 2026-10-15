@@ -66,4 +66,9 @@ describe("GET versions/[id]/download", () => {
     s.row = { data: { storage_prefix: PREFIX, source: "upload", manifest: { file: "../../x/document.pdf" } }, error: null };
     expect((await call()).status).toBe(404);
   });
+  it("ignores a manifest filename whose extension differs from the stored file", async () => {
+    s.row = { data: { storage_prefix: PREFIX, source: "upload", manifest: { file: "document.pdf", filename: "evil.html" } }, error: null };
+    await call();
+    expect(s.signed[0][2]).toEqual({ download: "document.pdf" });
+  });
 });

@@ -21,6 +21,9 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (!filename || !ext) return NextResponse.json({ error: "This file type is not allowed." }, { status: 400 });
 
   const rooms = supabaseAdmin.schema("rooms");
+  const { data: eng } = await rooms.from("engagements").select("id, status").eq("id", id).single();
+  if (!eng) return NextResponse.json({ error: "Engagement not found" }, { status: 404 });
+  if (eng.status === "closed") return NextResponse.json({ error: "Engagement is closed" }, { status: 409 });
   const { data: d } = await rooms.from("deliverables").select("id, engagement_id, kind")
     .eq("id", b.deliverable_id).eq("engagement_id", id).maybeSingle();
   if (!d) return NextResponse.json({ error: "Deliverable not found in this engagement" }, { status: 404 });
@@ -43,6 +46,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     p_deliverable: d.id, p_upload: uploadId, p_ext: ext, p_filename: filename, p_change_summary: b.change_summary ?? null,
   });
   if (error) {
+    // Duplicate finalize: the object backs an existing version, so it must NOT be deleted.
+    if (error.code === "23505") return NextResponse.json({ error: "This upload was already added." }, { status: 409 });
     if (error.code === "P0001") return refuse("This file could not be added (it may be too large, the wrong type, or already added).");
     if (error.code === "P0002") return NextResponse.json({ error: "Deliverable not found." }, { status: 404 });
     return NextResponse.json({ error: "Could not add this document. Try again." }, { status: 500 });
