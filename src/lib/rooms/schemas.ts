@@ -28,3 +28,7 @@ export const PrototypeRequestSchema = z.object({
 }).refine(b => Boolean(b.deliverable_id) !== Boolean(b.deliverable_title), {
   message: "Provide either an existing deliverable or a new deliverable title.",
 });
+
+export const RefreshAccessSchema = z.object({
+  expires_days: z.number().int().min(1).max(365).default(60),
+});

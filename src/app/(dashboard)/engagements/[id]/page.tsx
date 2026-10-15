@@ -22,6 +22,7 @@ export default function EngagementPage() {
   const [newLink, setNewLink] = useState<string | null>(null);
   const [confirmShare, setConfirmShare] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmRefresh, setConfirmRefresh] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -131,6 +132,17 @@ export default function EngagementPage() {
   const revoke = (accessId: string) => guarded("revoke", async () => {
     const r = await fetchJson(`/api/engagements/${id}/access?access_id=${accessId}`, { method: "DELETE" });
     if (!r.ok) { setMsg(`Revoke failed: ${r.error}`); return; }
+    await load();
+  });
+
+  const refreshLink = (accessId: string) => guarded("refresh", async () => {
+    const r = await fetchJson<{ link: string }>(`/api/engagements/${id}/access/${accessId}/refresh`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    });
+    setConfirmRefresh(null);
+    if (!r.ok) { setMsg(`Refresh failed: ${r.error}`); return; }
+    setNewLink(r.data.link);
+    setMsg("The old link no longer works. Send the new link below.");
     await load();
   });
 
@@ -253,11 +265,25 @@ export default function EngagementPage() {
           )}
           <ul className="divide-y divide-brand-border border border-brand-border rounded">
             {access.map(a => (
-              <li key={a.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                <span>{a.label ?? "Unlabelled"} · expires {new Date(a.expires_at).toLocaleDateString()}
-                  {a.revoked_at ? " · revoked" : ""}{a.last_used_at ? ` · last used ${formatDistanceToNow(new Date(a.last_used_at), { addSuffix: true })}` : ""}
-                </span>
-                {!a.revoked_at && <button disabled={!!pending} onClick={() => revoke(a.id)} className="text-red-600 disabled:opacity-50">Revoke</button>}
+              <li key={a.id} className="px-3 py-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span>{a.label ?? "Unlabelled"} · expires {new Date(a.expires_at).toLocaleDateString()}
+                    {a.revoked_at ? " · revoked" : ""}{a.last_used_at ? ` · last used ${formatDistanceToNow(new Date(a.last_used_at), { addSuffix: true })}` : ""}
+                  </span>
+                  {!a.revoked_at && (
+                    <span className="flex gap-3">
+                      <button disabled={!!pending} onClick={() => setConfirmRefresh(a.id)} className="text-brand-orange disabled:opacity-50">Refresh</button>
+                      <button disabled={!!pending} onClick={() => revoke(a.id)} className="text-red-600 disabled:opacity-50">Revoke</button>
+                    </span>
+                  )}
+                </div>
+                {confirmRefresh === a.id && (
+                  <div className="mt-2 border border-amber-300 bg-amber-50 rounded p-2 flex flex-wrap items-center gap-2">
+                    <span>Replace this link? The current link stops working immediately and a new one (60 days) is shown once.</span>
+                    <button disabled={!!pending} onClick={() => refreshLink(a.id)} className="px-2 py-1 rounded bg-brand-orange text-white disabled:opacity-50">Refresh link</button>
+                    <button disabled={!!pending} onClick={() => setConfirmRefresh(null)} className="px-2 py-1 rounded border border-brand-border disabled:opacity-50">Cancel</button>
+                  </div>
+                )}
               </li>
             ))}
             {access.length === 0 && <li className="px-3 py-2 text-sm text-brand-muted">No links yet.</li>}
