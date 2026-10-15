@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { DocumentFinalizeSchema } from "@/lib/rooms/schemas";
-import { docExt, sanitizeDocFilename, sniffDocument, readHead } from "@/lib/rooms/documents";
+import { docExt, sanitizeDocFilename, sniffDocument } from "@/lib/rooms/documents";
 import { DOC_BUCKET } from "@/lib/rooms/doc-limits";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Ctx = { params: Promise<{ id: string }> };
+
+// Fail in seconds with a clear message instead of hanging until the platform kills the request.
+export const maxDuration = 60;
+const HEAD_BYTES = 8192;
+const STEP_TIMEOUT_MS = 15_000;
 
 // POST — verify an uploaded object and add it as a draft version. Contents are sniffed here; size and
 // MIME are checked again in the database (rooms.add_document_version) from Storage's own metadata.
@@ -37,14 +42,28 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error }, { status: 400 });
   };
 
-  const dl = await bucket.download(path).asStream();
-  if (dl.error || !dl.data) return NextResponse.json({ error: "The upload was not found. Please upload the file again." }, { status: 404 });
-  const head = await readHead(dl.data as ReadableStream<Uint8Array>);
+  // Read only the first bytes through a short-lived signed URL (Range request), with a deadline.
+  // A body that is never fully read or cancelled can no longer hold the request open.
+  const signed = await bucket.createSignedUrl(path, 60);
+  if (signed.error || !signed.data?.signedUrl) return NextResponse.json({ error: "The upload was not found. Please upload the file again." }, { status: 404 });
+  let head: Uint8Array;
+  try {
+    const res = await fetch(signed.data.signedUrl, {
+      headers: { Range: `bytes=0-${HEAD_BYTES - 1}`, "Accept-Encoding": "identity" },
+      redirect: "error", signal: AbortSignal.timeout(STEP_TIMEOUT_MS),
+    });
+    if (res.status === 404) return NextResponse.json({ error: "The upload was not found. Please upload the file again." }, { status: 404 });
+    if (!res.ok) return NextResponse.json({ error: "Could not read the uploaded file. Try again." }, { status: 502 });
+    head = new Uint8Array(await res.arrayBuffer()).slice(0, HEAD_BYTES);
+  } catch {
+    // Unknown outcome: keep the object so a retry can finalize it.
+    return NextResponse.json({ error: "Reading the uploaded file timed out. Try again." }, { status: 504 });
+  }
   if (!sniffDocument(ext, head)) return refuse(`This file's contents don't match its type (.${ext}). It was not added.`);
 
   const { data, error } = await rooms.rpc("add_document_version", {
     p_deliverable: d.id, p_upload: uploadId, p_ext: ext, p_filename: filename, p_change_summary: b.change_summary ?? null,
-  });
+  }).abortSignal(AbortSignal.timeout(STEP_TIMEOUT_MS));
   if (error) {
     // Duplicate finalize: the object backs an existing version, so it must NOT be deleted.
     if (error.code === "23505") return NextResponse.json({ error: "This upload was already added." }, { status: 409 });

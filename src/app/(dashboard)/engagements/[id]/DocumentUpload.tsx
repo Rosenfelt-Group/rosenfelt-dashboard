@@ -42,13 +42,15 @@ export function DocumentUpload({ engagementId, documents, onDone }: {
       try {
         put = await fetch(prep.data.signed_url, {
           method: "PUT", headers: { "content-type": prep.data.content_type, "x-upsert": "false" }, body: file,
+          signal: AbortSignal.timeout(180_000),
         });
-      } catch { fail("Upload failed (network error). Try again."); return; }
+      } catch { fail("Upload failed (network error or timed out). Try again."); return; }
       if (!put.ok) { fail(`Upload failed (HTTP ${put.status}). Check the file is 25 MB or smaller and an allowed type.`); return; }
       const fin = await fetchJson<{ version_no: number }>(`/api/engagements/${engagementId}/documents/finalize`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deliverable_id: prep.data.deliverable_id, upload_id: prep.data.upload_id, filename: file.name,
           ...(summary.trim() ? { change_summary: summary.trim() } : {}) }),
+        signal: AbortSignal.timeout(90_000),
       });
       if (!fin.ok) { fail(fin.error); return; }
       setFile(null); setTitle(""); setSummary(""); setTargetId("");
