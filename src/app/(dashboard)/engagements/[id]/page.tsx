@@ -8,6 +8,8 @@ import { DocumentUpload } from "./DocumentUpload";
 import { canPreviewDoc } from "@/lib/rooms/doc-limits";
 import { formatVersionDate, formatRelativeTitle } from "@/lib/rooms/format";
 import { minutesSince, type Build } from "@/lib/rooms/builds";
+import { roomInviteEmail } from "@/lib/rooms/invite-email";
+import { CopyButton } from "@/components/crm/CopyButton";
 
 type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string; source: string; manifest: { filename?: string; size?: number; ext?: string } | null };
 type Deliverable = { id: string; title: string; kind: string; welcome_message: string | null; versions: Version[] };
@@ -24,7 +26,7 @@ export default function EngagementPage() {
   const [access, setAccess] = useState<Access[]>([]);
   const [activity, setActivity] = useState<Activity | null>(null);
   const [activityErr, setActivityErr] = useState<string | null>(null);
-  const [newLink, setNewLink] = useState<string | null>(null);
+  const [newLink, setNewLink] = useState<{ link: string; expiresAt: string | null; refreshed: boolean } | null>(null);
   const [confirmShare, setConfirmShare] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmRefresh, setConfirmRefresh] = useState<string | null>(null);
@@ -183,12 +185,12 @@ export default function EngagementPage() {
   });
 
   const issue = () => guarded("issue", async () => {
-    const r = await fetchJson<{ link: string }>(`/api/engagements/${id}/access`, {
+    const r = await fetchJson<{ link: string; expires_at?: string }>(`/api/engagements/${id}/access`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label: label || undefined }),
     });
     if (!r.ok) { setMsg(r.error); return; }
-    setNewLink(r.data.link); setLabel(""); await load();
+    setNewLink({ link: r.data.link, expiresAt: r.data.expires_at ?? null, refreshed: false }); setLabel(""); await load();
   });
 
   const revoke = (accessId: string) => guarded("revoke", async () => {
@@ -198,12 +200,12 @@ export default function EngagementPage() {
   });
 
   const refreshLink = (accessId: string) => guarded("refresh", async () => {
-    const r = await fetchJson<{ link: string }>(`/api/engagements/${id}/access/${accessId}/refresh`, {
+    const r = await fetchJson<{ link: string; expires_at?: string }>(`/api/engagements/${id}/access/${accessId}/refresh`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
     });
     setConfirmRefresh(null);
     if (!r.ok) { setMsg(`Refresh failed: ${r.error}`); return; }
-    setNewLink(r.data.link);
+    setNewLink({ link: r.data.link, expiresAt: r.data.expires_at ?? null, refreshed: true });
     setMsg("The old link no longer works. Send the new link below.");
     await load();
   });
@@ -218,6 +220,12 @@ export default function EngagementPage() {
   }
   if (!detail) return <p className="p-6 text-sm text-brand-muted">Loading…</p>;
   const { engagement, business, deliverables } = detail;
+  // Draft for Brian to paste into his own mail client; the app sends no email. No contact name is
+  // loaded here (and the link label is not a person's name), so the greeting is "Hi there".
+  const invite = newLink && roomInviteEmail({
+    orgName: business?.name, roomTitle: engagement.title,
+    link: newLink.link, expiresAt: newLink.expiresAt, refreshed: newLink.refreshed,
+  });
 
   return (
     <div className="p-6 max-w-5xl">
@@ -371,7 +379,14 @@ export default function EngagementPage() {
           {newLink && (
             <div className="border border-amber-300 bg-amber-50 rounded p-3 text-sm break-all">
               <p className="font-medium mb-1">Copy this link now — it will not be shown again.</p>
-              <code>{newLink}</code>
+              <code>{newLink.link}</code>
+              {invite && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <CopyButton text={newLink.link} label="Copy link" />
+                  <CopyButton text={invite.body} label="Copy invite email" />
+                  <CopyButton text={invite.subject} label="Copy subject" />
+                </div>
+              )}
             </div>
           )}
           <ul className="divide-y divide-brand-border border border-brand-border rounded">
