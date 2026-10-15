@@ -10,7 +10,7 @@ import { formatVersionDate, formatRelativeTitle } from "@/lib/rooms/format";
 type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string; source: string; manifest: { filename?: string; size?: number } | null };
 type Deliverable = { id: string; title: string; kind: string; welcome_message: string | null; versions: Version[] };
 type Access = { id: string; label: string | null; expires_at: string; revoked_at: string | null; last_used_at: string | null };
-type ActivityEvent = { id: number; type: string; created_at: string; contact: { name: string; email: string } | null; version: { deliverable_title: string; version_no: number } | null };
+type ActivityEvent = { id: number; type: string; created_at: string; contact: { name: string; email: string } | null; version: { deliverable_title: string; version_no: number } | null; deliverable_title: string | null };
 type ActivityContact = { id: string; name: string; email: string; first_seen_at: string };
 type Activity = { events: ActivityEvent[]; contacts: ActivityContact[] };
 type Detail = { engagement: { id: string; title: string; relationship: string; status: string }; business: { name: string } | null; deliverables: Deliverable[] };
@@ -71,6 +71,11 @@ export default function EngagementPage() {
     if (e.type === "version_viewed") {
       return `${e.contact?.name ?? "A visitor"} viewed ${e.version ? `${e.version.deliverable_title} v${e.version.version_no}` : "a version"}`;
     }
+    if (e.type === "document_downloaded") {
+      return `${e.contact?.name ?? "A visitor"} downloaded ${e.version ? `${e.version.deliverable_title} v${e.version.version_no}` : "a document"}`;
+    }
+    if (e.type === "deliverable_deleted") return `Deleted \u201c${e.deliverable_title ?? "a deliverable"}\u201d`;
+    if (e.type === "link_refreshed") return "A room link was refreshed (the old link stopped working)";
     return e.type;
   };
 

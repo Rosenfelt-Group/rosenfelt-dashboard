@@ -5,19 +5,19 @@ type Ctx = { params: Promise<{ id: string }> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type EventRow = { id: number; type: string; created_at: string; contact_id: string | null; version_id: string | null };
+type EventRow = { id: number; type: string; created_at: string; contact_id: string | null; version_id: string | null; deliverable_title: string | null };
 type ContactRow = { id: string; name: string; email: string; first_seen_at: string };
 type VersionRow = { id: string; version_no: number; deliverable: { title: string } | { title: string }[] | null };
 
 // GET — latest room activity (opens, introductions, views) for the engagement.
-// Never selects `meta` or `access_id`.
+// Never selects `meta` (only the single key deliverable_title) or `access_id`.
 export async function GET(_req: NextRequest, { params }: Ctx) {
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   const rooms = supabaseAdmin.schema("rooms");
 
   const { data: events, error: evErr } = await rooms.from("engagement_events")
-    .select("id, type, created_at, contact_id, version_id")
+    .select("id, type, created_at, contact_id, version_id, deliverable_title:meta->>deliverable_title")
     .eq("engagement_id", id)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -53,6 +53,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
         type: e.type,
         created_at: e.created_at,
         contact: c ? { name: c.name, email: c.email } : null,
+        deliverable_title: e.type === "deliverable_deleted" && typeof e.deliverable_title === "string" ? e.deliverable_title : null,
         version: (e.version_id && versionById.get(e.version_id)) || null,
       };
     }),
