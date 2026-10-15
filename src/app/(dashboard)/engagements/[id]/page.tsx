@@ -4,9 +4,10 @@ import { useParams } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { fetchJson } from "@/lib/rooms/fetch-json";
 import { WelcomeEditor } from "./WelcomeEditor";
+import { DocumentUpload } from "./DocumentUpload";
 import { formatVersionDate, formatRelativeTitle } from "@/lib/rooms/format";
 
-type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string };
+type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string; source: string; manifest: { filename?: string; size?: number } | null };
 type Deliverable = { id: string; title: string; kind: string; welcome_message: string | null; versions: Version[] };
 type Access = { id: string; label: string | null; expires_at: string; revoked_at: string | null; last_used_at: string | null };
 type ActivityEvent = { id: number; type: string; created_at: string; contact: { name: string; email: string } | null; version: { deliverable_title: string; version_no: number } | null };
@@ -103,6 +104,12 @@ export default function EngagementPage() {
     else { setPreviewUrl(null); setMsg(r.error); }
   });
 
+  const download = (versionId: string) => guarded("download", async () => {
+    const r = await fetchJson<{ url: string }>(`/api/versions/${versionId}/download`);
+    if (r.ok) window.location.assign(r.data.url);
+    else setMsg(r.error);
+  });
+
   const deleteDeliverable = (deliverableId: string, title: string) => guarded("delete", async () => {
     const r = await fetchJson<{ deleted: boolean; files_removed: number; files_left: number }>(`/api/deliverables/${deliverableId}`, { method: "DELETE" });
     setConfirmDelete(null);
@@ -181,7 +188,7 @@ export default function EngagementPage() {
             <h2 className="text-sm font-semibold">Request prototype</h2>
             <select value={delivId} onChange={e => setDelivId(e.target.value)} className="border border-brand-border rounded px-2 py-1.5 text-sm">
               <option value="">New deliverable…</option>
-              {deliverables.map(d => <option key={d.id} value={d.id}>New version of: {d.title}</option>)}
+              {deliverables.filter(d => d.kind === "prototype").map(d => <option key={d.id} value={d.id}>New version of: {d.title}</option>)}
             </select>
             {!delivId && (
               <input value={delivTitle} onChange={e => setDelivTitle(e.target.value)} placeholder="Deliverable title"
@@ -194,6 +201,9 @@ export default function EngagementPage() {
               Send to Casey
             </button>
           </div>
+
+          <DocumentUpload engagementId={id} documents={deliverables.filter(d => d.kind === "document").map(d => ({ id: d.id, title: d.title }))}
+            onDone={(m) => { setMsg(m); void load(); }} />
 
           {deliverables.map(d => (
             <div key={d.id}>
@@ -218,14 +228,16 @@ export default function EngagementPage() {
                   {d.versions.map(v => (
                     <li key={v.id} className="px-3 py-2 text-sm">
                       <div className="flex items-center justify-between">
-                        <span>v{v.version_no} · {v.status === "shared" ? <strong>Shared</strong> : v.status}{v.change_summary ? ` · ${v.change_summary}` : ""}
+                        <span>v{v.version_no} · {v.status === "shared" ? <strong>Shared</strong> : v.status}{v.source === "upload" && v.manifest?.filename ? ` · ${v.manifest.filename}` : ""}{v.change_summary ? ` · ${v.change_summary}` : ""}
                           <span className="text-brand-muted" title={formatRelativeTitle(v.created_at)}> · {formatVersionDate(v.created_at)}</span>
                         </span>
                         <span className="flex gap-3">
                           {v.status === "draft" && (
                             <button disabled={!!pending} onClick={() => setConfirmShare(v.id)} className="text-brand-orange disabled:opacity-50">Share with room</button>
                           )}
-                          <button disabled={!!pending} onClick={() => preview(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>
+                          {v.source === "upload"
+                            ? <button disabled={!!pending} onClick={() => download(v.id)} className="text-brand-orange disabled:opacity-50">Download</button>
+                            : <button disabled={!!pending} onClick={() => preview(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>}
                         </span>
                       </div>
                       {confirmShare === v.id && (

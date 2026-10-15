@@ -28,8 +28,9 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   let deliverableTitle = b.deliverable_title ?? "";
   if (deliverableId) {
     const { data: d } = await rooms.from("deliverables")
-      .select("id, title").eq("id", deliverableId).eq("engagement_id", id).single();
+      .select("id, title, kind").eq("id", deliverableId).eq("engagement_id", id).single();
     if (!d) return NextResponse.json({ error: "Deliverable not found in this engagement" }, { status: 404 });
+    if (d.kind !== "prototype") return NextResponse.json({ error: "That deliverable is a document; Casey only builds prototypes." }, { status: 409 });
     deliverableTitle = d.title;
   } else {
     const { data: d, error } = await rooms.from("deliverables")
