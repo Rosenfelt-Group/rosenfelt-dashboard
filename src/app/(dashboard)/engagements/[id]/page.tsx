@@ -7,6 +7,7 @@ import { WelcomeEditor } from "./WelcomeEditor";
 import { DocumentUpload } from "./DocumentUpload";
 import { canPreviewDoc } from "@/lib/rooms/doc-limits";
 import { formatVersionDate, formatRelativeTitle } from "@/lib/rooms/format";
+import { minutesSince, type Build } from "@/lib/rooms/builds";
 
 type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string; source: string; manifest: { filename?: string; size?: number; ext?: string } | null };
 type Deliverable = { id: string; title: string; kind: string; welcome_message: string | null; versions: Version[] };
@@ -36,6 +37,8 @@ export default function EngagementPage() {
   const [delivId, setDelivId] = useState("");
   const [label, setLabel] = useState("");
 
+  const [builds, setBuilds] = useState<Build[]>([]);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -67,6 +70,21 @@ export default function EngagementPage() {
     if (tab === "activity" && !activity && !activityErr) loadActivity();
   }, [tab, activity, activityErr, loadActivity]);
 
+  const loadBuilds = useCallback(async () => {
+    const r = await fetchJson<{ builds: Build[] }>(`/api/engagements/${id}/builds`);
+    if (r.ok) setBuilds(Array.isArray(r.data.builds) ? r.data.builds : []);
+  }, [id]);
+  useEffect(() => { void loadBuilds(); }, [loadBuilds]);
+
+  // While a build is open, poll so a returned version shows up without a manual refresh.
+  useEffect(() => {
+    if (builds.length === 0) return;
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") { void load(); void loadBuilds(); setUpdatedAt(new Date()); }
+    }, 15_000);
+    return () => clearInterval(t);
+  }, [builds.length, load, loadBuilds]);
+
   const describeEvent = (e: ActivityEvent): string => {
     if (e.type === "room_opened") return "Someone opened the room";
     if (e.type === "contact_identified") return `${e.contact?.name ?? "A visitor"} introduced themselves`;
@@ -87,6 +105,12 @@ export default function EngagementPage() {
     setPending(key); setMsg(null);
     try { await fn(); } finally { inFlight.current = false; setPending(null); }
   }
+
+  // load() reloads the deliverables and the access list together.
+  const refreshAll = () => guarded("refresh-all", async () => {
+    await Promise.all([load(), loadBuilds(), loadActivity()]);
+    setUpdatedAt(new Date());
+  });
 
   const requestPrototype = () => guarded("proto", async () => {
     const r = await fetchJson<{ work_item_id: string; dispatched: boolean; dispatch_error?: string }>(`/api/engagements/${id}/prototype-request`, {
@@ -196,7 +220,11 @@ export default function EngagementPage() {
     <div className="p-6 max-w-5xl">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-lg font-semibold text-brand-black">{engagement.title}</h1>
-        <button disabled={!!pending} onClick={openRoomPreview} className="px-3 py-1.5 text-sm rounded border border-brand-border disabled:opacity-50">Preview room</button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {updatedAt && <span className="text-xs text-brand-muted">Updated {updatedAt.toLocaleTimeString()}</span>}
+          <button disabled={!!pending} onClick={refreshAll} className="px-3 py-1.5 text-sm rounded border border-brand-border disabled:opacity-50">Refresh</button>
+          <button disabled={!!pending} onClick={openRoomPreview} className="px-3 py-1.5 text-sm rounded border border-brand-border disabled:opacity-50">Preview room</button>
+        </div>
       </div>
       <p className="text-sm text-brand-muted mb-4">{business?.name} · {engagement.relationship} · {engagement.status}</p>
 
@@ -252,6 +280,22 @@ export default function EngagementPage() {
               )}
               <WelcomeEditor key={`${d.id}:${d.welcome_message ?? ""}`} deliverableId={d.id} initial={d.welcome_message}
                 onSaved={(m) => { setMsg(m); void load(); }} />
+              {d.kind === "prototype" && builds.filter(b => b.deliverable_id === d.id).map(b => (
+                <div key={b.work_item_id} role="status" className="mb-2 border border-blue-200 bg-blue-50 rounded p-2 text-sm">
+                  <p>
+                    <strong>{b.agent ? b.agent.charAt(0).toUpperCase() + b.agent.slice(1) : "The agent"} is working on a new version</strong>
+                    {" · "}requested {formatVersionDate(b.requested_at)}{" · "}{b.status.replace(/_/g, " ")}
+                    {b.ref !== null && <>{" · "}<a href={`/work/${b.ref}`} className="underline">work item #{b.ref}</a></>}
+                  </p>
+                  {b.stalled && (
+                    <p className="text-amber-700">No update for {minutesSince(b.last_activity_at, Date.now())} minutes. The agent may be stuck; open the work item to check.</p>
+                  )}
+                  {b.logs.length === 0
+                    ? <p className="text-xs text-brand-muted">No progress notes yet.</p>
+                    : <ul className="mt-1 space-y-0.5 text-xs">{b.logs.map((l, i) => (
+                        <li key={i}><span className="text-brand-muted">{formatVersionDate(l.at)}</span> · {l.message}</li>))}</ul>}
+                </div>
+              ))}
               {d.versions.length === 0 ? <p className="text-sm text-brand-muted">No versions yet.</p> : (
                 <ul className="divide-y divide-brand-border border border-brand-border rounded">
                   {d.versions.map(v => (
