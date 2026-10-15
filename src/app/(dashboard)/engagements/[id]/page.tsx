@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { fetchJson } from "@/lib/rooms/fetch-json";
+import { formatVersionDate } from "@/lib/rooms/format";
 
 type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string };
 type Deliverable = { id: string; title: string; versions: Version[] };
@@ -215,7 +216,7 @@ export default function EngagementPage() {
                     <li key={v.id} className="px-3 py-2 text-sm">
                       <div className="flex items-center justify-between">
                         <span>v{v.version_no} · {v.status === "shared" ? <strong>Shared</strong> : v.status}{v.change_summary ? ` · ${v.change_summary}` : ""}
-                          <span className="text-brand-muted"> · {formatDistanceToNow(new Date(v.created_at), { addSuffix: true })}</span>
+                          <span className="text-brand-muted" title={formatDistanceToNow(new Date(v.created_at), { addSuffix: true })}> · {formatVersionDate(v.created_at)}</span>
                         </span>
                         <span className="flex gap-3">
                           {v.status === "draft" && (
@@ -244,7 +245,7 @@ export default function EngagementPage() {
                 Prototype preview — untrusted content. Do not enter real passwords or personal data.
               </p>
               <iframe src={previewUrl} sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" title="Prototype preview"
-                className="w-full h-[70vh] border border-brand-border rounded" />
+                className="w-full h-[calc(100dvh-8rem)] min-h-[480px] border border-brand-border rounded" />
             </>
           )}
         </div>
