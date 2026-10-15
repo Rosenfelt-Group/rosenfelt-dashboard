@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { createHmac } from "node:crypto";
-import { signGrant, verifyGrant, GRANT_TTL_SEC, signDocGrant, verifyDocGrant, isSafeDocFilename, DOC_GRANT_TTL_SEC, DOC_TYPES, DOC_EXTS } from "./grant";
+import { signGrant, verifyGrant, GRANT_TTL_SEC, signDocGrant, verifyDocGrant, isSafeDocFilename, DOC_GRANT_TTL_SEC, DOC_TYPES, DOC_EXTS, signPreviewToken, verifyPreviewToken, PREVIEW_TOKEN_TTL_SEC } from "./grant";
 
 const E = "0b6f1c0e-2d3a-4b5c-8d7e-9f0a1b2c3d4e";
 const D = "1c7a2d1f-3e4b-4c6d-9e8f-0a1b2c3d4e5f";
 const PREFIX = `${E}/${D}/v3`;
+const PREVIEW_PREFIX = PREFIX;
 const SECRET = "test-secret";
 const NOW = 1_800_000_000_000;
 
@@ -177,5 +178,47 @@ describe("document grant", () => {
     expect([...DOC_EXTS].sort()).toEqual(["csv", "docx", "jpg", "md", "pdf", "png", "pptx", "txt", "xlsx"]);
     expect(DOC_TYPES.pdf).toBe("application/pdf");
     expect(DOC_TYPES.jpg).toBe("image/jpeg");
+  });
+});
+
+describe("preview token", () => {
+  const EID = "0b6f1c0e-2d3a-4b5c-8d7e-9f0a1b2c3d4e";
+  it("round-trips the engagement id", () => {
+    const t = signPreviewToken(EID, SECRET, NOW);
+    expect(t.startsWith("p1.")).toBe(true);
+    expect(verifyPreviewToken(t, SECRET, NOW + 1000)).toEqual({ ok: true, eid: EID, exp: NOW / 1000 + PREVIEW_TOKEN_TTL_SEC });
+  });
+  it("expires after the ttl", () => {
+    const t = signPreviewToken(EID, SECRET, NOW);
+    expect(verifyPreviewToken(t, SECRET, NOW + (PREVIEW_TOKEN_TTL_SEC + 1) * 1000)).toEqual({ ok: false, reason: "expired" });
+  });
+  it("rejects the wrong secret and any tampering", () => {
+    const t = signPreviewToken(EID, SECRET, NOW);
+    expect(verifyPreviewToken(t, "other", NOW)).toEqual({ ok: false, reason: "bad_signature" });
+    const [p, e, x, sig] = t.split(".");
+    const other = Buffer.from("1c7a2d1f-3e4b-4c6d-9e8f-0a1b2c3d4e5f").toString("base64url");
+    expect(verifyPreviewToken([p, other, x, sig].join("."), SECRET, NOW)).toEqual({ ok: false, reason: "bad_signature" });
+    expect(verifyPreviewToken([p, e, String(Number(x) + 100), sig].join("."), SECRET, NOW)).toEqual({ ok: false, reason: "bad_signature" });
+  });
+  it("is domain-separated from prototype and document grants in both directions", () => {
+    const t = signPreviewToken(EID, SECRET, NOW);
+    expect(verifyGrant(t, SECRET, NOW).ok).toBe(false);
+    expect(verifyDocGrant(t, SECRET, NOW).ok).toBe(false);
+    const proto = signGrant(PREVIEW_PREFIX, SECRET, NOW);
+    const doc = signDocGrant(`${E}/${D}/${E}/document.pdf`, "a.pdf", SECRET, NOW);
+    expect(verifyPreviewToken(proto, SECRET, NOW)).toEqual({ ok: false, reason: "malformed" });
+    expect(verifyPreviewToken(doc, SECRET, NOW)).toEqual({ ok: false, reason: "malformed" });
+  });
+  it("rejects a MAC computed without the domain prefix", () => {
+    const payload = `p1.${Buffer.from(EID).toString("base64url")}.${NOW / 1000 + 100}`;
+    const bare = createHmac("sha256", SECRET).update(payload).digest("base64url");
+    expect(verifyPreviewToken(`${payload}.${bare}`, SECRET, NOW)).toEqual({ ok: false, reason: "bad_signature" });
+  });
+  it("rejects malformed input and refuses to sign bad input", () => {
+    for (const bad of ["", "p1", "p1.a.b", "p2.a.1.c", "x".repeat(600), "p1..1.c"]) expect(verifyPreviewToken(bad, SECRET, NOW).ok).toBe(false);
+    expect(() => signPreviewToken("not-a-uuid", SECRET, NOW)).toThrow();
+    expect(() => signPreviewToken(EID, "", NOW)).toThrow();
+    expect(() => signPreviewToken(EID, SECRET, NOW, 0)).toThrow();
+    expect(() => signPreviewToken(EID, SECRET, NOW, PREVIEW_TOKEN_TTL_SEC + 1)).toThrow();
   });
 });

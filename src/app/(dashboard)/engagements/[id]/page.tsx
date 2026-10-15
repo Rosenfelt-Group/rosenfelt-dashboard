@@ -5,9 +5,11 @@ import { formatDistanceToNow } from "date-fns";
 import { fetchJson } from "@/lib/rooms/fetch-json";
 import { WelcomeEditor } from "./WelcomeEditor";
 import { DocumentUpload } from "./DocumentUpload";
+import { canPreviewDoc } from "@/lib/rooms/doc-limits";
 import { formatVersionDate, formatRelativeTitle } from "@/lib/rooms/format";
+import { minutesSince, type Build } from "@/lib/rooms/builds";
 
-type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string; source: string; manifest: { filename?: string; size?: number } | null };
+type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string; source: string; manifest: { filename?: string; size?: number; ext?: string } | null };
 type Deliverable = { id: string; title: string; kind: string; welcome_message: string | null; versions: Version[] };
 type Access = { id: string; label: string | null; expires_at: string; revoked_at: string | null; last_used_at: string | null };
 type ActivityEvent = { id: number; type: string; created_at: string; contact: { name: string; email: string } | null; version: { deliverable_title: string; version_no: number } | null; deliverable_title: string | null };
@@ -27,6 +29,7 @@ export default function EngagementPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmRefresh, setConfirmRefresh] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [docPreview, setDocPreview] = useState<{ versionId: string; url: string } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const [brief, setBrief] = useState("");
@@ -34,6 +37,8 @@ export default function EngagementPage() {
   const [delivId, setDelivId] = useState("");
   const [label, setLabel] = useState("");
 
+  const [builds, setBuilds] = useState<Build[]>([]);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -65,6 +70,21 @@ export default function EngagementPage() {
     if (tab === "activity" && !activity && !activityErr) loadActivity();
   }, [tab, activity, activityErr, loadActivity]);
 
+  const loadBuilds = useCallback(async () => {
+    const r = await fetchJson<{ builds: Build[] }>(`/api/engagements/${id}/builds`);
+    if (r.ok) setBuilds(Array.isArray(r.data.builds) ? r.data.builds : []);
+  }, [id]);
+  useEffect(() => { void loadBuilds(); }, [loadBuilds]);
+
+  // While a build is open, poll so a returned version shows up without a manual refresh.
+  useEffect(() => {
+    if (builds.length === 0) return;
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") { void load(); void loadBuilds(); setUpdatedAt(new Date()); }
+    }, 15_000);
+    return () => clearInterval(t);
+  }, [builds.length, load, loadBuilds]);
+
   const describeEvent = (e: ActivityEvent): string => {
     if (e.type === "room_opened") return "Someone opened the room";
     if (e.type === "contact_identified") return `${e.contact?.name ?? "A visitor"} introduced themselves`;
@@ -86,6 +106,12 @@ export default function EngagementPage() {
     try { await fn(); } finally { inFlight.current = false; setPending(null); }
   }
 
+  // load() reloads the deliverables and the access list together.
+  const refreshAll = () => guarded("refresh-all", async () => {
+    await Promise.all([load(), loadBuilds(), loadActivity()]);
+    setUpdatedAt(new Date());
+  });
+
   const requestPrototype = () => guarded("proto", async () => {
     const r = await fetchJson<{ work_item_id: string; dispatched: boolean; dispatch_error?: string }>(`/api/engagements/${id}/prototype-request`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -105,9 +131,30 @@ export default function EngagementPage() {
 
   const preview = (versionId: string) => guarded("preview", async () => {
     const r = await fetchJson<{ url: string }>(`/api/versions/${versionId}/preview`);
-    if (r.ok) setPreviewUrl(r.data.url);
+    if (r.ok) { setDocPreview(null); setPreviewUrl(r.data.url); }
     else { setPreviewUrl(null); setMsg(r.error); }
   });
+
+  const docPreviewOpen = (versionId: string) => guarded("docpreview", async () => {
+    const r = await fetchJson<{ url: string }>(`/api/versions/${versionId}/doc-preview`);
+    if (r.ok) { setPreviewUrl(null); setDocPreview({ versionId, url: r.data.url }); }
+    else setMsg(r.error);
+  });
+
+  // window.open must run synchronously inside the click, or the browser blocks it as a pop-up.
+  const openRoomPreview = () => {
+    if (inFlight.current) return;
+    const w = window.open("", "_blank");
+    if (!w) { setMsg("Your browser blocked the new tab. Allow pop-ups for this site and try again."); return; }
+    w.opener = null;
+    void guarded("room-preview", async () => {
+      try {
+        const r = await fetchJson<{ url: string }>(`/api/engagements/${id}/room-preview`, { method: "POST" });
+        if (!r.ok) { w.close(); setMsg(r.error); return; }
+        w.location.href = r.data.url;
+      } catch (e) { w.close(); throw e; }
+    });
+  };
 
   const download = (versionId: string) => guarded("download", async () => {
     const r = await fetchJson<{ url: string }>(`/api/versions/${versionId}/download`);
@@ -120,6 +167,7 @@ export default function EngagementPage() {
     setConfirmDelete(null);
     if (!r.ok) { setMsg(r.error); return; }
     setPreviewUrl(null);
+    setDocPreview(null);
     setMsg(r.data.files_left > 0
       ? `Deleted “${title}”. ${r.data.files_left} file(s) could not be removed from storage; they are no longer reachable from any room.`
       : `Deleted “${title}”.`);
@@ -173,7 +221,14 @@ export default function EngagementPage() {
 
   return (
     <div className="p-6 max-w-5xl">
-      <h1 className="text-lg font-semibold text-brand-black">{engagement.title}</h1>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h1 className="text-lg font-semibold text-brand-black">{engagement.title}</h1>
+        <div className="flex items-center gap-2 flex-wrap">
+          {updatedAt && <span className="text-xs text-brand-muted">Updated {updatedAt.toLocaleTimeString()}</span>}
+          <button disabled={!!pending} onClick={refreshAll} className="px-3 py-1.5 text-sm rounded border border-brand-border disabled:opacity-50">Refresh</button>
+          <button disabled={!!pending} onClick={openRoomPreview} className="px-3 py-1.5 text-sm rounded border border-brand-border disabled:opacity-50">Preview room</button>
+        </div>
+      </div>
       <p className="text-sm text-brand-muted mb-4">{business?.name} · {engagement.relationship} · {engagement.status}</p>
 
       <div className="flex gap-4 border-b border-brand-border mb-4">
@@ -228,6 +283,22 @@ export default function EngagementPage() {
               )}
               <WelcomeEditor key={`${d.id}:${d.welcome_message ?? ""}`} deliverableId={d.id} initial={d.welcome_message}
                 onSaved={(m) => { setMsg(m); void load(); }} />
+              {d.kind === "prototype" && builds.filter(b => b.deliverable_id === d.id).map(b => (
+                <div key={b.work_item_id} role="status" className="mb-2 border border-blue-200 bg-blue-50 rounded p-2 text-sm">
+                  <p>
+                    <strong>{b.agent ? b.agent.charAt(0).toUpperCase() + b.agent.slice(1) : "The agent"} is working on a new version</strong>
+                    {" · "}requested {formatVersionDate(b.requested_at)}{" · "}{b.status.replace(/_/g, " ")}
+                    {b.ref !== null && <>{" · "}<a href={`/work/${b.ref}`} className="underline">work item #{b.ref}</a></>}
+                  </p>
+                  {b.stalled && (
+                    <p className="text-amber-700">No update for {minutesSince(b.last_activity_at, Date.now())} minutes. The agent may be stuck; open the work item to check.</p>
+                  )}
+                  {b.logs.length === 0
+                    ? <p className="text-xs text-brand-muted">No progress notes yet.</p>
+                    : <ul className="mt-1 space-y-0.5 text-xs">{b.logs.map((l, i) => (
+                        <li key={i}><span className="text-brand-muted">{formatVersionDate(l.at)}</span> · {l.message}</li>))}</ul>}
+                </div>
+              ))}
               {d.versions.length === 0 ? <p className="text-sm text-brand-muted">No versions yet.</p> : (
                 <ul className="divide-y divide-brand-border border border-brand-border rounded">
                   {d.versions.map(v => (
@@ -240,9 +311,14 @@ export default function EngagementPage() {
                           {v.status === "draft" && (
                             <button disabled={!!pending} onClick={() => setConfirmShare(v.id)} className="text-brand-orange disabled:opacity-50">Share with room</button>
                           )}
-                          {v.source === "upload"
-                            ? <button disabled={!!pending} onClick={() => download(v.id)} className="text-brand-orange disabled:opacity-50">Download</button>
-                            : <button disabled={!!pending} onClick={() => preview(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>}
+                          {v.source === "upload" ? (
+                            <>
+                              {canPreviewDoc(v.manifest?.ext) && (
+                                <button disabled={!!pending} onClick={() => docPreviewOpen(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>
+                              )}
+                              <button disabled={!!pending} onClick={() => download(v.id)} className="text-brand-orange disabled:opacity-50">Download</button>
+                            </>
+                          ) : <button disabled={!!pending} onClick={() => preview(v.id)} className="text-brand-orange disabled:opacity-50">Preview</button>}
                         </span>
                       </div>
                       {confirmShare === v.id && (
@@ -265,6 +341,20 @@ export default function EngagementPage() {
                 Prototype preview — untrusted content. Do not enter real passwords or personal data.
               </p>
               <iframe src={previewUrl} sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" title="Prototype preview"
+                className="w-full h-[calc(100dvh-8rem)] min-h-[480px] border border-brand-border rounded" />
+            </>
+          )}
+
+          {docPreview && (
+            <>
+              <div className="flex flex-wrap items-center gap-3 mb-1">
+                <p className="text-xs text-brand-muted">Document preview. The link lasts about two minutes; use Reload if it stops loading.</p>
+                <button disabled={!!pending} onClick={() => docPreviewOpen(docPreview.versionId)} className="text-xs text-brand-orange disabled:opacity-50">Reload preview</button>
+                <button onClick={() => setDocPreview(null)} className="text-xs text-brand-muted">Close</button>
+              </div>
+              {/* No sandbox attribute: it would disable the browser's PDF viewer. The frame is a separate,
+                  cookie-less origin that only this site may embed. */}
+              <iframe src={docPreview.url} referrerPolicy="no-referrer" title="Document preview"
                 className="w-full h-[calc(100dvh-8rem)] min-h-[480px] border border-brand-border rounded" />
             </>
           )}

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
-import { generateToken, hashToken, isPlausibleToken, roomLink } from "./token";
+import { generateToken, hashToken, isPlausibleToken, roomLink, previewRoomLink } from "./token";
 
 describe("token", () => {
   beforeEach(() => { delete process.env.NEXT_PUBLIC_PORTAL_URL; });
@@ -32,5 +32,14 @@ describe("token", () => {
 
   it("defaults to portal.rosably.com", () => {
     expect(roomLink("abc")).toBe("https://portal.rosably.com/r/abc");
+  });
+});
+
+describe("previewRoomLink", () => {
+  it("uses the portal base and strips a trailing slash", () => {
+    process.env.NEXT_PUBLIC_PORTAL_URL = "https://portal.example.com/";
+    expect(previewRoomLink("p1.abc.1.sig")).toBe("https://portal.example.com/preview/p1.abc.1.sig");
+    delete process.env.NEXT_PUBLIC_PORTAL_URL;
+    expect(previewRoomLink("t")).toBe("https://portal.rosably.com/preview/t");
   });
 });

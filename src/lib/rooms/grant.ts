@@ -125,3 +125,51 @@ export function verifyDocGrant(grant: string, secret: string, nowMs: number = Da
   if (!DOC_PATH_RE.test(path) || !isSafeDocFilename(filename)) return { ok: false, reason: "malformed" };
   return { ok: true, path, filename, exp };
 }
+
+// ---- Preview-room tokens ----
+// Shape: "p1" . base64url(engagement id) . expiry . MAC (4 parts), MAC over a domain-prefixed string.
+// A prototype grant (3 parts) and a document grant (5 parts, "d1") can never verify as a preview
+// token, and a preview token can never verify as either of them.
+export const PREVIEW_TOKEN_TTL_SEC = 300;
+const PREVIEW_MAC_DOMAIN = "rooms-preview-v1\n";
+const UUID_RE = new RegExp(`^${UUID}$`);
+
+export type PreviewTokenResult =
+  | { ok: true; eid: string; exp: number }
+  | { ok: false; reason: "malformed" | "bad_signature" | "expired" };
+
+export function signPreviewToken(
+  eid: string,
+  secret: string,
+  nowMs: number = Date.now(),
+  ttlSec: number = PREVIEW_TOKEN_TTL_SEC,
+): string {
+  if (!UUID_RE.test(eid)) throw new Error("invalid engagement id");
+  if (!secret) throw new Error("grant secret missing");
+  if (!Number.isFinite(nowMs)) throw new Error("invalid nowMs");
+  if (!Number.isInteger(ttlSec) || ttlSec < 1 || ttlSec > PREVIEW_TOKEN_TTL_SEC) throw new Error("invalid ttlSec");
+  const exp = Math.floor(nowMs / 1000) + ttlSec;
+  const payload = `p1.${b64(eid)}.${exp}`;
+  return `${payload}.${mac(secret, PREVIEW_MAC_DOMAIN + payload)}`;
+}
+
+export function verifyPreviewToken(token: string, secret: string, nowMs: number = Date.now()): PreviewTokenResult {
+  if (typeof token !== "string" || token.length === 0 || token.length > 512) return { ok: false, reason: "malformed" };
+  if (typeof secret !== "string" || secret.length === 0) return { ok: false, reason: "malformed" };
+  if (!Number.isFinite(nowMs)) return { ok: false, reason: "malformed" };
+  const parts = token.split(".");
+  if (parts.length !== 4 || parts[0] !== "p1") return { ok: false, reason: "malformed" };
+  const [, p, expStr, sig] = parts;
+  if (!p || !sig || !/^\d{1,12}$/.test(expStr)) return { ok: false, reason: "malformed" };
+
+  const a = Buffer.from(sig);
+  const b = Buffer.from(mac(secret, `${PREVIEW_MAC_DOMAIN}p1.${p}.${expStr}`));
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return { ok: false, reason: "bad_signature" };
+
+  const exp = Number(expStr);
+  if (exp * 1000 <= nowMs) return { ok: false, reason: "expired" };
+
+  const eid = unb64(p);
+  if (!UUID_RE.test(eid)) return { ok: false, reason: "malformed" };
+  return { ok: true, eid, exp };
+}

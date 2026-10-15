@@ -17,3 +17,8 @@ export function roomLink(raw: string): string {
   const base = (process.env.NEXT_PUBLIC_PORTAL_URL ?? "https://portal.rosably.com").replace(/\/$/, "");
   return `${base}/r/${raw}`;
 }
+
+export function previewRoomLink(token: string): string {
+  const base = (process.env.NEXT_PUBLIC_PORTAL_URL ?? "https://portal.rosably.com").replace(/\/$/, "");
+  return `${base}/preview/${token}`;
+}
