@@ -7,9 +7,10 @@ import { PROJECT_TYPES } from "@/lib/discovery";
 import { allFields, customKey, estimateMinutes, questionToField, SnapshotSchema } from "@/lib/discovery/snapshot";
 import { addFields, uniqueSectionId, updateField } from "@/lib/discovery/editing";
 import { CopyButton } from "@/components/crm/CopyButton";
-import { inviteEmail } from "@/components/crm/NewDiscoveryModal";
+import { inviteEmail } from "@/lib/discovery/invite-email";
 import { BankPicker } from "./BankPicker";
 import { QuestionnaireOutline } from "./QuestionnaireOutline";
+import { RecipientFields, useEmailConfigured } from "./EmailInvite";
 import { EMPTY_QUESTION, INPUT, LABEL, Modal, QuestionDraft, QuestionForm } from "./QuestionForm";
 
 type Detail = DiscoveryInvite & { link: string };
@@ -51,7 +52,9 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
   const [editing, setEditing] = useState<DiscoveryFieldDef | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [sent, setSent] = useState<{ link: string; email: string } | null>(null);
+  const [sent, setSent] = useState<{ link: string; email: string; emailed?: { ok: boolean; text: string } } | null>(null);
+  const emailConfigured = useEmailConfigured();
+  const [recipient, setRecipient] = useState({ to: invite.contact?.email ?? "", firstName: invite.contact?.first_name ?? "" });
 
   useEffect(() => {
     fetch("/api/crm/discovery/templates").then(r => r.json()).then(d => setTemplates(Array.isArray(d) ? d : []));
@@ -108,17 +111,25 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
     if (w) { w.opener = null; w.location.href = `${invite.link}&preview=1`; }
   }
 
-  async function send() {
-    if (!confirm("Send this questionnaire? Its questions are frozen once sent.")) return;
+  async function send(withEmail: boolean) {
+    const to = recipient.to.trim();
+    if (withEmail && !to) { setError("Enter the recipient's email"); return; }
+    const prompt = withEmail ? `Send this questionnaire and email it to ${to}?` : "Send this questionnaire?";
+    if (!confirm(`${prompt} Its questions are frozen once sent.`)) return;
     if (dirty && !(await save("send"))) return;
-    setBusy("send"); setError("");
-    const res = await fetch(`/api/crm/discovery/${invite.id}/send`, { method: "POST" });
+    setBusy(withEmail ? "send-email" : "send"); setError("");
+    const firstName = recipient.firstName.trim() || undefined;
+    const res = await fetch(`/api/crm/discovery/${invite.id}/send`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify(withEmail ? { email: { to, firstName } } : {}),
+    });
     const data = await res.json().catch(() => ({}));
     setBusy("");
     if (!res.ok) { setError(data.error ?? "Could not send"); return; }
     setSent({
       link: data.link,
-      email: inviteEmail({ firstName: contactFirst, orgName: invite.business?.name, projectTitle: project.title, link: data.link, minutes }),
+      email: inviteEmail({ firstName: withEmail ? firstName : contactFirst, orgName: invite.business?.name, projectTitle: project.title, link: data.link, minutes }),
+      emailed: data.email ? (data.email.sent ? { ok: true, text: `Emailed to ${to}.` } : { ok: false, text: `Sent, but the email failed: ${data.email.error}` }) : undefined,
     });
   }
 
@@ -176,7 +187,12 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
     return (
       <div className="card space-y-4">
         <h2 className="text-base font-semibold text-brand-black">Questionnaire sent</h2>
-        <p className="text-sm text-brand-muted">The questions are frozen. Send the link to {contactFirst || "the contact"}:</p>
+        {sent.emailed && (
+          <p className={clsx("text-sm", sent.emailed.ok ? "text-green-700" : "text-amber-700")}>{sent.emailed.text}</p>
+        )}
+        <p className="text-sm text-brand-muted">
+          The questions are frozen. {sent.emailed?.ok ? "The link, if you need it again:" : `Send the link to ${contactFirst || "the contact"}:`}
+        </p>
         <div className="flex gap-2">
           <input readOnly className={clsx(INPUT, "bg-brand-offwhite")} value={sent.link} onFocus={e => e.target.select()} />
           <CopyButton text={sent.link} />
@@ -246,14 +262,33 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
         onEditField={setEditing}
       />
 
+      {emailConfigured && (
+        <div className="card mt-6 space-y-2">
+          <h2 className="text-sm font-semibold text-brand-black">Email the invite</h2>
+          <p className="text-xs text-brand-muted">Sent from brian@rosably.com with the same text as the copied invite email.</p>
+          <RecipientFields to={recipient.to} firstName={recipient.firstName} onChange={setRecipient} />
+        </div>
+      )}
+
       <div className="sticky bottom-0 md:bottom-4 mt-6 card flex items-center gap-2 flex-wrap shadow-lg">
         <button onClick={() => save()} disabled={!dirty || !!busy || !project.title.trim()} className="btn-ghost text-sm disabled:opacity-50">
           {busy === "save" ? "Saving…" : "Save draft"}
         </button>
         <button onClick={preview} disabled={!!busy} className="btn-ghost text-sm">{busy === "preview" ? "Saving…" : "Preview ↗"}</button>
-        <button onClick={send} disabled={!!busy || !keys.size || !project.title.trim()} className="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed">
-          {busy === "send" ? "Sending…" : "Send"}
-        </button>
+        {emailConfigured ? (
+          <>
+            <button onClick={() => send(true)} disabled={!!busy || !keys.size || !project.title.trim() || !recipient.to.trim()} className="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+              {busy === "send-email" ? "Sending…" : "Send & email"}
+            </button>
+            <button onClick={() => send(false)} disabled={!!busy || !keys.size || !project.title.trim()} className="btn-ghost text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+              {busy === "send" ? "Sending…" : "Send (copy link only)"}
+            </button>
+          </>
+        ) : (
+          <button onClick={() => send(false)} disabled={!!busy || !keys.size || !project.title.trim()} className="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+            {busy === "send" ? "Sending…" : "Send"}
+          </button>
+        )}
         {dirty && <span className="text-xs text-amber-700">Unsaved changes</span>}
         {error && <span className="text-xs text-red-600">{error}</span>}
         <button onClick={remove} disabled={!!busy} className="btn-ghost text-xs px-3 py-1.5 ml-auto text-red-600">Delete draft</button>

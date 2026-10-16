@@ -6,13 +6,14 @@ import clsx from "clsx";
 import { format, formatDistanceToNow } from "date-fns";
 import { CRMNav } from "@/components/CRMNav";
 import { CopyButton } from "@/components/crm/CopyButton";
-import { inviteEmail } from "@/components/crm/NewDiscoveryModal";
+import { inviteEmail } from "@/lib/discovery/invite-email";
 import { SamMarkdown } from "@/components/SamMarkdown";
 import { DiscoveryInvite, DiscoveryFieldDef } from "@/types";
 import { PROJECT_TYPES, STATUS_META, isEmptyAnswer, isFieldVisible } from "@/lib/discovery";
 import { estimateMinutes, resolveSnapshot, visibleSections } from "@/lib/discovery/snapshot";
 import { DraftEditor } from "@/components/crm/discovery/DraftEditor";
 import { QuestionnaireOutline } from "@/components/crm/discovery/QuestionnaireOutline";
+import { ResendInviteEmail } from "@/components/crm/discovery/EmailInvite";
 
 type Detail = DiscoveryInvite & { link: string };
 type Tab = "brief" | "answers" | "questions" | "project";
@@ -208,6 +209,9 @@ export default function DiscoveryDetailPage() {
               <button onClick={() => patch({ extend_days: 30 }, "extend")} disabled={!!busy} className="btn-ghost text-xs px-3 py-1.5">
                 {busy === "extend" ? "…" : `Extend 30 days (expires ${format(new Date(d.expires_at), "MMM d")})`}
               </button>
+              {!expired && ["sent", "opened", "in_progress"].includes(d.status) && (
+                <ResendInviteEmail inviteId={d.id} defaultTo={d.contact?.email} defaultFirstName={d.contact?.first_name} />
+              )}
             </>
           )}
           {d.status === "submitted" && (

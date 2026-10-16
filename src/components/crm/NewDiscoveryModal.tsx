@@ -13,19 +13,6 @@ interface Props {
 const INPUT = "w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange";
 const LABEL = "text-xs text-brand-muted mb-1 block";
 
-export function inviteEmail(opts: { firstName?: string; orgName?: string; projectTitle: string; link: string; minutes?: number }) {
-  return `Hi ${opts.firstName || "there"},
-
-Thanks again for the chance to help${opts.orgName ? ` ${opts.orgName}` : ""} with "${opts.projectTitle}". Before our first call, could you fill out this short questionnaire? It covers the tools you use today, who's involved, and what you've already tried, so we can spend the call on solutions instead of background.
-
-${opts.link}
-
-It takes about ${opts.minutes ?? 15} minutes and saves as you go, so you can stop and come back with the same link.
-
-Thanks,
-Brian`;
-}
-
 // Creates a draft and opens it in the editor, where it's customized, previewed and sent.
 export function NewDiscoveryModal({ initialLeadId, onClose }: Props) {
   const router = useRouter();
