@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { discoveryLink } from "@/lib/discovery";
+import { defaultTemplateId, snapshotFromTemplate } from "@/lib/discovery/server";
 
 const LIST_SELECT =
-  "id, token, lead_id, project_title, project_type, engagement_type, status, sent_at, opened_at, last_saved_at, submitted_at, expires_at, created_at," +
+  "id, token, lead_id, project_title, project_type, engagement_type, template_id, status, sent_at, opened_at, last_saved_at, submitted_at, expires_at, created_at," +
   " business:businesses(id, name), contact:contacts(id, first_name, last_name, email), briefs:discovery_briefs(id, status, created_at)";
 
 // GET /api/crm/discovery[?lead_id=…]
@@ -33,9 +34,11 @@ const CreateSchema = z.object({
   project_type: z.enum(["content_social", "operations", "fundraising", "data_reporting", "other"]),
   engagement_type: z.enum(["pro_bono", "paid"]).default("pro_bono"),
   expires_days: z.number().int().min(7).max(180).default(60),
+  template_id: z.string().uuid().optional(),
 }).refine(b => b.lead_id || (b.org && b.contact), { message: "Pick an existing lead or enter an organization and contact." });
 
-// POST /api/crm/discovery — create an invite, creating business/contact/lead first if needed.
+// POST /api/crm/discovery — create a draft invite from a template, creating
+// business/contact/lead first if needed. Nothing reaches the prospect until Send.
 export async function POST(req: NextRequest) {
   const parsed = CreateSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
@@ -43,6 +46,12 @@ export async function POST(req: NextRequest) {
   }
   const b = parsed.data;
   const crm = supabaseAdmin.schema("crm");
+
+  // Resolve the template before creating any CRM rows, so a bad template id leaves nothing behind.
+  const templateId = b.template_id ?? await defaultTemplateId();
+  if (!templateId) return NextResponse.json({ error: "No questionnaire template available" }, { status: 400 });
+  const snapshot = await snapshotFromTemplate(templateId, b.project_type).catch(() => null);
+  if (!snapshot) return NextResponse.json({ error: "Template not found" }, { status: 400 });
 
   let leadId = b.lead_id;
   let businessId: string | undefined;
@@ -81,6 +90,10 @@ export async function POST(req: NextRequest) {
     project_brief: b.project_brief || null,
     project_type: b.project_type,
     engagement_type: b.engagement_type,
+    status: "draft",
+    sent_at: null,
+    template_id: templateId,
+    questionnaire_snapshot: snapshot,
     expires_at: new Date(Date.now() + b.expires_days * 86_400_000).toISOString(),
     created_by: "brian",
   }).select("id, token, lead_id").single();
@@ -90,7 +103,7 @@ export async function POST(req: NextRequest) {
     lead_id: leadId,
     activity_type: "system",
     logged_by: "brian",
-    content: `Discovery questionnaire created: ${b.project_title}`,
+    content: `Discovery questionnaire drafted: ${b.project_title}`,
     metadata: { discovery_invite_id: invite.id },
   });
 

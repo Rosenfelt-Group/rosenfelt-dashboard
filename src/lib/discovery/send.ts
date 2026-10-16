@@ -17,6 +17,7 @@ const DAY = 86_400_000;
  * (e.g. emailing the prospect) belong here, after the freeze succeeds.
  */
 export async function finalizeSend(inviteId: string): Promise<SendResult> {
+  if (!/^[0-9a-f-]{36}$/i.test(inviteId)) return { ok: false, status: 404, error: "Not found" };
   const crm = supabaseAdmin.schema("crm");
   const { data: invite, error: le } = await crm.from("discovery_invites")
     .select("id, token, lead_id, status, project_title, questionnaire_snapshot, created_at, expires_at")
