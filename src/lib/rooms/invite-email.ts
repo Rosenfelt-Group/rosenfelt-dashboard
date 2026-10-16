@@ -1,5 +1,5 @@
-// Plain-text invite email for a room link, for Brian to paste into his own mail client.
-// The app sends no email (a v1 non-goal); this is the "draft to send".
+// Plain-text invite email for a room link. Brian can copy it into his own mail client, or the
+// access email route sends it via Gmail (src/lib/email/gmail.ts).
 export const DEFAULT_LINK_DAYS = 60;
 
 export type RoomInviteEmail = { subject: string; body: string };
