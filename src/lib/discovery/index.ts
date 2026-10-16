@@ -16,6 +16,7 @@ export const PROJECT_TYPES: { value: DiscoveryProjectType; label: string }[] = [
 ];
 
 export const STATUS_META: Record<DiscoveryStatus, { label: string; color: string }> = {
+  draft:       { label: "Draft",       color: "bg-purple-50 text-purple-700" },
   sent:        { label: "Sent",        color: "bg-gray-100 text-gray-600" },
   opened:      { label: "Opened",      color: "bg-blue-50 text-blue-700" },
   in_progress: { label: "In progress", color: "bg-amber-50 text-amber-700" },

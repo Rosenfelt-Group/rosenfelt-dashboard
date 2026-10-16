@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { discoveryLink } from "@/lib/discovery";
+import { snapshotFromTemplate } from "@/lib/discovery/server";
+import { SnapshotSchema } from "@/lib/discovery/snapshot";
+import { DiscoveryProjectType } from "@/types";
 
 const DETAIL_SELECT =
   "*, business:businesses(id, name, website), contact:contacts(id, first_name, last_name, email)," +
@@ -31,6 +34,9 @@ const PatchSchema = z.object({
   archived: z.boolean().optional(),
   extend_days: z.number().int().min(1).max(180).optional(),
   reopen: z.boolean().optional(),
+  // Draft only: the edited questionnaire, or a template to rebuild it from.
+  questionnaire_snapshot: z.unknown().optional(),
+  rebuild_from_template: z.string().uuid().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
@@ -40,10 +46,29 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const b = parsed.data;
   const crm = supabaseAdmin.schema("crm");
 
-  const { data: current } = await crm.from("discovery_invites").select("status, submitted_at, opened_at").eq("id", id).maybeSingle();
+  const { data: current } = await crm.from("discovery_invites").select("status, submitted_at, opened_at, project_type").eq("id", id).maybeSingle();
   if (!current) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const draft = current.status === "draft";
 
   const update: Record<string, unknown> = {};
+  if (b.questionnaire_snapshot !== undefined || b.rebuild_from_template) {
+    if (!draft) return NextResponse.json({ error: "This questionnaire has been sent and can no longer be edited" }, { status: 409 });
+  }
+  if (b.questionnaire_snapshot !== undefined) {
+    const snap = SnapshotSchema.safeParse(b.questionnaire_snapshot);
+    if (!snap.success) return NextResponse.json({ error: snap.error.issues[0]?.message ?? "Invalid questionnaire" }, { status: 400 });
+    update.questionnaire_snapshot = snap.data;
+  }
+  if (b.rebuild_from_template) {
+    const pt = (b.project_type ?? current.project_type) as DiscoveryProjectType;
+    const snap = await snapshotFromTemplate(b.rebuild_from_template, pt).catch(() => null);
+    if (!snap) return NextResponse.json({ error: "Template not found" }, { status: 400 });
+    update.questionnaire_snapshot = snap;
+    update.template_id = b.rebuild_from_template;
+  }
+  if (draft && (b.archived !== undefined || b.reopen)) {
+    return NextResponse.json({ error: "Drafts can't be archived or reopened — delete the draft instead" }, { status: 409 });
+  }
   if (b.project_title !== undefined) update.project_title = b.project_title;
   if (b.project_brief !== undefined) update.project_brief = b.project_brief;
   if (b.project_type !== undefined) {
@@ -59,4 +84,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const { error } = await crm.from("discovery_invites").update(update).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return GET(req, { params });
+}
+
+// DELETE /api/crm/discovery/:id — drafts only; sent questionnaires are archived instead.
+export async function DELETE(_: NextRequest, { params }: Ctx) {
+  const { id } = await params;
+  const { data, error } = await supabaseAdmin.schema("crm").from("discovery_invites")
+    .delete().eq("id", id).eq("status", "draft").select("id");
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data?.length) return NextResponse.json({ error: "Only drafts can be deleted" }, { status: 409 });
+  return NextResponse.json({ ok: true });
 }

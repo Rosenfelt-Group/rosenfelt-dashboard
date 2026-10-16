@@ -7,6 +7,7 @@ import { formatDistanceToNow } from "date-fns";
 import { CRMNav } from "@/components/CRMNav";
 import { NewDiscoveryModal } from "@/components/crm/NewDiscoveryModal";
 import { CopyButton } from "@/components/crm/CopyButton";
+import { DiscoveryNav } from "@/components/crm/discovery/DiscoveryNav";
 import { DiscoveryInvite, DiscoveryStatus } from "@/types";
 import { PROJECT_TYPES, STATUS_META } from "@/lib/discovery";
 
@@ -14,6 +15,7 @@ type Row = DiscoveryInvite & { link: string };
 
 const FILTERS: { value: DiscoveryStatus | "active" | ""; label: string }[] = [
   { value: "active", label: "Active" },
+  { value: "draft", label: "Drafts" },
   { value: "submitted", label: "Submitted" },
   { value: "archived", label: "Archived" },
   { value: "", label: "All" },
@@ -43,6 +45,7 @@ function DiscoveryList() {
   const visible = rows.filter(r =>
     filter === "" ? true : filter === "active" ? r.status !== "archived" && r.status !== "submitted" : r.status === filter);
   const counts = {
+    drafts: rows.filter(r => r.status === "draft").length,
     waiting: rows.filter(r => ["sent", "opened", "in_progress"].includes(r.status)).length,
     submitted: rows.filter(r => r.status === "submitted").length,
   };
@@ -53,15 +56,16 @@ function DiscoveryList() {
       <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
         <div>
           <h1 className="text-lg font-semibold text-brand-black">Discovery</h1>
-          <p className="text-sm text-brand-muted">Pre-call questionnaires · {counts.waiting} waiting · {counts.submitted} submitted</p>
+          <p className="text-sm text-brand-muted">Pre-call questionnaires · {counts.drafts ? `${counts.drafts} draft${counts.drafts === 1 ? "" : "s"} · ` : ""}{counts.waiting} waiting · {counts.submitted} submitted</p>
         </div>
         <button onClick={() => setShowNew(true)} className="btn-primary text-sm">+ New discovery</button>
       </div>
+      <DiscoveryNav />
 
       <div className="flex gap-2 mb-4 flex-wrap">
         {FILTERS.map(f => (
           <button key={f.label} onClick={() => setFilter(f.value)}
-            className={clsx("badge cursor-pointer", filter === f.value ? "bg-brand-black text-white" : "badge-neutral")}>
+            className={clsx("text-xs px-2 py-1 rounded-md cursor-pointer", filter === f.value ? "bg-brand-offwhite text-brand-black font-medium" : "text-brand-muted hover:text-brand-black")}>
             {f.label}
           </button>
         ))}
@@ -78,7 +82,7 @@ function DiscoveryList() {
           {visible.map(r => {
             const st = STATUS_META[r.status];
             const type = PROJECT_TYPES.find(t => t.value === r.project_type)?.label;
-            const last = r.submitted_at ?? r.last_saved_at ?? r.opened_at ?? r.sent_at;
+            const last = r.submitted_at ?? r.last_saved_at ?? r.opened_at ?? r.sent_at ?? r.created_at;
             return (
               <div key={r.id} className="flex items-center gap-3 px-4 py-3 border-b border-brand-border last:border-b-0 hover:bg-brand-offwhite">
                 <Link href={`/crm/discovery/${r.id}`} className="flex-1 min-w-0">
@@ -92,7 +96,9 @@ function DiscoveryList() {
                 <span className="hidden sm:block text-xs text-brand-muted w-28 text-right">
                   {formatDistanceToNow(new Date(last), { addSuffix: true })}
                 </span>
-                {r.status !== "submitted" && r.status !== "archived" && <CopyButton text={r.link} label="Copy link" />}
+                {r.status === "draft"
+                  ? <Link href={`/crm/discovery/${r.id}`} className="btn-ghost text-xs px-3 py-1.5">Edit &amp; send</Link>
+                  : r.status !== "submitted" && r.status !== "archived" && <CopyButton text={r.link} label="Copy link" />}
               </div>
             );
           })}
@@ -103,7 +109,6 @@ function DiscoveryList() {
         <NewDiscoveryModal
           initialLeadId={params.get("lead_id") ?? undefined}
           onClose={() => setShowNew(false)}
-          onCreated={load}
         />
       )}
     </div>

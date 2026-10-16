@@ -320,7 +320,7 @@ function BusinessDetail() {
             <p className="text-xs text-brand-muted p-4">No discovery questionnaires for this business yet.</p>
           ) : invites.map(r => {
             const st = STATUS_META[r.status];
-            const last = r.submitted_at ?? r.last_saved_at ?? r.opened_at ?? r.sent_at;
+            const last = r.submitted_at ?? r.last_saved_at ?? r.opened_at ?? r.sent_at ?? r.created_at;
             return (
               <Link key={r.id} href={`/crm/discovery/${r.id}`} className="flex items-center gap-3 px-4 py-3 border-b border-brand-border last:border-b-0 hover:bg-brand-offwhite">
                 <div className="flex-1 min-w-0">

@@ -1,34 +1,24 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { CRMLead, DiscoveryProjectType } from "@/types";
+import { CRMLead, DiscoveryProjectType, DiscoveryTemplate } from "@/types";
 import { PROJECT_TYPES } from "@/lib/discovery";
-import { CopyButton } from "@/components/crm/CopyButton";
 
 interface Props {
   initialLeadId?: string;
   onClose: () => void;
-  onCreated: () => void;
 }
 
 const INPUT = "w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange";
 const LABEL = "text-xs text-brand-muted mb-1 block";
 
-export function inviteEmail(opts: { firstName?: string; orgName?: string; projectTitle: string; link: string }) {
-  return `Hi ${opts.firstName || "there"},
-
-Thanks again for the chance to help${opts.orgName ? ` ${opts.orgName}` : ""} with "${opts.projectTitle}". Before our first call, could you fill out this short questionnaire? It covers the tools you use today, who's involved, and what you've already tried, so we can spend the call on solutions instead of background.
-
-${opts.link}
-
-It takes about 15 minutes and saves as you go, so you can stop and come back with the same link.
-
-Thanks,
-Brian`;
-}
-
-export function NewDiscoveryModal({ initialLeadId, onClose, onCreated }: Props) {
+// Creates a draft and opens it in the editor, where it's customized, previewed and sent.
+export function NewDiscoveryModal({ initialLeadId, onClose }: Props) {
+  const router = useRouter();
   const [leads, setLeads] = useState<CRMLead[]>([]);
+  const [templates, setTemplates] = useState<DiscoveryTemplate[]>([]);
+  const [templateId, setTemplateId] = useState("");
   const [mode, setMode] = useState<"existing" | "new">(initialLeadId ? "existing" : "new");
   const [leadId, setLeadId] = useState(initialLeadId ?? "");
   const [org, setOrg] = useState({ name: "", website: "" });
@@ -37,10 +27,14 @@ export function NewDiscoveryModal({ initialLeadId, onClose, onCreated }: Props) 
   const [engagement, setEngagement] = useState<"pro_bono" | "paid">("pro_bono");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [created, setCreated] = useState<{ link: string; email: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/crm/leads").then(r => r.json()).then(d => setLeads(Array.isArray(d) ? d : []));
+    fetch("/api/crm/discovery/templates").then(r => r.json()).then(d => {
+      const list: DiscoveryTemplate[] = Array.isArray(d) ? d : [];
+      setTemplates(list);
+      setTemplateId(id => id || (list.find(t => t.is_default) ?? list[0])?.id || "");
+    });
   }, []);
 
   const lead = leads.find(l => l.id === leadId);
@@ -55,6 +49,7 @@ export function NewDiscoveryModal({ initialLeadId, onClose, onCreated }: Props) 
       project_brief: project.brief || undefined,
       project_type: project.type,
       engagement_type: engagement,
+      template_id: templateId || undefined,
     };
     if (mode === "existing") body.lead_id = leadId;
     else {
@@ -63,47 +58,18 @@ export function NewDiscoveryModal({ initialLeadId, onClose, onCreated }: Props) 
     }
     const res = await fetch("/api/crm/discovery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const data = await res.json();
-    setSaving(false);
-    if (!res.ok) { setError(data.error ?? "Could not create"); return; }
-    setCreated({
-      link: data.link,
-      email: inviteEmail({
-        firstName: mode === "existing" ? lead?.contact?.first_name : contact.first_name,
-        orgName: mode === "existing" ? lead?.business?.name : org.name,
-        projectTitle: project.title,
-        link: data.link,
-      }),
-    });
-    onCreated();
+    if (!res.ok) { setSaving(false); setError(data.error ?? "Could not create"); return; }
+    router.push(`/crm/discovery/${data.id}`);
   }
 
   return (
     <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
       <div className="bg-white rounded-xl w-full max-w-lg p-6 shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-semibold text-brand-black">{created ? "Discovery link ready" : "New discovery"}</h2>
+          <h2 className="text-base font-semibold text-brand-black">New discovery</h2>
           <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg" aria-label="Close">✕</button>
         </div>
 
-        {created ? (
-          <div className="space-y-4">
-            <div>
-              <label className={LABEL}>Link</label>
-              <div className="flex gap-2">
-                <input readOnly className={clsx(INPUT, "bg-brand-offwhite")} value={created.link} onFocus={e => e.target.select()} />
-                <CopyButton text={created.link} />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs text-brand-muted">Invite email</label>
-                <CopyButton text={created.email} label="Copy email" />
-              </div>
-              <textarea readOnly className={clsx(INPUT, "h-56 bg-brand-offwhite")} value={created.email} />
-            </div>
-            <button onClick={onClose} className="btn-primary w-full">Done</button>
-          </div>
-        ) : (
           <div className="space-y-4">
             <div className="flex gap-1 p-1 bg-brand-offwhite rounded-lg">
               {(["new", "existing"] as const).map(m => (
@@ -171,6 +137,13 @@ export function NewDiscoveryModal({ initialLeadId, onClose, onCreated }: Props) 
                 <p className="text-xs text-brand-muted mt-1">Decides which workflow section they see.</p>
               </div>
               <div>
+                <label className={LABEL}>Questionnaire template</label>
+                <select className={INPUT} value={templateId} onChange={e => setTemplateId(e.target.value)}>
+                  {templates.map(t => <option key={t.id} value={t.id}>{t.name}{t.is_default ? " (default)" : ""}</option>)}
+                </select>
+                <p className="text-xs text-brand-muted mt-1">You can add, remove and reorder questions before sending.</p>
+              </div>
+              <div>
                 <label className={LABEL}>Project description</label>
                 <textarea className={clsx(INPUT, "h-32")} value={project.brief} onChange={e => setProject({ ...project, brief: e.target.value })}
                   placeholder="Paste their description (e.g. from Taproot). They'll see it first and only need to correct it." />
@@ -188,11 +161,10 @@ export function NewDiscoveryModal({ initialLeadId, onClose, onCreated }: Props) 
             <div className="flex gap-2 pt-2">
               <button onClick={onClose} className="btn-ghost flex-1">Cancel</button>
               <button onClick={create} disabled={!canSubmit || saving} className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed">
-                {saving ? "Creating…" : "Create link"}
+                {saving ? "Creating…" : "Create draft"}
               </button>
             </div>
           </div>
-        )}
       </div>
     </div>
   );
