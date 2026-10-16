@@ -63,3 +63,11 @@ export const DocumentFinalizeSchema = z.object({
   filename: z.string().min(1).max(300),
   change_summary: z.string().trim().max(500).optional(),
 });
+
+export const SendInviteEmailSchema = z.object({
+  to: z.string().trim().min(3).max(254),
+  link: z.string().trim().min(1).max(500),
+  first_name: z.string().trim().max(100).optional(),
+  refreshed: z.boolean().default(false),
+  time_zone: z.string().trim().max(64).optional(),
+});
