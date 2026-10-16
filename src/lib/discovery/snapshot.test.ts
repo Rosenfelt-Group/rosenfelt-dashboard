@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { DiscoveryQuestion, DiscoveryQuestionnaireDef, DiscoveryTemplateItem } from "@/types";
 import {
-  SnapshotSchema, buildSnapshot, customKey, dependentsOf, dropDanglingShowIf, estimateMinutes,
+  DraftSnapshotSchema, NO_QUESTIONS_MESSAGE, SnapshotSchema, buildSnapshot, customKey, dependentsOf, dropDanglingShowIf, estimateMinutes,
   questionToField, resolveSnapshot, visibleSections,
 } from "./snapshot";
 import { cleanQuestion, questionFromField, QuestionInputSchema } from "./bank";
@@ -73,6 +73,33 @@ const v1: DiscoveryQuestionnaireDef = {
     { id: "workflow_general", title: "Process", modules: ["operations", "other"], fields: [{ id: "process_steps", type: "textarea", label: "Steps" }] },
   ],
 };
+
+describe("blank template", () => {
+  const blank = { id: "t-blank", name: "Blank: custom questions", intro_text: "Hi", estimated_minutes: 5, sections: [{ id: "questions", title: "Questions" }] };
+
+  it("keeps the empty section so the draft has somewhere to add questions", () => {
+    const s = buildSnapshot(blank, [], "other");
+    expect(s.sections).toEqual([{ id: "questions", title: "Questions", fields: [] }]);
+    expect(s.template).toEqual({ id: "t-blank", name: "Blank: custom questions" });
+  });
+
+  it("falls back to a Questions section when the template has none", () => {
+    expect(buildSnapshot({ ...blank, sections: [] }, [], "other").sections).toEqual([{ id: "questions", title: "Questions", fields: [] }]);
+  });
+
+  it("still drops sections emptied by project-type filtering", () => {
+    const s = buildSnapshot(template, [item(q("x"), 1, "a"), item(q("y"), 2, "c", { project_types: ["content_social"] })], "other");
+    expect(s.sections.map(x => x.id)).toEqual(["a"]);
+  });
+
+  it("can be saved as a draft but not sent", () => {
+    const s = buildSnapshot(blank, [], "other");
+    expect(DraftSnapshotSchema.safeParse(s).success).toBe(true);
+    const sent = SnapshotSchema.safeParse(s);
+    expect(sent.success).toBe(false);
+    expect(sent.error?.issues[0]?.message).toBe(NO_QUESTIONS_MESSAGE);
+  });
+});
 
 describe("legacy (v1) snapshots", () => {
   it("filters sections by the invite's project type", () => {

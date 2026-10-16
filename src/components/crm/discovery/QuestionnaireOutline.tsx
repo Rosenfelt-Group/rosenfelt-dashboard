@@ -43,6 +43,9 @@ export function QuestionnaireOutline({ def, onChange, onAddFromBank, onAddCustom
 
   return (
     <div className="space-y-4">
+      {!readOnly && !def.sections.some(s => s.fields.length) && (
+        <p className="text-sm text-brand-muted">No questions yet — add from the bank or write your own.</p>
+      )}
       {def.sections.map((s, si) => (
         <div key={s.id} className="card p-0 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 bg-brand-offwhite border-b border-brand-border">

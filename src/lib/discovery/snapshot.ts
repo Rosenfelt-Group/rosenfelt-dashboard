@@ -58,7 +58,10 @@ export function buildSnapshot(
     estimated_minutes: template.estimated_minutes ?? undefined,
     intro: template.intro_text ?? undefined,
     template: { id: template.id, name: template.name },
-    sections: sections.filter(s => s.fields.length),
+    // Drop sections emptied by project-type filtering, but keep a blank template's
+    // empty sections so the draft has somewhere to add questions.
+    sections: applicable.length ? sections.filter(s => s.fields.length)
+      : sections.length ? sections : [{ id: "questions", title: "Questions", fields: [] }],
   });
 }
 
@@ -133,7 +136,7 @@ const Field = z.object({
   if (CHOICE_TYPES.has(f.type) && !(f.options?.length)) ctx.addIssue({ code: "custom", message: `“${f.label}” needs at least one option` });
 });
 
-export const SnapshotSchema = z.object({
+const SnapshotShape = z.object({
   version: z.string().max(100),
   title: z.string().max(200),
   estimated_minutes: z.number().int().min(1).max(120).optional(),
@@ -147,9 +150,20 @@ export const SnapshotSchema = z.object({
     modules: z.array(z.string()).optional(),
     fields: z.array(Field).max(150),
   }).passthrough()).max(40),
-}).superRefine((d, ctx) => {
-  const ids = d.sections.flatMap(s => s.fields.map(f => f.id));
+});
+
+const fieldIds = (d: z.infer<typeof SnapshotShape>) => d.sections.flatMap(s => s.fields.map(f => f.id));
+
+/** A draft being edited: may still be empty (e.g. started from the blank template). */
+export const DraftSnapshotSchema = SnapshotShape.superRefine((d, ctx) => {
+  const ids = fieldIds(d);
   const dup = ids.find((id, i) => ids.indexOf(id) !== i);
   if (dup) ctx.addIssue({ code: "custom", message: `Question key “${dup}” is used twice` });
-  if (!ids.length) ctx.addIssue({ code: "custom", message: "The questionnaire has no questions" });
+});
+
+export const NO_QUESTIONS_MESSAGE = "Add at least one question before sending.";
+
+/** What can be sent: a valid draft with at least one question. */
+export const SnapshotSchema = DraftSnapshotSchema.superRefine((d, ctx) => {
+  if (!fieldIds(d).length) ctx.addIssue({ code: "custom", message: NO_QUESTIONS_MESSAGE });
 });
