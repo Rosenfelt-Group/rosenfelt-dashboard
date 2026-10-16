@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import clsx from "clsx";
 import { format, formatDistanceToNow } from "date-fns";
@@ -10,14 +10,28 @@ import { inviteEmail } from "@/components/crm/NewDiscoveryModal";
 import { SamMarkdown } from "@/components/SamMarkdown";
 import { DiscoveryInvite, DiscoveryFieldDef } from "@/types";
 import { PROJECT_TYPES, STATUS_META, isEmptyAnswer, isFieldVisible } from "@/lib/discovery";
+import { estimateMinutes, resolveSnapshot, visibleSections } from "@/lib/discovery/snapshot";
+import { DraftEditor } from "@/components/crm/discovery/DraftEditor";
+import { QuestionnaireOutline } from "@/components/crm/discovery/QuestionnaireOutline";
 
 type Detail = DiscoveryInvite & { link: string };
-type Tab = "brief" | "answers" | "project";
+type Tab = "brief" | "answers" | "questions" | "project";
+const TAB_LABEL: Record<Tab, string> = { brief: "Pre-call brief", answers: "Answers", questions: "Questions sent", project: "Project" };
 
 function Answer({ field, answers }: { field: DiscoveryFieldDef; answers: Record<string, unknown> }) {
   const v = answers[field.id];
   const other = answers[`${field.id}__other`] as string | undefined;
   if (isEmptyAnswer(v)) return <span className="text-brand-muted">—</span>;
+
+  if (field.type === "yes_no") {
+    const detail = answers[`${field.id}__detail`] as string | undefined;
+    return (
+      <span className="whitespace-pre-wrap">
+        {String(v)}
+        {detail?.trim() && <span className="block text-brand-muted mt-1">{field.followUpLabel ? `${field.followUpLabel} ` : ""}<span className="text-brand-black">{detail}</span></span>}
+      </span>
+    );
+  }
 
   if (field.type === "tool_rows" && Array.isArray(v) && field.columns) {
     const rows = (v as Record<string, string>[]).filter(r => !isEmptyAnswer([r]));
@@ -57,6 +71,7 @@ function Answer({ field, answers }: { field: DiscoveryFieldDef; answers: Record<
 
 export default function DiscoveryDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [d, setD] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("brief");
@@ -115,15 +130,37 @@ export default function DiscoveryDetailPage() {
     );
   }
 
+  if (d.status === "draft") {
+    const contact = d.contact ? `${d.contact.first_name}${d.contact.last_name ? " " + d.contact.last_name : ""}` : "—";
+    return (
+      <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
+        <CRMNav />
+        <Link href="/crm/discovery" className="text-xs text-brand-muted hover:text-brand-black">← Discovery</Link>
+        <div className="flex items-center gap-2 mt-2 mb-4 flex-wrap">
+          <h1 className="text-lg font-semibold text-brand-black">{d.business?.name ?? "—"}</h1>
+          <span className={clsx("badge", STATUS_META.draft.color)}>Draft</span>
+          <span className="text-xs text-brand-muted">{contact}{d.contact?.email ? ` · ${d.contact.email}` : ""}</span>
+          <Link href={`/crm/leads/${d.lead_id}`} className="btn-ghost text-xs px-2 py-1 ml-auto">Open lead</Link>
+        </div>
+        <DraftEditor key={d.id} invite={d} onChanged={next => {
+          if (!next) router.push("/crm/discovery");
+          else if (next.status === "draft") setD(next);
+          else load();
+        }} />
+      </div>
+    );
+  }
+
   const st = STATUS_META[d.status];
   const type = PROJECT_TYPES.find(t => t.value === d.project_type)?.label;
   const answers = (d.response?.answers ?? {}) as Record<string, unknown>;
-  const schema = d.response?.schema_snapshot;
-  const sections = schema?.sections.filter(s => !s.modules || s.modules.includes(d.project_type)) ?? [];
+  // The questions exactly as this prospect was asked them.
+  const schema = resolveSnapshot(d);
+  const sections = visibleSections(schema, d.project_type);
   const expired = d.status !== "submitted" && new Date(d.expires_at) < new Date();
   const contactName = d.contact ? `${d.contact.first_name}${d.contact.last_name ? " " + d.contact.last_name : ""}` : "—";
 
-  const timeline: [string, string | undefined][] = [
+  const timeline: [string, string | null | undefined][] = [
     ["Sent", d.sent_at], ["Opened", d.opened_at], ["Last saved", d.last_saved_at], ["Submitted", d.submitted_at],
   ];
 
@@ -162,8 +199,12 @@ export default function DiscoveryDetailPage() {
           {d.status !== "submitted" && d.status !== "archived" && (
             <>
               <CopyButton text={d.link} label="Copy link" />
-              <CopyButton label="Copy invite email" text={inviteEmail({ firstName: d.contact?.first_name, orgName: d.business?.name, projectTitle: d.project_title, link: d.link })} />
-              <a href={d.link} target="_blank" rel="noopener noreferrer" className="btn-ghost text-xs px-3 py-1.5">Preview ↗</a>
+              <CopyButton label="Copy invite email" text={inviteEmail({
+                firstName: d.contact?.first_name, orgName: d.business?.name, projectTitle: d.project_title, link: d.link,
+                minutes: schema ? schema.estimated_minutes ?? estimateMinutes(schema) : undefined,
+              })} />
+              {/* preview=1: read-only, and doesn't mark the invite opened */}
+              <a href={`${d.link}&preview=1`} target="_blank" rel="noopener noreferrer" className="btn-ghost text-xs px-3 py-1.5">Preview ↗</a>
               <button onClick={() => patch({ extend_days: 30 }, "extend")} disabled={!!busy} className="btn-ghost text-xs px-3 py-1.5">
                 {busy === "extend" ? "…" : `Extend 30 days (expires ${format(new Date(d.expires_at), "MMM d")})`}
               </button>
@@ -181,11 +222,11 @@ export default function DiscoveryDetailPage() {
       </div>
 
       <div className="flex items-center gap-0 border-b border-brand-border mb-4">
-        {(["brief", "answers", "project"] as Tab[]).map(t => (
+        {(["brief", "answers", "questions", "project"] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={clsx("px-4 py-2 text-sm font-medium border-b-2 -mb-px capitalize",
+            className={clsx("px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap",
               tab === t ? "border-brand-orange text-brand-orange" : "border-transparent text-brand-muted hover:text-brand-black")}>
-            {t === "brief" ? "Pre-call brief" : t}
+            {TAB_LABEL[t]}
           </button>
         ))}
       </div>
@@ -259,6 +300,18 @@ export default function DiscoveryDetailPage() {
             </>
           )}
         </div>
+      )}
+
+      {tab === "questions" && (
+        schema ? (
+          <div>
+            <p className="text-xs text-brand-muted mb-3">
+              Frozen when sent{schema.template ? ` · from “${schema.template.name}”` : ""}. Later template or bank edits don&apos;t change it.
+            </p>
+            {schema.intro && <div className="card mb-4 text-sm text-brand-black whitespace-pre-wrap">{schema.intro}</div>}
+            <QuestionnaireOutline def={{ ...schema, sections }} onChange={() => {}} onAddFromBank={() => {}} readOnly />
+          </div>
+        ) : <div className="card text-sm text-brand-muted">No questionnaire snapshot.</div>
       )}
 
       {tab === "project" && (
