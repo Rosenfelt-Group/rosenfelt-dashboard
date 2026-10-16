@@ -3,7 +3,7 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { discoveryLink } from "@/lib/discovery";
 import { snapshotFromTemplate } from "@/lib/discovery/server";
-import { SnapshotSchema } from "@/lib/discovery/snapshot";
+import { DraftSnapshotSchema } from "@/lib/discovery/snapshot";
 import { DiscoveryProjectType } from "@/types";
 
 const DETAIL_SELECT =
@@ -55,7 +55,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (!draft) return NextResponse.json({ error: "This questionnaire has been sent and can no longer be edited" }, { status: 409 });
   }
   if (b.questionnaire_snapshot !== undefined) {
-    const snap = SnapshotSchema.safeParse(b.questionnaire_snapshot);
+    const snap = DraftSnapshotSchema.safeParse(b.questionnaire_snapshot);
     if (!snap.success) return NextResponse.json({ error: snap.error.issues[0]?.message ?? "Invalid questionnaire" }, { status: 400 });
     update.questionnaire_snapshot = snap.data;
   }
@@ -86,12 +86,31 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   return GET(req, { params });
 }
 
-// DELETE /api/crm/discovery/:id — drafts only; sent questionnaires are archived instead.
+// DELETE /api/crm/discovery/:id — any status. Responses and briefs cascade; a linked
+// room keeps going without the link. The prospect's link stops working immediately.
 export async function DELETE(_: NextRequest, { params }: Ctx) {
   const { id } = await params;
-  const { data, error } = await supabaseAdmin.schema("crm").from("discovery_invites")
-    .delete().eq("id", id).eq("status", "draft").select("id");
+  const crm = supabaseAdmin.schema("crm");
+  const { data: invite, error: le } = await crm.from("discovery_invites")
+    .select("id, lead_id, project_title, status, response:discovery_responses(id)")
+    .eq("id", id).maybeSingle();
+  if (le) return NextResponse.json({ error: le.message }, { status: 500 });
+  if (!invite) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const response = (invite as { response?: unknown }).response;
+  const hadResponse = Array.isArray(response) ? response.length > 0 : !!response;
+
+  const { data, error } = await crm.from("discovery_invites").delete().eq("id", id).select("id");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data?.length) return NextResponse.json({ error: "Only drafts can be deleted" }, { status: 409 });
+  if (!data?.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Not `discovery_invite_id`: that key marks timeline entries for a live invite.
+  const { error: ae } = await crm.from("lead_activities").insert({
+    lead_id: invite.lead_id,
+    activity_type: "system",
+    logged_by: "brian",
+    content: `Discovery questionnaire deleted: ${invite.project_title}`,
+    metadata: { deleted_discovery_invite_id: invite.id, status: invite.status, had_response: hadResponse },
+  });
+  if (ae) console.error("discovery delete: timeline log failed", ae.message);
   return NextResponse.json({ ok: true });
 }

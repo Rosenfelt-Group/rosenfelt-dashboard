@@ -12,6 +12,7 @@ import { DiscoveryInvite, DiscoveryFieldDef } from "@/types";
 import { PROJECT_TYPES, STATUS_META, isEmptyAnswer, isFieldVisible } from "@/lib/discovery";
 import { estimateMinutes, resolveSnapshot, visibleSections } from "@/lib/discovery/snapshot";
 import { DraftEditor } from "@/components/crm/discovery/DraftEditor";
+import { DeleteDiscoveryButton } from "@/components/crm/discovery/DeleteDiscoveryButton";
 import { QuestionnaireOutline } from "@/components/crm/discovery/QuestionnaireOutline";
 import { ResendInviteEmail } from "@/components/crm/discovery/EmailInvite";
 
@@ -221,6 +222,8 @@ export default function DiscoveryDetailPage() {
           <button onClick={() => patch({ archived: d.status !== "archived" }, "archive")} disabled={!!busy} className="btn-ghost text-xs px-3 py-1.5 ml-auto">
             {d.status === "archived" ? "Unarchive" : "Archive"}
           </button>
+          <DeleteDiscoveryButton inviteId={d.id} status={d.status} hasResponse={!!d.response} disabled={!!busy}
+            onDeleted={() => router.push("/crm/discovery")} />
         </div>
         {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
       </div>

@@ -4,12 +4,13 @@ import Link from "next/link";
 import clsx from "clsx";
 import { DiscoveryFieldDef, DiscoveryInvite, DiscoveryProjectType, DiscoveryQuestion, DiscoveryQuestionnaireDef, DiscoveryTemplate } from "@/types";
 import { PROJECT_TYPES } from "@/lib/discovery";
-import { allFields, customKey, estimateMinutes, questionToField, SnapshotSchema } from "@/lib/discovery/snapshot";
+import { allFields, customKey, estimateMinutes, questionToField, DraftSnapshotSchema } from "@/lib/discovery/snapshot";
 import { addFields, uniqueSectionId, updateField } from "@/lib/discovery/editing";
 import { CopyButton } from "@/components/crm/CopyButton";
 import { inviteEmail } from "@/lib/discovery/invite-email";
 import { BankPicker } from "./BankPicker";
 import { QuestionnaireOutline } from "./QuestionnaireOutline";
+import { DeleteDiscoveryButton } from "./DeleteDiscoveryButton";
 import { RecipientFields, useEmailConfigured } from "./EmailInvite";
 import { EMPTY_QUESTION, INPUT, LABEL, Modal, QuestionDraft, QuestionForm } from "./QuestionForm";
 
@@ -83,7 +84,7 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
   }
 
   async function save(label = "save"): Promise<boolean> {
-    const check = SnapshotSchema.safeParse(def);
+    const check = DraftSnapshotSchema.safeParse(def);
     if (!check.success) { setError(check.error.issues[0]?.message ?? "The questionnaire is incomplete"); return false; }
     const d = await patch({
       questionnaire_snapshot: def,
@@ -131,14 +132,6 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
       email: inviteEmail({ firstName: withEmail ? firstName : contactFirst, orgName: invite.business?.name, projectTitle: project.title, link: data.link, minutes }),
       emailed: data.email ? (data.email.sent ? { ok: true, text: `Emailed to ${to}.` } : { ok: false, text: `Sent, but the email failed: ${data.email.error}` }) : undefined,
     });
-  }
-
-  async function remove() {
-    if (!confirm("Delete this draft? This can't be undone.")) return;
-    setBusy("delete");
-    const res = await fetch(`/api/crm/discovery/${invite.id}`, { method: "DELETE" });
-    setBusy("");
-    if (res.ok) onChanged(null); else setError((await res.json().catch(() => ({}))).error ?? "Could not delete");
   }
 
   function addFromBank(qs: DiscoveryQuestion[], sectionId: string) {
@@ -289,9 +282,12 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
             {busy === "send" ? "Sending…" : "Send"}
           </button>
         )}
+        {!keys.size && <span className="text-xs text-brand-muted">Add at least one question to send.</span>}
         {dirty && <span className="text-xs text-amber-700">Unsaved changes</span>}
         {error && <span className="text-xs text-red-600">{error}</span>}
-        <button onClick={remove} disabled={!!busy} className="btn-ghost text-xs px-3 py-1.5 ml-auto text-red-600">Delete draft</button>
+        <span className="ml-auto flex items-center gap-2">
+          <DeleteDiscoveryButton inviteId={invite.id} status="draft" hasResponse={false} disabled={!!busy} onDeleted={() => onChanged(null)} />
+        </span>
       </div>
 
       {picker && (
