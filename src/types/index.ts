@@ -433,23 +433,29 @@ export interface WorkItemDoc {
 // ─── Discovery questionnaires (crm.discovery_*) ──────────────────────────────
 
 export type DiscoveryProjectType = "content_social" | "operations" | "fundraising" | "data_reporting" | "other";
-export type DiscoveryStatus = "sent" | "opened" | "in_progress" | "submitted" | "archived";
+export type DiscoveryStatus = "draft" | "sent" | "opened" | "in_progress" | "submitted" | "archived";
 export type DiscoveryBriefStatus = "pending" | "ready" | "failed" | "superseded";
 
 export interface DiscoveryFieldDef {
   id: string;
-  type: "text" | "email" | "textarea" | "single" | "multi" | "scale" | "tool_rows";
+  type: DiscoveryQuestionType;
   label: string;
   help?: string;
   required?: boolean;
   options?: string[];
   other?: boolean;
-  showIf?: { field: string; in?: string[]; notIn?: string[] };
-  columns?: { id: string; label: string }[];
+  showIf?: DiscoveryShowIf;
+  columns?: { id: string; label: string; type?: string; options?: string[]; placeholder?: string }[];
   min?: number;
   max?: number;
   minLabel?: string;
   maxLabel?: string;
+  placeholder?: string;
+  prefill?: string;
+  min_rows?: number;
+  /** yes_no: show a follow-up text box (answer stored as `<id>__detail`) when the answer equals this. */
+  followUpOn?: string;
+  followUpLabel?: string;
 }
 
 export interface DiscoverySectionDef {
@@ -463,8 +469,60 @@ export interface DiscoverySectionDef {
 export interface DiscoveryQuestionnaireDef {
   version: string;
   title: string;
-  project_types: Record<DiscoveryProjectType, string>;
+  estimated_minutes?: number;
+  /** Welcome-screen text. Absent on v1 snapshots; the form then uses its built-in text. */
+  intro?: string;
+  template?: { id: string; name: string };
+  project_types?: Partial<Record<DiscoveryProjectType, string>>;
   sections: DiscoverySectionDef[];
+}
+
+export type DiscoveryQuestionType = "text" | "textarea" | "single" | "multi" | "scale" | "yes_no" | "email" | "tool_rows";
+
+export interface DiscoveryShowIf { field: string; in?: string[]; notIn?: string[] }
+
+/** A reusable question in the bank (crm.discovery_questions). `key` becomes the answer id. */
+export interface DiscoveryQuestion {
+  id: string;
+  key: string;
+  label: string;
+  help?: string | null;
+  section: string;
+  type: DiscoveryQuestionType;
+  options?: string[] | null;
+  required: boolean;
+  config: Partial<Omit<DiscoveryFieldDef, "id" | "type" | "label" | "help" | "required" | "options" | "showIf">>;
+  archived_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DiscoveryTemplateSection { id: string; title: string; intro?: string }
+
+export interface DiscoveryTemplateItem {
+  id?: string;
+  question_id: string;
+  position: number;
+  section_id: string;
+  required?: boolean | null;
+  project_types?: DiscoveryProjectType[] | null;
+  show_if?: DiscoveryShowIf | null;
+  question?: DiscoveryQuestion;
+}
+
+export interface DiscoveryTemplate {
+  id: string;
+  name: string;
+  description?: string | null;
+  intro_text?: string | null;
+  estimated_minutes?: number | null;
+  sections: DiscoveryTemplateSection[];
+  is_default: boolean;
+  archived_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  items?: DiscoveryTemplateItem[];
+  item_count?: number;
 }
 
 export interface DiscoveryBrief {
@@ -503,8 +561,10 @@ export interface DiscoveryInvite {
   project_type: DiscoveryProjectType;
   engagement_type: "pro_bono" | "paid";
   questionnaire_version: string;
+  template_id?: string | null;
+  questionnaire_snapshot?: DiscoveryQuestionnaireDef | null;
   status: DiscoveryStatus;
-  sent_at: string;
+  sent_at?: string | null;
   opened_at?: string;
   last_saved_at?: string;
   submitted_at?: string;
