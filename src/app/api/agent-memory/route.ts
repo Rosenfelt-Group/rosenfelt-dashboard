@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin as supabase } from "@/lib/supabase-admin";
+import { requirePermission } from "@/lib/requirePermission";
 
 export async function GET(request: NextRequest) {
+  const guard = await requirePermission(request, "view_intelligence");
+  if (!guard.ok) return guard.response;
   const agent = request.nextUrl.searchParams.get("agent");
   if (!agent) return NextResponse.json({ error: "agent required" }, { status: 400 });
 
@@ -16,6 +19,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const guard = await requirePermission(request, "manage_intelligence");
+  if (!guard.ok) return guard.response;
   const body = await request.json();
   const { agent, memory_key, memory_value, category = "general", source = "manual", rating = 0 } = body;
 
@@ -36,6 +41,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const guard = await requirePermission(request, "manage_intelligence");
+  if (!guard.ok) return guard.response;
   const { id, ...updates } = await request.json();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
@@ -51,6 +58,8 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const guard = await requirePermission(request, "manage_intelligence");
+  if (!guard.ok) return guard.response;
   const { id } = await request.json();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 

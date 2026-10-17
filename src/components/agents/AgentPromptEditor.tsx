@@ -26,7 +26,7 @@ interface PromptVersion {
   note?: string;
 }
 
-export function AgentPromptEditor({ agent }: { agent: Agent }) {
+export function AgentPromptEditor({ agent, readOnly = false }: { agent: Agent; readOnly?: boolean }) {
   const [prompt,         setPrompt]         = useState("");
   const [promptDraft,    setPromptDraft]    = useState("");
   const [promptMeta,     setPromptMeta]     = useState<AgentPrompt | null>(null);
@@ -65,7 +65,7 @@ export function AgentPromptEditor({ agent }: { agent: Agent }) {
   useEffect(() => { load(); }, [load]);
 
   async function handleSavePrompt() {
-    if (!dirty) return;
+    if (!dirty || readOnly) return;
     setSaving(true);
     setPromptError(null);
     const saveRes = await fetchJson("/api/agent-prompts", {
@@ -120,7 +120,7 @@ export function AgentPromptEditor({ agent }: { agent: Agent }) {
               <p className="text-xs font-medium text-brand-muted">Version History</p>
             </div>
             {versions.length === 0 ? (
-              <p className="text-xs text-brand-muted p-4">No versions yet — save the prompt to create the first version.</p>
+              <p className="text-xs text-brand-muted p-4">No versions yet{readOnly ? "." : " — save the prompt to create the first version."}</p>
             ) : (
               versions.map(v => (
                 <div key={v.id} className="flex items-center justify-between px-4 py-2.5 border-b border-brand-border last:border-0 hover:bg-brand-offwhite">
@@ -135,10 +135,12 @@ export function AgentPromptEditor({ agent }: { agent: Agent }) {
                       className="text-xs text-brand-orange hover:underline">
                       {previewVersion?.id === v.id ? "Hide" : "Preview"}
                     </button>
-                    <button onClick={() => handleRestoreVersion(v)}
-                      className="text-xs text-brand-muted hover:text-brand-black">
-                      Restore
-                    </button>
+                    {!readOnly && (
+                      <button onClick={() => handleRestoreVersion(v)}
+                        className="text-xs text-brand-muted hover:text-brand-black">
+                        Restore
+                      </button>
+                    )}
                   </div>
                 </div>
               ))
@@ -152,10 +154,12 @@ export function AgentPromptEditor({ agent }: { agent: Agent }) {
               <p className="text-xs font-medium text-amber-700">
                 Previewing version from {formatDistanceToNow(parseISO(previewVersion.created_at), { addSuffix: true })}
               </p>
-              <button onClick={() => handleRestoreVersion(previewVersion)}
-                className="text-xs text-brand-orange font-medium hover:underline">
-                Restore this version
-              </button>
+              {!readOnly && (
+                <button onClick={() => handleRestoreVersion(previewVersion)}
+                  className="text-xs text-brand-orange font-medium hover:underline">
+                  Restore this version
+                </button>
+              )}
             </div>
             <pre className="text-xs text-brand-muted p-4 overflow-x-auto whitespace-pre-wrap font-mono max-h-64 [-webkit-overflow-scrolling:touch]">
               {previewVersion.prompt}
@@ -171,15 +175,17 @@ export function AgentPromptEditor({ agent }: { agent: Agent }) {
           <textarea
             value={promptDraft}
             onChange={e => { setPromptDraft(e.target.value); setDirty(e.target.value !== prompt); }}
+            readOnly={readOnly}
+            aria-readonly={readOnly}
             className="w-full text-sm font-mono p-4 focus:outline-none resize-none min-h-[400px] bg-white"
-            placeholder="Enter system prompt..."
+            placeholder={readOnly ? "No system prompt set." : "Enter system prompt..."}
             spellCheck={false}
           />
         </div>
 
         {promptError && <ErrorState message={promptError} />}
 
-        {dirty && (
+        {dirty && !readOnly && (
           <div className="flex gap-2 items-center flex-wrap">
             <input
               value={saveNote}

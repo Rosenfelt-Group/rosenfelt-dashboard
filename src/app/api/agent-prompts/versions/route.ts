@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin as supabase } from "@/lib/supabase-admin";
+import { requirePermission } from "@/lib/requirePermission";
 
 export async function GET(request: NextRequest) {
+  const guard = await requirePermission(request, "view_intelligence");
+  if (!guard.ok) return guard.response;
   const agent = request.nextUrl.searchParams.get("agent");
   if (!agent) return NextResponse.json({ error: "agent required" }, { status: 400 });
 

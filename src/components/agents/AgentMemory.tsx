@@ -43,8 +43,9 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 // ─── Memory Card ──────────────────────────────────────────────────────────────
 
-function MemoryCard({ memory, onRate, onPin, onDelete, onEdit }: {
+function MemoryCard({ memory, readOnly, onRate, onPin, onDelete, onEdit }: {
   memory: AgentMemory;
+  readOnly: boolean;
   onRate: (id: string, rating: -1 | 0 | 1) => void;
   onPin: (id: string, pinned: boolean) => void;
   onDelete: (id: string) => void;
@@ -69,6 +70,7 @@ function MemoryCard({ memory, onRate, onPin, onDelete, onEdit }: {
           <p className="text-xs text-brand-muted leading-relaxed">{memory.memory_value}</p>
         </div>
         {/* Rating */}
+        {!readOnly && (
         <div className="flex flex-col gap-1 flex-shrink-0">
           <button
             onClick={() => onRate(memory.id, memory.rating === 1 ? 0 : 1)}
@@ -85,12 +87,19 @@ function MemoryCard({ memory, onRate, onPin, onDelete, onEdit }: {
             title="Bad memory — suppress"
           >👎</button>
         </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between pt-1 border-t border-brand-border">
         <span className="text-[10px] text-brand-muted">
           {formatDistanceToNow(parseISO(memory.updated_at), { addSuffix: true })} · {memory.source} · used {memory.use_count ?? 0}×
         </span>
+        {readOnly ? (
+          memory.pinned && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700"
+              title="Pinned — always retrieved, never pruned">📌 Pinned</span>
+          )
+        ) : (
         <div className="flex gap-2 items-center">
           <button
             onClick={() => onPin(memory.id, !memory.pinned)}
@@ -116,6 +125,7 @@ function MemoryCard({ memory, onRate, onPin, onDelete, onEdit }: {
             </button>
           )}
         </div>
+        )}
       </div>
     </div>
   );
@@ -219,8 +229,10 @@ function MemoryModal({ memory, onSave, onClose }: {
 
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
-export function AgentMemoryPanel({ agent, onCountChange }: {
+export function AgentMemoryPanel({ agent, onCountChange, readOnly = false }: {
   agent: Agent;
+  /** Hide rate/pin/edit/add/delete controls (no manage_intelligence). */
+  readOnly?: boolean;
   /** Reports the number of memories whenever it changes (e.g. for a tab label). */
   onCountChange?: (count: number) => void;
 }) {
@@ -313,7 +325,7 @@ export function AgentMemoryPanel({ agent, onCountChange }: {
 
   return (
     <>
-      {editingMemory && (
+      {editingMemory && !readOnly && (
         <MemoryModal
           memory={editingMemory}
           onSave={handleSaveMemory}
@@ -356,9 +368,11 @@ export function AgentMemoryPanel({ agent, onCountChange }: {
               </button>
             ))}
           </div>
-          <Button size="sm" onClick={() => setEditingMemory({ agent })} className="ml-2 flex-shrink-0">
-            + Add
-          </Button>
+          {!readOnly && (
+            <Button size="sm" onClick={() => setEditingMemory({ agent })} className="ml-2 flex-shrink-0">
+              + Add
+            </Button>
+          )}
         </div>
 
         {filteredMemories.length === 0 ? (
@@ -369,10 +383,12 @@ export function AgentMemoryPanel({ agent, onCountChange }: {
                 ? "Jordan will start building memory automatically as you have more conversations."
                 : "Memories will appear here as this agent becomes active."}
             </p>
-            <button onClick={() => setEditingMemory({ agent })}
-              className="text-xs text-brand-orange hover:underline">
-              + Add one manually
-            </button>
+            {!readOnly && (
+              <button onClick={() => setEditingMemory({ agent })}
+                className="text-xs text-brand-orange hover:underline">
+                + Add one manually
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
@@ -380,6 +396,7 @@ export function AgentMemoryPanel({ agent, onCountChange }: {
               <MemoryCard
                 key={m.id}
                 memory={m}
+                readOnly={readOnly}
                 onRate={handleRateMemory}
                 onPin={handlePinMemory}
                 onDelete={handleDeleteMemory}
