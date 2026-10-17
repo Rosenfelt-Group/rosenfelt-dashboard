@@ -11,6 +11,8 @@ import { DiscoveryProjectType, DiscoveryQuestion, DiscoveryQuestionnaireDef, Dis
 import { addFields } from "@/lib/discovery/editing";
 import { dropDanglingShowIf, questionToField } from "@/lib/discovery/snapshot";
 import { PROJECT_TYPES } from "@/lib/discovery";
+import { fetchJson } from "@/lib/fetch-json";
+import { Button, ErrorState, LoadingState, PageHeader } from "@/components/ui";
 
 type Loaded = Omit<DiscoveryTemplate, "items"> & { items: (DiscoveryTemplateItem & { question: DiscoveryQuestion })[] };
 // Per-question template settings that aren't part of the rendered field.
@@ -35,6 +37,7 @@ export default function TemplateEditorPage() {
   const { id } = useParams<{ id: string }>();
   const [tpl, setTpl] = useState<Loaded | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", description: "", intro_text: "", estimated_minutes: "" });
   const [def, setDef] = useState<DiscoveryQuestionnaireDef | null>(null);
   const [meta, setMeta] = useState<Record<string, Meta>>({});
@@ -52,7 +55,11 @@ export default function TemplateEditorPage() {
   }, []);
 
   useEffect(() => {
-    fetch(`/api/crm/discovery/templates/${id}`).then(r => r.json()).then(d => { if (d?.id) apply(d); setLoading(false); });
+    fetchJson<Loaded>(`/api/crm/discovery/templates/${id}`).then(r => {
+      if (r.ok) { if (r.data?.id) apply(r.data); }
+      else if (r.status !== 404) setLoadError(r.error);
+      setLoading(false);
+    });
   }, [id, apply]);
 
   // Warn before leaving with unsaved changes.
@@ -116,7 +123,15 @@ export default function TemplateEditorPage() {
     }) })) });
   }
 
-  if (loading) return <div className="p-8"><div className="card animate-pulse h-64" /></div>;
+  if (loading) return <div className="p-8"><LoadingState /></div>;
+  if (loadError) {
+    return (
+      <div className="p-8">
+        <ErrorState message={`Couldn't load the template: ${loadError}`} />
+        <Link href="/crm/discovery/templates" className="text-brand-orange text-sm mt-2 block">← Templates</Link>
+      </div>
+    );
+  }
   if (!tpl || !def) {
     return (
       <div className="p-8">
@@ -134,11 +149,16 @@ export default function TemplateEditorPage() {
       <Link href="/crm/discovery/templates" className="text-xs text-brand-muted hover:text-brand-black">← Templates</Link>
 
       <div className="card mt-2 mb-4 space-y-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          <h1 className="text-lg font-semibold text-brand-black flex-1">{tpl.name}</h1>
-          {tpl.is_default && <span className="badge badge-success">Default</span>}
-          {tpl.archived_at && <span className="badge badge-neutral">Archived</span>}
-        </div>
+        <PageHeader
+          className="!mb-0"
+          title={tpl.name}
+          actions={(tpl.is_default || tpl.archived_at) && (
+            <>
+              {tpl.is_default && <span className="badge badge-success">Default</span>}
+              {tpl.archived_at && <span className="badge badge-neutral">Archived</span>}
+            </>
+          )}
+        />
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="md:col-span-3">
             <label className={LABEL}>Name *</label>
@@ -194,19 +214,19 @@ export default function TemplateEditorPage() {
       />
 
       <div className="sticky bottom-0 md:bottom-4 mt-6 card flex items-center gap-2 flex-wrap shadow-lg">
-        <button onClick={save} disabled={!dirty || !!busy || !form.name.trim()} className="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+        <Button onClick={save} disabled={!dirty || !!busy || !form.name.trim()}>
           {busy === "save" ? "Saving…" : "Save template"}
-        </button>
+        </Button>
         {dirty ? <span className="text-xs text-amber-700">Unsaved changes</span> : saved ? <span className="text-xs text-green-700">Saved</span> : null}
         {error && <span className="text-xs text-red-600">{error}</span>}
         <div className="ml-auto flex gap-2">
           {!tpl.is_default && !tpl.archived_at && (
-            <button onClick={() => patch({ is_default: true }, "default")} disabled={!!busy || dirty} className="btn-ghost text-xs px-3 py-1.5">Make default</button>
+            <Button variant="ghost" size="sm" onClick={() => patch({ is_default: true }, "default")} disabled={!!busy || dirty}>Make default</Button>
           )}
           {!tpl.is_default && (
-            <button onClick={() => patch({ archived: !tpl.archived_at }, "archive")} disabled={!!busy || dirty} className="btn-ghost text-xs px-3 py-1.5">
+            <Button variant="ghost" size="sm" onClick={() => patch({ archived: !tpl.archived_at }, "archive")} disabled={!!busy || dirty}>
               {tpl.archived_at ? "Unarchive" : "Archive"}
-            </button>
+            </Button>
           )}
         </div>
       </div>

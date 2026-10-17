@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/fetch-json";
+import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
 
@@ -124,11 +125,8 @@ export default function ResearchPage() {
 
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8 max-w-5xl">
-      <h1 className="text-xl font-semibold text-brand-black">Research</h1>
-      <p className="text-sm text-brand-muted mt-0.5 mb-5">Research briefs from Avery, by category.</p>
-      {loadError && (
-        <div className="card text-sm text-red-600 mb-4">Couldn&apos;t load research: {loadError}</div>
-      )}
+      <PageHeader title="Research" description="Research briefs from Avery, by category." />
+      {loadError && <ErrorState message={`Couldn't load research: ${loadError}`} className="mb-4" />}
       <div className="space-y-4">
         {/* Run research form */}
         <div className="card p-4">
@@ -142,13 +140,9 @@ export default function ResearchPage() {
               placeholder="e.g. AI scheduling tools for SMBs"
               className="flex-1 px-3 py-2 text-sm border border-brand-border rounded-lg focus:outline-none focus:border-brand-orange"
             />
-            <button
-              onClick={runResearch}
-              disabled={running || !researchTopic.trim()}
-              className="px-4 py-2 rounded-lg bg-brand-orange text-white text-sm font-medium disabled:opacity-50 hover:bg-brand-orange/90 transition-colors"
-            >
+            <Button onClick={runResearch} disabled={running || !researchTopic.trim()}>
               {running ? "Queuing…" : "Run"}
-            </button>
+            </Button>
           </div>
           {runMsg && (
             <p className={clsx("text-xs mt-2", runMsg.includes("queued") ? "text-green-600" : "text-red-600")}>
@@ -192,14 +186,9 @@ export default function ResearchPage() {
 
         {/* Briefs table */}
         {briefsLoading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map(i => <div key={i} className="card animate-pulse h-16" />)}
-          </div>
+          <LoadingState />
         ) : filteredBriefs.length === 0 ? (
-          <div className="card text-center py-8">
-            <p className="text-sm text-brand-muted">No research briefs yet</p>
-            <p className="text-xs text-brand-muted mt-1">Run a brief above to get started</p>
-          </div>
+          <EmptyState title="No research briefs yet" description="Run a brief above to get started" />
         ) : (
           <div className="overflow-x-auto card [-webkit-overflow-scrolling:touch]">
             <table className="w-full text-sm">
@@ -306,13 +295,9 @@ export default function ResearchPage() {
                 placeholder="New category name"
                 className="flex-1 px-3 py-1.5 text-sm border border-brand-border rounded-lg focus:outline-none focus:border-brand-orange"
               />
-              <button
-                onClick={addCategory}
-                disabled={catSaving || !newCatName.trim()}
-                className="px-3 py-1.5 rounded-lg bg-brand-orange text-white text-sm font-medium disabled:opacity-50 hover:bg-brand-orange/90 transition-colors"
-              >
+              <Button size="sm" onClick={addCategory} disabled={catSaving || !newCatName.trim()}>
                 {catSaving ? "Adding…" : "Add"}
-              </button>
+              </Button>
             </div>
           </div>
         )}

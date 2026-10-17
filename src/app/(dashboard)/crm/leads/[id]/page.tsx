@@ -11,7 +11,17 @@ import { STAGES } from "@/lib/crm/stages";
 import { Agent } from "@/types";
 import { safeHref } from "@/lib/safe-url";
 import { DiscoveryInvite } from "@/types";
-import { STATUS_META } from "@/lib/discovery";
+import { Button, ErrorState, LoadingState } from "@/components/ui";
+import { AssessmentCard, BusinessCard, ContactCard, DetailsCard, DiscoveryCard } from "./_components/SidebarCards";
+import {
+  ConvertToClientModal,
+  EditLeadModal,
+  LogEmailModal,
+  LogNoteModal,
+  type ConvertForm,
+  type EditLeadForm,
+  type EmailForm,
+} from "./_components/LeadModals";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝",
@@ -20,21 +30,6 @@ const ACTIVITY_ICONS: Record<string, string> = {
   stage_change: "🔀",
   assessment: "📊",
   system: "⚙️",
-};
-
-const SERVICE_TIERS: { value: CRMServiceTier; label: string }[] = [
-  { value: "newsroom",     label: "Newsroom" },
-  { value: "operations",  label: "Operations" },
-  { value: "finance_ops", label: "Finance Ops" },
-  { value: "growth_stack", label: "Growth Stack" },
-  { value: "full_stack",  label: "Full Stack" },
-];
-
-const TIER_LABELS: Record<string, string> = {
-  foundation_first: "Foundation First",
-  getting_there: "Getting There",
-  ready_light_prep: "Ready with Light Prep",
-  ready_to_move: "Ready to Move",
 };
 
 export default function LeadDetailPage() {
@@ -51,7 +46,7 @@ export default function LeadDetailPage() {
 
   // Edit form state
   const [showEdit, setShowEdit] = useState(false);
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<EditLeadForm>({
     estimated_value: "", close_date: "", lost_reason: "", assigned_agent: "" as Agent | "", quiz_url: "",
   });
 
@@ -90,9 +85,9 @@ export default function LeadDetailPage() {
   const [showNote, setShowNote] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [showEmail, setShowEmail] = useState(false);
-  const [emailForm, setEmailForm] = useState({ subject: "", direction: "sent", snippet: "" });
+  const [emailForm, setEmailForm] = useState<EmailForm>({ subject: "", direction: "sent", snippet: "" });
   const [showConvert, setShowConvert] = useState(false);
-  const [convertForm, setConvertForm] = useState({ service_tier: "newsroom" as CRMServiceTier, contract_start: "", monthly_value: "" });
+  const [convertForm, setConvertForm] = useState<ConvertForm>({ service_tier: "newsroom" as CRMServiceTier, contract_start: "", monthly_value: "" });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -178,12 +173,12 @@ export default function LeadDetailPage() {
   }
 
   if (loading) {
-    return <div className="p-8"><div className="card animate-pulse h-64" /></div>;
+    return <div className="p-8"><LoadingState /></div>;
   }
   if (loadError) {
     return (
       <div className="p-8">
-        <div className="card text-sm text-red-600">Couldn&apos;t load this lead: {loadError}</div>
+        <ErrorState message={`Couldn't load this lead: ${loadError}`} />
         <Link href="/crm" className="text-brand-orange text-sm mt-2 block">← Back to pipeline</Link>
       </div>
     );
@@ -233,12 +228,9 @@ export default function LeadDetailPage() {
             {lead.assigned_agent && (
               <AgentBadge agent={lead.assigned_agent} size="sm" />
             )}
-            <button
-              onClick={() => openEditForm(lead)}
-              className="btn-ghost text-xs px-2 py-1"
-            >
+            <Button variant="ghost" size="sm" onClick={() => openEditForm(lead)}>
               Edit
-            </button>
+            </Button>
           </div>
         </div>
         {(lead.estimated_value || lead.close_date) && (
@@ -258,16 +250,16 @@ export default function LeadDetailPage() {
         <div className="lg:col-span-2 space-y-4">
           {/* Actions */}
           <div className="flex gap-2 flex-wrap">
-            <button onClick={() => setShowNote(true)} className="btn-ghost text-xs px-3 py-1.5">
+            <Button variant="ghost" size="sm" onClick={() => setShowNote(true)}>
               📝 Log note
-            </button>
-            <button onClick={() => setShowEmail(true)} className="btn-ghost text-xs px-3 py-1.5">
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setShowEmail(true)}>
               📧 Log email
-            </button>
+            </Button>
             {lead.stage === "won" && !lead.converted_at && (
-              <button onClick={() => setShowConvert(true)} className="btn-primary text-xs px-3 py-1.5">
+              <Button size="sm" onClick={() => setShowConvert(true)}>
                 🎉 Convert to client
-              </button>
+              </Button>
             )}
             {lead.converted_at && (
               <span className="badge badge-success text-xs">Converted {format(new Date(lead.converted_at), "MMM d, yyyy")}</span>
@@ -328,306 +320,49 @@ export default function LeadDetailPage() {
 
         {/* Right: sidebar */}
         <div className="space-y-4">
-          {/* Business info */}
-          {lead.business && (
-            <div className="card">
-              <h3 className="text-xs font-medium text-brand-muted uppercase tracking-wide mb-3">Business</h3>
-              <Link href={`/crm/businesses`} className="text-sm font-medium text-brand-orange hover:underline">
-                {lead.business.name}
-              </Link>
-              {lead.business.industry && (
-                <p className="text-xs text-brand-muted mt-1">{lead.business.industry}</p>
-              )}
-              {lead.business.size && (
-                <p className="text-xs text-brand-muted">{lead.business.size} employees</p>
-              )}
-              {lead.business.website && (
-                <a href={lead.business.website} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-brand-orange hover:underline block mt-1">
-                  {lead.business.website}
-                </a>
-              )}
-            </div>
-          )}
-
-          {/* Contact info */}
+          {lead.business && <BusinessCard business={lead.business} />}
           {lead.contact && (
-            <div className="card">
-              <h3 className="text-xs font-medium text-brand-muted uppercase tracking-wide mb-3">Contact</h3>
-              <p className="text-sm font-medium text-brand-black">{contactName}</p>
-              {lead.contact.title && <p className="text-xs text-brand-muted">{lead.contact.title}</p>}
-              {lead.contact.email && (
-                <p className="text-xs text-brand-orange mt-1">{lead.contact.email}</p>
-              )}
-              {lead.contact.phone && (
-                <p className="text-xs text-brand-muted">{lead.contact.phone}</p>
-              )}
-              {contactLinkedinUrl && (
-                <a href={contactLinkedinUrl} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-brand-orange hover:underline block mt-1">
-                  LinkedIn ↗
-                </a>
-              )}
-            </div>
+            <ContactCard contact={lead.contact} contactName={contactName} linkedinUrl={contactLinkedinUrl} />
           )}
-
-          {/* Discovery questionnaires */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-medium text-brand-muted uppercase tracking-wide">Discovery</h3>
-              <Link href={`/crm/discovery?new=1&lead_id=${id}`} className="text-xs text-brand-orange hover:underline">+ New</Link>
-            </div>
-            {discovery.length === 0 ? (
-              <p className="text-xs text-brand-muted">No questionnaire sent yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {discovery.map(inv => (
-                  <Link key={inv.id} href={`/crm/discovery/${inv.id}`} className="block group">
-                    <p className="text-sm text-brand-black group-hover:text-brand-orange truncate">{inv.project_title}</p>
-                    <span className={clsx("badge text-xs mt-0.5", STATUS_META[inv.status].color)}>{STATUS_META[inv.status].label}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Assessment results */}
-          {assessment && (
-            <div className="card">
-              <h3 className="text-xs font-medium text-brand-muted uppercase tracking-wide mb-3">Assessment</h3>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-2xl font-bold text-brand-black">{assessment.score}</span>
-                <span className="text-xs text-brand-muted">/ 25</span>
-              </div>
-              <span className="badge badge-orange text-xs">{TIER_LABELS[assessment.tier] ?? assessment.tier}</span>
-              {assessment.section_breakdown && (
-                <div className="mt-3 space-y-1">
-                  {Object.entries(assessment.section_breakdown).map(([section, score]) => (
-                    <div key={section} className="flex justify-between text-xs text-brand-muted">
-                      <span className="capitalize">{section}</span>
-                      <span className="font-medium text-brand-black">{score}/5</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Lead metadata */}
-          <div className="card">
-            <h3 className="text-xs font-medium text-brand-muted uppercase tracking-wide mb-3">Details</h3>
-            <div className="space-y-1.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-brand-muted">Created</span>
-                <span className="text-brand-black">{format(new Date(lead.created_at), "MMM d, yyyy")}</span>
-              </div>
-              {lead.lost_reason && (
-                <div>
-                  <span className="text-brand-muted block">Lost reason</span>
-                  <span className="text-brand-black">{lead.lost_reason}</span>
-                </div>
-              )}
-            </div>
-          </div>
+          <DiscoveryCard leadId={id} discovery={discovery} />
+          {assessment && <AssessmentCard assessment={assessment} />}
+          <DetailsCard lead={lead} />
         </div>
       </div>
 
-      {/* Log note modal */}
-      {showNote && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-brand-black">Log note</h2>
-              <button onClick={() => setShowNote(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
-            </div>
-            <textarea
-              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange h-28 resize-none"
-              placeholder="Add a note…"
-              value={noteText}
-              onChange={e => setNoteText(e.target.value)}
-            />
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setShowNote(false)} className="btn-ghost flex-1">Cancel</button>
-              <button onClick={logNote} disabled={saving || !noteText.trim()} className="btn-primary flex-1 disabled:opacity-50">
-                {saving ? "Saving…" : "Save note"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Log email modal */}
-      {showEmail && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-brand-black">Log email</h2>
-              <button onClick={() => setShowEmail(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Subject *</label>
-                <input
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={emailForm.subject}
-                  onChange={e => setEmailForm(p => ({ ...p, subject: e.target.value }))}
-                  placeholder="Following up on our call…"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Direction</label>
-                <select
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={emailForm.direction}
-                  onChange={e => setEmailForm(p => ({ ...p, direction: e.target.value }))}
-                >
-                  <option value="sent">Sent</option>
-                  <option value="received">Received</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Snippet (optional)</label>
-                <textarea
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange h-20 resize-none"
-                  value={emailForm.snippet}
-                  onChange={e => setEmailForm(p => ({ ...p, snippet: e.target.value }))}
-                  placeholder="Brief summary or key quote…"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setShowEmail(false)} className="btn-ghost flex-1">Cancel</button>
-              <button onClick={logEmail} disabled={saving || !emailForm.subject.trim()} className="btn-primary flex-1 disabled:opacity-50">
-                {saving ? "Saving…" : "Log email"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Convert to client modal */}
-      {showConvert && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-brand-black">Convert to client</h2>
-              <button onClick={() => setShowConvert(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Service tier</label>
-                <select
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={convertForm.service_tier}
-                  onChange={e => setConvertForm(p => ({ ...p, service_tier: e.target.value as CRMServiceTier }))}
-                >
-                  {SERVICE_TIERS.map(t => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Contract start</label>
-                <input
-                  type="date"
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={convertForm.contract_start}
-                  onChange={e => setConvertForm(p => ({ ...p, contract_start: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Monthly value ($)</label>
-                <input
-                  type="number"
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={convertForm.monthly_value}
-                  onChange={e => setConvertForm(p => ({ ...p, monthly_value: e.target.value }))}
-                  placeholder="2500"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setShowConvert(false)} className="btn-ghost flex-1">Cancel</button>
-              <button onClick={convertToClient} disabled={saving} className="btn-primary flex-1 disabled:opacity-50">
-                {saving ? "Converting…" : "Convert"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit lead modal */}
-      {showEdit && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-brand-black">Edit lead</h2>
-              <button onClick={() => setShowEdit(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Assigned agent</label>
-                <select
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={editForm.assigned_agent}
-                  onChange={e => setEditForm(p => ({ ...p, assigned_agent: e.target.value as Agent | "" }))}
-                >
-                  <option value="">— unassigned —</option>
-                  {(["jordan", "riley", "avery", "brian"] as Agent[]).map(a => (
-                    <option key={a} value={a} className="capitalize">{a}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Quiz result URL</label>
-                <input
-                  type="url"
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={editForm.quiz_url}
-                  onChange={e => setEditForm(p => ({ ...p, quiz_url: e.target.value }))}
-                  placeholder="https://rosably.com/ai-readiness-assessment/..."
-                />
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Est. value ($/mo)</label>
-                <input
-                  type="number"
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={editForm.estimated_value}
-                  onChange={e => setEditForm(p => ({ ...p, estimated_value: e.target.value }))}
-                  placeholder="2500"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Target close date</label>
-                <input
-                  type="date"
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={editForm.close_date}
-                  onChange={e => setEditForm(p => ({ ...p, close_date: e.target.value }))}
-                />
-              </div>
-              {lead?.stage === "lost" && (
-                <div>
-                  <label className="text-xs text-brand-muted mb-1 block">Lost reason</label>
-                  <textarea
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange h-20 resize-none"
-                    value={editForm.lost_reason}
-                    onChange={e => setEditForm(p => ({ ...p, lost_reason: e.target.value }))}
-                    placeholder="Why was this lead lost?"
-                  />
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setShowEdit(false)} className="btn-ghost flex-1">Cancel</button>
-              <button onClick={saveEditForm} disabled={saving} className="btn-primary flex-1 disabled:opacity-50">
-                {saving ? "Saving…" : "Save"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <LogNoteModal
+        open={showNote}
+        onClose={() => setShowNote(false)}
+        saving={saving}
+        onSubmit={logNote}
+        noteText={noteText}
+        setNoteText={setNoteText}
+      />
+      <LogEmailModal
+        open={showEmail}
+        onClose={() => setShowEmail(false)}
+        saving={saving}
+        onSubmit={logEmail}
+        form={emailForm}
+        setForm={setEmailForm}
+      />
+      <ConvertToClientModal
+        open={showConvert}
+        onClose={() => setShowConvert(false)}
+        saving={saving}
+        onSubmit={convertToClient}
+        form={convertForm}
+        setForm={setConvertForm}
+      />
+      <EditLeadModal
+        open={showEdit}
+        onClose={() => setShowEdit(false)}
+        saving={saving}
+        onSubmit={saveEditForm}
+        form={editForm}
+        setForm={setEditForm}
+        isLost={lead.stage === "lost"}
+      />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { formatDistanceToNow } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
 import { usePolling } from "@/lib/use-polling";
+import { ErrorState, PageHeader } from "@/components/ui";
 
 interface RawNote {
   id: string;
@@ -38,7 +39,9 @@ export default function OverviewPage() {
   const [costToday,   setCostToday]   = useState<number | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [alerts,      setAlerts]      = useState<AlertNote[]>([]);
+  const [loadError,   setLoadError]   = useState(false);
   const dismissedIdsRef = useRef<Set<string>>(new Set());
+  const loadedOnceRef   = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -46,6 +49,8 @@ export default function OverviewPage() {
     } catch (e) {
       // Keep whatever is already on screen; the next poll retries.
       console.error("Overview load failed:", e);
+      // Nothing on screen yet: say so instead of rendering empty cards.
+      if (!loadedOnceRef.current) setLoadError(true);
       setLoading(false);
     }
 
@@ -66,6 +71,8 @@ export default function OverviewPage() {
       const total = (usage.agents as { todayCost: number }[]).reduce((sum, ag) => sum + ag.todayCost, 0);
       setCostToday(total);
     }
+    loadedOnceRef.current = true;
+    setLoadError(false);
     setLoading(false);
     const rawNotes: RawNote[] = notifRes.notifications ?? [];
     setAlerts(
@@ -116,15 +123,28 @@ export default function OverviewPage() {
     );
   }
 
+  const header = (
+    <PageHeader
+      title={greeting}
+      description={new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+    />
+  );
+
+  if (loadError) {
+    return (
+      <div className="p-4 md:p-8 max-w-6xl pb-24 md:pb-8">
+        {header}
+        <ErrorState
+          message="Couldn't load the overview. It will retry automatically."
+          onRetry={() => { setLoading(true); load(); }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-8 max-w-6xl pb-24 md:pb-8">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-brand-black">{greeting}</h1>
-        <p className="text-sm text-brand-muted mt-0.5">
-          {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-        </p>
-      </div>
+      {header}
 
       {/* Global alert banners */}
       {alerts.length > 0 && (

@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { fetchJson } from "@/lib/fetch-json";
+import { Button } from "@/components/ui";
 
 const MAX = 1000;
 
@@ -45,9 +46,9 @@ export function WelcomeEditor({ deliverableId, initial, onSaved }: {
         className="w-full border border-brand-border rounded px-2 py-1.5" />
       <div className="flex items-center gap-2">
         <span className="text-xs text-brand-muted">{text.length}/{MAX}</span>
-        <button disabled={busy} onClick={() => save(text)} className="px-2 py-1 rounded bg-brand-orange text-white disabled:opacity-50">Save</button>
-        {initial && <button disabled={busy} onClick={() => save(null)} className="px-2 py-1 rounded border border-brand-border disabled:opacity-50">Remove</button>}
-        <button disabled={busy} onClick={() => { setText(initial ?? ""); setEditing(false); }} className="px-2 py-1 rounded border border-brand-border disabled:opacity-50">Cancel</button>
+        <Button size="sm" disabled={busy} onClick={() => save(text)}>Save</Button>
+        {initial && <Button variant="secondary" size="sm" disabled={busy} onClick={() => save(null)}>Remove</Button>}
+        <Button variant="secondary" size="sm" disabled={busy} onClick={() => { setText(initial ?? ""); setEditing(false); }}>Cancel</Button>
       </div>
       {err && <p className="text-red-600">{err}</p>}
     </div>

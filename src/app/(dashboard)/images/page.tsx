@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
+import { PageHeader } from "@/components/ui";
 
 interface ImageEntry {
   name:      string;
@@ -120,16 +121,16 @@ export default function ImagesPage() {
   return (
     <div className="p-4 md:p-8 pt-16 md:pt-8 pb-24 md:pb-8">
       {/* Header */}
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold text-brand-black">Images</h1>
-        <p className="text-sm text-brand-muted mt-0.5">
-          {loading
+      <PageHeader
+        title="Images"
+        description={
+          loading
             ? "Loading…"
             : error
             ? "Failed to load image library"
-            : `${images.length} image${images.length !== 1 ? "s" : ""} available`}
-        </p>
-      </div>
+            : `${images.length} image${images.length !== 1 ? "s" : ""} available`
+        }
+      />
 
       <div className="flex gap-4" style={{ height: "calc(100dvh - 14rem)" }}>
 

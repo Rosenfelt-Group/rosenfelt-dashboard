@@ -11,6 +11,7 @@ import { minutesSince, type Build } from "@/lib/rooms/builds";
 import { roomInviteEmail } from "@/lib/rooms/invite-email";
 import { CopyButton } from "@/components/crm/CopyButton";
 import { SendInviteEmail } from "./SendInviteEmail";
+import { Button, ErrorState, LoadingState, PageHeader, Tabs } from "@/components/ui";
 
 type Version = { id: string; version_no: number; status: string; change_summary: string | null; built_by_agent: string | null; created_at: string; source: string; manifest: { filename?: string; size?: number; ext?: string } | null };
 type Deliverable = { id: string; title: string; kind: string; welcome_message: string | null; versions: Version[] };
@@ -18,11 +19,17 @@ type Access = { id: string; label: string | null; expires_at: string; revoked_at
 type ActivityEvent = { id: number; type: string; created_at: string; contact: { name: string; email: string } | null; version: { deliverable_title: string; version_no: number } | null; deliverable_title: string | null };
 type ActivityContact = { id: string; name: string; email: string; first_seen_at: string };
 type Activity = { events: ActivityEvent[]; contacts: ActivityContact[] };
+type RoomTab = "deliverables" | "access" | "activity";
+const ROOM_TABS: { id: RoomTab; label: string }[] = [
+  { id: "deliverables", label: "Deliverables" },
+  { id: "access", label: "Access" },
+  { id: "activity", label: "Activity" },
+];
 type Detail = { engagement: { id: string; title: string; relationship: string; status: string }; business: { name: string } | null; deliverables: Deliverable[] };
 
 export default function EngagementPage() {
   const { id } = useParams<{ id: string }>();
-  const [tab, setTab] = useState<"deliverables" | "access" | "activity">("deliverables");
+  const [tab, setTab] = useState<RoomTab>("deliverables");
   const [detail, setDetail] = useState<Detail | null>(null);
   const [access, setAccess] = useState<Access[]>([]);
   const [activity, setActivity] = useState<Activity | null>(null);
@@ -213,13 +220,12 @@ export default function EngagementPage() {
 
   if (loadErr && !detail) {
     return (
-      <div className="p-6 text-sm">
-        <p className="text-red-600 mb-2">Couldn&apos;t load engagement: {loadErr}</p>
-        <button onClick={load} className="px-3 py-1.5 rounded border border-brand-border">Retry</button>
+      <div className="p-6">
+        <ErrorState message={`Couldn't load engagement: ${loadErr}`} onRetry={load} />
       </div>
     );
   }
-  if (!detail) return <p className="p-6 text-sm text-brand-muted">Loading…</p>;
+  if (!detail) return <div className="p-6"><LoadingState /></div>;
   const { engagement, business, deliverables } = detail;
   // Draft to copy into a mail client (SendInviteEmail can also send it via Gmail). No contact name is
   // loaded here (and the link label is not a person's name), so the greeting is "Hi there".
@@ -230,24 +236,20 @@ export default function EngagementPage() {
 
   return (
     <div className="p-6 max-w-5xl">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-lg font-semibold text-brand-black">{engagement.title}</h1>
-        <div className="flex items-center gap-2 flex-wrap">
-          {updatedAt && <span className="text-xs text-brand-muted">Updated {updatedAt.toLocaleTimeString()}</span>}
-          <button disabled={!!pending} onClick={refreshAll} className="px-3 py-1.5 text-sm rounded border border-brand-border disabled:opacity-50">Refresh</button>
-          <button disabled={!!pending} onClick={openRoomPreview} className="px-3 py-1.5 text-sm rounded border border-brand-border disabled:opacity-50">Preview room</button>
-        </div>
-      </div>
-      <p className="text-sm text-brand-muted mb-4">{business?.name} · {engagement.relationship} · {engagement.status}</p>
+      <PageHeader
+        className="flex-wrap"
+        title={engagement.title}
+        description={<>{business?.name} · {engagement.relationship} · {engagement.status}</>}
+        actions={
+          <>
+            {updatedAt && <span className="text-xs text-brand-muted">Updated {updatedAt.toLocaleTimeString()}</span>}
+            <Button variant="secondary" size="sm" disabled={!!pending} onClick={refreshAll}>Refresh</Button>
+            <Button variant="secondary" size="sm" disabled={!!pending} onClick={openRoomPreview}>Preview room</Button>
+          </>
+        }
+      />
 
-      <div className="flex gap-4 border-b border-brand-border mb-4">
-        {(["deliverables", "access", "activity"] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`pb-2 text-sm capitalize ${tab === t ? "border-b-2 border-brand-orange text-brand-orange" : "text-brand-muted"}`}>
-            {t}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={ROOM_TABS} value={tab} onChange={setTab} className="mb-4" />
 
       {msg && <p className="text-sm mb-3">{msg}</p>}
 
@@ -265,10 +267,9 @@ export default function EngagementPage() {
             )}
             <textarea value={brief} onChange={e => setBrief(e.target.value)} rows={5} placeholder="What should the prototype show?"
               className="w-full border border-brand-border rounded px-2 py-1.5 text-sm" />
-            <button disabled={!!pending || !brief.trim() || (!delivId && !delivTitle.trim())} onClick={requestPrototype}
-              className="px-3 py-1.5 text-sm rounded bg-brand-orange text-white disabled:opacity-50">
+            <Button size="sm" disabled={!!pending || !brief.trim() || (!delivId && !delivTitle.trim())} onClick={requestPrototype}>
               Send to Casey
-            </button>
+            </Button>
           </div>
 
           <DocumentUpload engagementId={id} documents={deliverables.filter(d => d.kind === "document").map(d => ({ id: d.id, title: d.title }))}
@@ -286,8 +287,8 @@ export default function EngagementPage() {
                     Permanently delete “{d.title}” with its {d.versions.length} version(s), all comments and all files?
                     Visitors lose access immediately. This cannot be undone. Casey&apos;s work items are kept.
                   </span>
-                  <button disabled={!!pending} onClick={() => deleteDeliverable(d.id, d.title)} className="px-2 py-1 rounded bg-red-600 text-white disabled:opacity-50">Delete permanently</button>
-                  <button disabled={!!pending} onClick={() => setConfirmDelete(null)} className="px-2 py-1 rounded border border-brand-border disabled:opacity-50">Cancel</button>
+                  <Button variant="danger" size="sm" disabled={!!pending} onClick={() => deleteDeliverable(d.id, d.title)}>Delete permanently</Button>
+                  <Button variant="secondary" size="sm" disabled={!!pending} onClick={() => setConfirmDelete(null)}>Cancel</Button>
                 </div>
               )}
               <WelcomeEditor key={`${d.id}:${d.welcome_message ?? ""}`} deliverableId={d.id} initial={d.welcome_message}
@@ -333,8 +334,8 @@ export default function EngagementPage() {
                       {confirmShare === v.id && (
                         <div className="mt-2 border border-amber-300 bg-amber-50 rounded p-2 flex flex-wrap items-center gap-2">
                           <span>Share v{v.version_no} with everyone who has a link to this room? The previous shared version will be marked as older.</span>
-                          <button disabled={!!pending} onClick={() => share(v.id, v.version_no)} className="px-2 py-1 rounded bg-brand-orange text-white disabled:opacity-50">Share</button>
-                          <button disabled={!!pending} onClick={() => setConfirmShare(null)} className="px-2 py-1 rounded border border-brand-border disabled:opacity-50">Cancel</button>
+                          <Button size="sm" disabled={!!pending} onClick={() => share(v.id, v.version_no)}>Share</Button>
+                          <Button variant="secondary" size="sm" disabled={!!pending} onClick={() => setConfirmShare(null)}>Cancel</Button>
                         </div>
                       )}
                     </li>
@@ -375,7 +376,7 @@ export default function EngagementPage() {
           <div className="flex gap-2">
             <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Label (e.g. ED + board chair)"
               className="border border-brand-border rounded px-2 py-1.5 text-sm flex-1" />
-            <button disabled={!!pending} onClick={issue} className="px-3 py-1.5 text-sm rounded bg-brand-orange text-white disabled:opacity-50">Create link</button>
+            <Button size="sm" disabled={!!pending} onClick={issue}>Create link</Button>
           </div>
           {newLink && (
             <div className="border border-amber-300 bg-amber-50 rounded p-3 text-sm break-all">
@@ -410,8 +411,8 @@ export default function EngagementPage() {
                 {confirmRefresh === a.id && (
                   <div className="mt-2 border border-amber-300 bg-amber-50 rounded p-2 flex flex-wrap items-center gap-2">
                     <span>Replace this link? The current link stops working immediately and a new one (60 days) is shown once.</span>
-                    <button disabled={!!pending} onClick={() => refreshLink(a.id)} className="px-2 py-1 rounded bg-brand-orange text-white disabled:opacity-50">Refresh link</button>
-                    <button disabled={!!pending} onClick={() => setConfirmRefresh(null)} className="px-2 py-1 rounded border border-brand-border disabled:opacity-50">Cancel</button>
+                    <Button size="sm" disabled={!!pending} onClick={() => refreshLink(a.id)}>Refresh link</Button>
+                    <Button variant="secondary" size="sm" disabled={!!pending} onClick={() => setConfirmRefresh(null)}>Cancel</Button>
                   </div>
                 )}
               </li>
@@ -424,12 +425,9 @@ export default function EngagementPage() {
       {tab === "activity" && (
         <div className="space-y-4">
           {activityErr && (
-            <div className="text-sm">
-              <p className="text-red-600 mb-2">Couldn&apos;t load activity: {activityErr}</p>
-              <button onClick={loadActivity} className="px-3 py-1.5 rounded border border-brand-border">Retry</button>
-            </div>
+            <ErrorState message={`Couldn't load activity: ${activityErr}`} onRetry={loadActivity} />
           )}
-          {!activityErr && !activity && <p className="text-sm text-brand-muted">Loading…</p>}
+          {!activityErr && !activity && <LoadingState />}
           {activity && (
             <>
               {activity.contacts.length > 0 && (

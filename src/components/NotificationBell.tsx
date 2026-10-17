@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { fetchJson } from "@/lib/fetch-json";
 
 type Note = {
   id: string;
@@ -37,17 +38,17 @@ export default function NotificationBell() {
   const [unread, setUnread] = useState(0);
   const [open, setOpen]     = useState(false);
   const [pos, setPos]       = useState<{ left: number; top: number } | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const btnRef              = useRef<HTMLButtonElement>(null);
   const panelRef            = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
-    try {
-      const r = await fetch("/api/notifications");
-      if (!r.ok) return;
-      const j = await r.json();
-      setNotes(j.notifications ?? []);
-      setUnread(j.unread ?? 0);
-    } catch {}
+    const r = await fetchJson<{ notifications?: Note[]; unread?: number }>("/api/notifications");
+    // Keep the last good list on failure; the panel shows a short note instead.
+    setLoadError(!r.ok);
+    if (!r.ok) return;
+    setNotes(r.data.notifications ?? []);
+    setUnread(r.data.unread ?? 0);
   }, []);
 
   useEffect(() => {
@@ -123,7 +124,13 @@ export default function NotificationBell() {
             </p>
           </div>
 
-          {notes.length === 0 && (
+          {loadError && (
+            <div role="alert" className="px-3 py-2 text-xs text-red-600 border-b border-brand-border">
+              Couldn&apos;t refresh notifications. Retrying shortly.
+            </div>
+          )}
+
+          {notes.length === 0 && !loadError && (
             <div className="px-3 py-6 text-center text-sm text-brand-muted">
               No notifications
             </div>

@@ -8,6 +8,8 @@ import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
 import { AgentBadge } from "@/components/AgentBadge";
 import { Agent } from "@/types";
+import { ErrorState, LoadingState, PageHeader } from "@/components/ui";
+import { fetchJson } from "@/lib/fetch-json";
 
 // Services to health-check via the agent-status/health API
 const SERVICES = [
@@ -34,13 +36,23 @@ export default function ControlCenterPage() {
   const [activity,      setActivity]      = useState<ActivityLog[]>([]);
   const [approvalCount, setApprovalCount] = useState<number>(0);
   const [loading,       setLoading]       = useState(true);
+  const [loadError,     setLoadError]     = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [health, act, appr] = await Promise.all([
-      fetch("/api/agent-status/health").then(r => r.json()).catch(() => ({})),
-      fetch("/api/activity").then(r => r.json()).catch(() => []),
-      fetch("/api/approvals").then(r => r.json()).catch(() => []),
+    const [healthRes, actRes, apprRes] = await Promise.all([
+      fetchJson<unknown>("/api/agent-status/health"),
+      fetchJson<unknown>("/api/activity"),
+      fetchJson<unknown>("/api/approvals"),
     ]);
+    const failed = [
+      !healthRes.ok && "agent health",
+      !actRes.ok && "activity",
+      !apprRes.ok && "approvals",
+    ].filter(Boolean);
+    setLoadError(failed.length ? `Couldn't load ${failed.join(", ")}.` : null);
+    const health = healthRes.ok ? healthRes.data : {};
+    const act = actRes.ok ? actRes.data : [];
+    const appr = apprRes.ok ? apprRes.data : [];
     const healthMap = Object.fromEntries(
       (Array.isArray(health) ? health : []).map(
         (h: { agent: string; status: string }) => [h.agent, h.status]
@@ -61,34 +73,37 @@ export default function ControlCenterPage() {
   if (loading) {
     return (
       <div className="p-4 md:p-8">
-        <div className="space-y-4">
-          {[1, 2, 3].map(i => <div key={i} className="card animate-pulse h-32" />)}
-        </div>
+        <LoadingState className="space-y-4" />
       </div>
     );
   }
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
-        <h1 className="text-xl font-semibold text-brand-black">Control Center</h1>
-        <div className="flex gap-2 flex-wrap">
-          {approvalCount > 0 && (
-            <Link href="/approvals"
-              className="px-3 py-1 bg-red-50 text-red-700 rounded-full text-sm font-medium hover:bg-red-100 transition-colors">
-              {approvalCount} approval{approvalCount !== 1 ? "s" : ""} waiting →
+      <PageHeader
+        title="Control Center"
+        className="flex-wrap"
+        actions={
+          <div className="flex gap-2 flex-wrap">
+            {approvalCount > 0 && (
+              <Link href="/approvals"
+                className="px-3 py-1 bg-red-50 text-red-700 rounded-full text-sm font-medium hover:bg-red-100 transition-colors">
+                {approvalCount} approval{approvalCount !== 1 ? "s" : ""} waiting →
+              </Link>
+            )}
+            <Link href="/work"
+              className="px-3 py-1.5 rounded-lg border border-brand-border text-sm text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors">
+              Work board →
             </Link>
-          )}
-          <Link href="/work"
-            className="px-3 py-1.5 rounded-lg border border-brand-border text-sm text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors">
-            Work board →
-          </Link>
-          <Link href="/approvals"
-            className="px-3 py-1.5 rounded-lg border border-brand-border text-sm text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors">
-            All approvals →
-          </Link>
-        </div>
-      </div>
+            <Link href="/approvals"
+              className="px-3 py-1.5 rounded-lg border border-brand-border text-sm text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors">
+              All approvals →
+            </Link>
+          </div>
+        }
+      />
+
+      {loadError && <ErrorState message={loadError} onRetry={load} className="mb-4" />}
 
       <div className="space-y-4">
 

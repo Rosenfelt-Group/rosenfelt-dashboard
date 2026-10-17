@@ -9,6 +9,7 @@ import { formatDistanceToNow } from "date-fns";
 import { AgentBadge } from "@/components/AgentBadge";
 import { Agent } from "@/types";
 import { CreateLeadModal } from "@/components/crm/CreateLeadModal";
+import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
 
 const AGENTS: Agent[] = ["jordan", "riley", "avery", "brian"];
 
@@ -88,15 +89,11 @@ export default function LeadsPage() {
 
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold text-brand-black">Leads</h1>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-brand-muted">{filtered.length} of {leads.length}</span>
-          <button onClick={() => setShowCreate(true)} className="btn-primary text-xs px-3 py-1.5">
-            + New lead
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Leads"
+        description={`${filtered.length} of ${leads.length}`}
+        actions={<Button size="sm" onClick={() => setShowCreate(true)}>+ New lead</Button>}
+      />
 
       <div className="flex gap-2 mb-4 flex-wrap">
         <input
@@ -115,15 +112,11 @@ export default function LeadsPage() {
         </select>
       </div>
 
-      {loadError && (
-        <div className="card text-sm text-red-600 mb-4">Couldn&apos;t load leads: {loadError}</div>
-      )}
+      {loadError && <ErrorState message={`Couldn't load leads: ${loadError}`} className="mb-4" />}
       {loading ? (
-        <div className="card animate-pulse h-40" />
+        <LoadingState />
       ) : filtered.length === 0 ? (
-        <div className="card text-center py-12">
-          <p className="text-brand-muted text-sm">{search || stageFilter ? "No leads match." : "No leads yet."}</p>
-        </div>
+        <EmptyState title={search || stageFilter ? "No leads match." : "No leads yet."} />
       ) : (
         <div className="card divide-y divide-brand-border">
           {filtered.map(lead => {
@@ -257,10 +250,10 @@ export default function LeadsPage() {
           </div>
 
           <div className="p-5 border-t border-brand-border flex gap-2">
-            <button onClick={() => setSelected(null)} className="btn-ghost flex-1">Cancel</button>
-            <button onClick={saveEdit} disabled={saving} className="btn-primary flex-1 disabled:opacity-50">
+            <Button variant="ghost" className="flex-1" onClick={() => setSelected(null)}>Cancel</Button>
+            <Button className="flex-1" onClick={saveEdit} disabled={saving}>
               {saving ? "Saving…" : "Save"}
-            </button>
+            </Button>
           </div>
         </div>
       )}

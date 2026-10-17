@@ -5,6 +5,8 @@ import { SamMarkdown } from "@/components/SamMarkdown";
 import { Agent } from "@/types";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
+import { ErrorState, PageHeader } from "@/components/ui";
+import { fetchJson } from "@/lib/fetch-json";
 
 type Message = {
   role: "user" | "assistant";
@@ -83,21 +85,22 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyAttempt, setHistoryAttempt] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Load history when agent changes
   useEffect(() => {
     setLoadingHistory(true);
+    setHistoryError(null);
     setMessages([]);
-    fetch(`/api/chat?agent=${agent}&chatId=${CHAT_ID}`)
-      .then(r => r.json())
-      .then(data => {
-        setMessages(Array.isArray(data) ? data : []);
-        setLoadingHistory(false);
-      })
-      .catch(() => setLoadingHistory(false));
-  }, [agent]);
+    fetchJson<unknown>(`/api/chat?agent=${agent}&chatId=${CHAT_ID}`).then(r => {
+      if (r.ok) setMessages(Array.isArray(r.data) ? r.data : []);
+      else setHistoryError(r.error);
+      setLoadingHistory(false);
+    });
+  }, [agent, historyAttempt]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -167,40 +170,47 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-screen ml-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-brand-border flex-shrink-0">
-        <div>
-          <h1 className="text-base font-semibold text-brand-black">Agent Chat</h1>
-          <p className="text-xs text-brand-muted mt-0.5">Dashboard interface — history saved to Supabase</p>
-        </div>
-
-        {/* Agent selector */}
-        <div className="flex gap-2">
-          {AGENTS.map(a => (
-            <button
-              key={a.id}
-              onClick={() => a.available && setAgent(a.id)}
-              title={a.note}
-              className={clsx(
-                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors",
-                a.available
-                  ? agent === a.id
-                    ? "bg-brand-orange text-white"
-                    : "bg-brand-offwhite text-brand-black hover:bg-brand-border"
-                  : "bg-brand-offwhite text-brand-muted cursor-not-allowed opacity-50"
-              )}
-            >
-              <AgentBadge agent={a.id} size="sm" />
-              {a.label}
-              {!a.available && <span className="text-xs">({a.note})</span>}
-            </button>
-          ))}
-        </div>
+      <div className="px-6 py-4 bg-white border-b border-brand-border flex-shrink-0">
+        <PageHeader
+          className="!mb-0 items-center"
+          title="Agent Chat"
+          description="Dashboard interface — history saved to Supabase"
+          actions={
+            // Agent selector
+            <div className="flex gap-2">
+              {AGENTS.map(a => (
+                <button
+                  key={a.id}
+                  onClick={() => a.available && setAgent(a.id)}
+                  title={a.note}
+                  className={clsx(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors",
+                    a.available
+                      ? agent === a.id
+                        ? "bg-brand-orange text-white"
+                        : "bg-brand-offwhite text-brand-black hover:bg-brand-border"
+                      : "bg-brand-offwhite text-brand-muted cursor-not-allowed opacity-50"
+                  )}
+                >
+                  <AgentBadge agent={a.id} size="sm" />
+                  {a.label}
+                  {!a.available && <span className="text-xs">({a.note})</span>}
+                </button>
+              ))}
+            </div>
+          }
+        />
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-brand-offwhite">
         {loadingHistory ? (
           <div className="text-center text-sm text-brand-muted py-8">Loading history...</div>
+        ) : historyError && messages.length === 0 ? (
+          <ErrorState
+            message={`Couldn't load chat history: ${historyError}`}
+            onRetry={() => setHistoryAttempt(n => n + 1)}
+          />
         ) : messages.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-12 h-12 bg-white rounded-xl border border-brand-border flex items-center justify-center mx-auto mb-4">

@@ -14,10 +14,13 @@ import { DraftEditor } from "@/components/crm/discovery/DraftEditor";
 import { DeleteDiscoveryButton } from "@/components/crm/discovery/DeleteDiscoveryButton";
 import { QuestionnaireOutline } from "@/components/crm/discovery/QuestionnaireOutline";
 import { ResendInviteEmail } from "@/components/crm/discovery/EmailInvite";
+import { fetchJson } from "@/lib/fetch-json";
+import { Button, EmptyState, ErrorState, LoadingState, PageHeader, Tabs } from "@/components/ui";
 
 type Detail = DiscoveryInvite & { link: string };
 type Tab = "brief" | "answers" | "questions" | "project";
 const TAB_LABEL: Record<Tab, string> = { brief: "Pre-call brief", answers: "Answers", questions: "Questions sent", project: "Project" };
+const TABS = (["brief", "answers", "questions", "project"] as Tab[]).map(t => ({ id: t, label: TAB_LABEL[t] }));
 
 function Answer({ field, answers }: { field: DiscoveryFieldDef; answers: Record<string, unknown> }) {
   const v = answers[field.id];
@@ -75,15 +78,18 @@ export default function DiscoveryDetailPage() {
   const router = useRouter();
   const [d, setD] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("brief");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
-    return fetch(`/api/crm/discovery/${id}`).then(r => r.json()).then(data => {
-      setD(data?.id ? data : null);
+    return fetchJson<Detail>(`/api/crm/discovery/${id}`).then(r => {
+      if (r.ok) { setD(r.data?.id ? r.data : null); setLoadError(null); }
+      else if (r.status === 404) setD(null);
+      else setLoadError(r.error);
       setLoading(false);
-      return data as Detail;
+      return r.ok ? r.data : null;
     });
   }, [id]);
 
@@ -121,11 +127,13 @@ export default function DiscoveryDetailPage() {
     load();
   }
 
-  if (loading) return <div className="p-8"><div className="card animate-pulse h-64" /></div>;
+  if (loading) return <div className="p-8"><LoadingState /></div>;
   if (!d) {
     return (
       <div className="p-8">
-        <p className="text-brand-muted">Not found.</p>
+        {loadError
+          ? <ErrorState message={`Couldn't load this questionnaire: ${loadError}`} onRetry={load} />
+          : <p className="text-brand-muted">Not found.</p>}
         <Link href="/crm/discovery" className="text-brand-orange text-sm mt-2 block">← Back to discovery</Link>
       </div>
     );
@@ -136,12 +144,17 @@ export default function DiscoveryDetailPage() {
     return (
       <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
         <Link href="/crm/discovery" className="text-xs text-brand-muted hover:text-brand-black">← Discovery</Link>
-        <div className="flex items-center gap-2 mt-2 mb-4 flex-wrap">
-          <h1 className="text-lg font-semibold text-brand-black">{d.business?.name ?? "—"}</h1>
-          <span className={clsx("badge", STATUS_META.draft.color)}>Draft</span>
-          <span className="text-xs text-brand-muted">{contact}{d.contact?.email ? ` · ${d.contact.email}` : ""}</span>
-          <Link href={`/crm/leads/${d.lead_id}`} className="btn-ghost text-xs px-2 py-1 ml-auto">Open lead</Link>
-        </div>
+        <PageHeader
+          className="mt-2"
+          title={d.business?.name ?? "—"}
+          description={
+            <span className="flex items-center gap-2 flex-wrap">
+              <span className={clsx("badge", STATUS_META.draft.color)}>Draft</span>
+              <span className="text-xs">{contact}{d.contact?.email ? ` · ${d.contact.email}` : ""}</span>
+            </span>
+          }
+          actions={<Link href={`/crm/leads/${d.lead_id}`} className="btn-ghost text-xs px-2 py-1">Open lead</Link>}
+        />
         <DraftEditor key={d.id} invite={d} onChanged={next => {
           if (!next) router.push("/crm/discovery");
           else if (next.status === "draft") setD(next);
@@ -169,21 +182,26 @@ export default function DiscoveryDetailPage() {
       <Link href="/crm/discovery" className="text-xs text-brand-muted hover:text-brand-black">← Discovery</Link>
 
       <div className="card mt-2 mb-4">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-brand-black">{d.business?.name ?? "—"}</h1>
-            <p className="text-sm text-brand-black mt-0.5">{d.project_title}</p>
-            <p className="text-xs text-brand-muted mt-0.5">
-              {type} · {d.engagement_type === "pro_bono" ? "Pro bono" : "Paid"} · {contactName}
-              {d.contact?.email && <> · <span className="text-brand-orange">{d.contact.email}</span></>}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={clsx("badge", st.color)}>{st.label}</span>
-            {expired && <span className="badge badge-error">Link expired</span>}
-            <Link href={`/crm/leads/${d.lead_id}`} className="btn-ghost text-xs px-2 py-1">Open lead</Link>
-          </div>
-        </div>
+        <PageHeader
+          className="!mb-0 flex-wrap"
+          title={d.business?.name ?? "—"}
+          description={
+            <>
+              <span className="block text-brand-black">{d.project_title}</span>
+              <span className="block text-xs mt-0.5">
+                {type} · {d.engagement_type === "pro_bono" ? "Pro bono" : "Paid"} · {contactName}
+                {d.contact?.email && <> · <span className="text-brand-orange">{d.contact.email}</span></>}
+              </span>
+            </>
+          }
+          actions={
+            <>
+              <span className={clsx("badge", st.color)}>{st.label}</span>
+              {expired && <span className="badge badge-error">Link expired</span>}
+              <Link href={`/crm/leads/${d.lead_id}`} className="btn-ghost text-xs px-2 py-1">Open lead</Link>
+            </>
+          }
+        />
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 pt-4 border-t border-brand-border">
           {timeline.map(([label, at]) => (
@@ -204,36 +222,28 @@ export default function DiscoveryDetailPage() {
               })} />
               {/* preview=1: read-only, and doesn't mark the invite opened */}
               <a href={`${d.link}&preview=1`} target="_blank" rel="noopener noreferrer" className="btn-ghost text-xs px-3 py-1.5">Preview ↗</a>
-              <button onClick={() => patch({ extend_days: 30 }, "extend")} disabled={!!busy} className="btn-ghost text-xs px-3 py-1.5">
+              <Button variant="ghost" size="sm" onClick={() => patch({ extend_days: 30 }, "extend")} disabled={!!busy}>
                 {busy === "extend" ? "…" : `Extend 30 days (expires ${format(new Date(d.expires_at), "MMM d")})`}
-              </button>
+              </Button>
               {!expired && ["sent", "opened", "in_progress"].includes(d.status) && (
                 <ResendInviteEmail inviteId={d.id} defaultTo={d.contact?.email} defaultFirstName={d.contact?.first_name} />
               )}
             </>
           )}
           {d.status === "submitted" && (
-            <button onClick={() => { if (confirm("Reopen so they can edit and resubmit? Their answers are kept.")) patch({ reopen: true, extend_days: 14 }, "reopen"); }}
-              disabled={!!busy} className="btn-ghost text-xs px-3 py-1.5">Reopen for edits</button>
+            <Button variant="ghost" size="sm" onClick={() => { if (confirm("Reopen so they can edit and resubmit? Their answers are kept.")) patch({ reopen: true, extend_days: 14 }, "reopen"); }}
+              disabled={!!busy}>Reopen for edits</Button>
           )}
-          <button onClick={() => patch({ archived: d.status !== "archived" }, "archive")} disabled={!!busy} className="btn-ghost text-xs px-3 py-1.5 ml-auto">
+          <Button variant="ghost" size="sm" onClick={() => patch({ archived: d.status !== "archived" }, "archive")} disabled={!!busy} className="ml-auto">
             {d.status === "archived" ? "Unarchive" : "Archive"}
-          </button>
+          </Button>
           <DeleteDiscoveryButton inviteId={d.id} status={d.status} hasResponse={!!d.response} disabled={!!busy}
             onDeleted={() => router.push("/crm/discovery")} />
         </div>
         {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
       </div>
 
-      <div className="flex items-center gap-0 border-b border-brand-border mb-4">
-        {(["brief", "answers", "questions", "project"] as Tab[]).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={clsx("px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap",
-              tab === t ? "border-brand-orange text-brand-orange" : "border-transparent text-brand-muted hover:text-brand-black")}>
-            {TAB_LABEL[t]}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={TABS} value={tab} onChange={setTab} className="mb-4" />
 
       {tab === "brief" && (
         <div className="card">
@@ -242,7 +252,7 @@ export default function DiscoveryDetailPage() {
           ) : !lastBrief ? (
             <div className="flex items-center justify-between gap-4">
               <p className="text-sm text-brand-muted">No brief yet.</p>
-              <button onClick={regenerate} disabled={!!busy} className="btn-primary text-xs">Generate brief</button>
+              <Button size="sm" onClick={regenerate} disabled={!!busy}>Generate brief</Button>
             </div>
           ) : lastBrief.status === "pending" ? (
             <div className="flex items-center gap-3 text-sm text-brand-muted">
@@ -252,7 +262,7 @@ export default function DiscoveryDetailPage() {
           ) : lastBrief.status === "failed" ? (
             <div className="space-y-3">
               <p className="text-sm text-red-700">Brief generation failed: {lastBrief.error ?? "unknown error"}</p>
-              <button onClick={regenerate} disabled={!!busy} className="btn-primary text-xs">Try again</button>
+              <Button size="sm" onClick={regenerate} disabled={!!busy}>Try again</Button>
             </div>
           ) : (
             <>
@@ -263,7 +273,7 @@ export default function DiscoveryDetailPage() {
                 </p>
                 <div className="flex gap-2">
                   <CopyButton text={lastBrief.content_md ?? ""} label="Copy markdown" />
-                  <button onClick={regenerate} disabled={!!busy} className="btn-ghost text-xs px-3 py-1.5">{busy === "brief" ? "Regenerating…" : "Regenerate"}</button>
+                  <Button variant="ghost" size="sm" onClick={regenerate} disabled={!!busy}>{busy === "brief" ? "Regenerating…" : "Regenerate"}</Button>
                 </div>
               </div>
               <div className="text-sm text-brand-black">
@@ -277,9 +287,7 @@ export default function DiscoveryDetailPage() {
       {tab === "answers" && (
         <div className="space-y-4">
           {!d.response ? (
-            <div className="card text-sm text-brand-muted">
-              {d.opened_at ? "They've opened the questionnaire but haven't saved any answers yet." : "They haven't opened the questionnaire yet."}
-            </div>
+            <EmptyState title={d.opened_at ? "They've opened the questionnaire but haven't saved any answers yet." : "They haven't opened the questionnaire yet."} />
           ) : (
             <>
               {d.status !== "submitted" && (
@@ -315,7 +323,7 @@ export default function DiscoveryDetailPage() {
             {schema.intro && <div className="card mb-4 text-sm text-brand-black whitespace-pre-wrap">{schema.intro}</div>}
             <QuestionnaireOutline def={{ ...schema, sections }} onChange={() => {}} onAddFromBank={() => {}} readOnly />
           </div>
-        ) : <div className="card text-sm text-brand-muted">No questionnaire snapshot.</div>
+        ) : <EmptyState title="No questionnaire snapshot." />
       )}
 
       {tab === "project" && (

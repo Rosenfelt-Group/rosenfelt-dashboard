@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
 import { usePolling } from "@/lib/use-polling";
+import { Button, ErrorState, LoadingState } from "@/components/ui";
 
 type CheckStatus = "pass" | "fail" | "warn" | "skip";
 type OverallStatus = "pass" | "degraded" | "fail" | "pending";
@@ -113,7 +114,7 @@ export default function RegressionPanel({ isAdmin }: { isAdmin: boolean }) {
   const toggleCategory = (cat: string) =>
     setExpanded((prev) => ({ ...prev, [cat]: !prev[cat] }));
 
-  if (loading) return <div className="card animate-pulse h-64" />;
+  if (loading) return <LoadingState />;
 
   const grouped = latest?.results ? groupByCategory(latest.results) : {};
   const sortedCategories = CATEGORY_ORDER.filter((c) => grouped[c]).concat(
@@ -134,20 +135,14 @@ export default function RegressionPanel({ isAdmin }: { isAdmin: boolean }) {
           )}
         </div>
         {isAdmin && (
-          <button
-            onClick={handleRunNow}
-            disabled={running}
-            className="btn-primary text-sm px-4 py-2 disabled:opacity-60"
-          >
+          <Button onClick={handleRunNow} disabled={running}>
             {running ? "Starting…" : "▶ Run Now"}
-          </button>
+          </Button>
         )}
       </div>
 
       {runError && (
-        <div className="card border-red-200 text-sm text-red-600">
-          Failed to trigger run: {runError}
-        </div>
+        <ErrorState message={`Failed to trigger run: ${runError}`} />
       )}
 
       {running && (
@@ -244,39 +239,41 @@ export default function RegressionPanel({ isAdmin }: { isAdmin: boolean }) {
       {history.length > 1 && (
         <div className="card">
           <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-3">Run History</p>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-brand-muted border-b border-brand-border">
-                <th className="pb-2 font-medium">When</th>
-                <th className="pb-2 font-medium">Status</th>
-                <th className="pb-2 font-medium">Results</th>
-                <th className="pb-2 font-medium">Duration</th>
-                <th className="pb-2 font-medium">By</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-brand-border">
-              {history.map((run) => (
-                <tr key={run.id} className="text-brand-black">
-                  <td className="py-2 text-xs">{new Date(run.run_at).toLocaleString()}</td>
-                  <td className="py-2">
-                    <span className={clsx("uppercase text-[10px] font-semibold", OVERALL_BADGE[run.overall_status] ?? "badge-neutral")}>
-                      {run.overall_status}
-                    </span>
-                  </td>
-                  <td className="py-2 text-xs text-brand-muted">
-                    {run.passed}/{run.total_checks} · {run.failed} fail · {run.warnings} warn
-                  </td>
-                  <td className="py-2 text-xs text-brand-muted">
-                    {run.duration_ms ? `${(run.duration_ms / 1000).toFixed(1)}s` : "—"}
-                  </td>
-                  <td className="py-2 text-xs text-brand-muted">
-                    {run.triggered_by}
-                    {run.triggered_by_user ? ` (${run.triggered_by_user})` : ""}
-                  </td>
+          <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-brand-muted border-b border-brand-border">
+                  <th className="pb-2 font-medium">When</th>
+                  <th className="pb-2 font-medium">Status</th>
+                  <th className="pb-2 font-medium">Results</th>
+                  <th className="pb-2 font-medium">Duration</th>
+                  <th className="pb-2 font-medium">By</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-brand-border">
+                {history.map((run) => (
+                  <tr key={run.id} className="text-brand-black">
+                    <td className="py-2 text-xs">{new Date(run.run_at).toLocaleString()}</td>
+                    <td className="py-2">
+                      <span className={clsx("uppercase text-[10px] font-semibold", OVERALL_BADGE[run.overall_status] ?? "badge-neutral")}>
+                        {run.overall_status}
+                      </span>
+                    </td>
+                    <td className="py-2 text-xs text-brand-muted">
+                      {run.passed}/{run.total_checks} · {run.failed} fail · {run.warnings} warn
+                    </td>
+                    <td className="py-2 text-xs text-brand-muted">
+                      {run.duration_ms ? `${(run.duration_ms / 1000).toFixed(1)}s` : "—"}
+                    </td>
+                    <td className="py-2 text-xs text-brand-muted">
+                      {run.triggered_by}
+                      {run.triggered_by_user ? ` (${run.triggered_by_user})` : ""}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

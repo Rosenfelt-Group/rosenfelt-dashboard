@@ -7,6 +7,7 @@ import clsx from "clsx";
 import Link from "next/link";
 import { STAGES } from "@/lib/crm/stages";
 import { CreateLeadModal } from "@/components/crm/CreateLeadModal";
+import { Button, ErrorState, LoadingState, PageHeader } from "@/components/ui";
 
 const SOURCE_LABELS: Record<string, string> = {
   website_contact: "Contact form",
@@ -43,29 +44,23 @@ export default function CRMPage() {
   const activeCount = leads.filter(l => l.stage !== "lost").length;
 
   if (loading) {
-    return <div className="p-8"><div className="card animate-pulse h-64" /></div>;
+    return <div className="p-8"><LoadingState /></div>;
   }
   if (loadError) {
     return (
       <div className="p-4 md:p-8">
-        <div className="card text-sm text-red-600">Couldn&apos;t load the pipeline: {loadError}</div>
+        <ErrorState message={`Couldn't load the pipeline: ${loadError}`} />
       </div>
     );
   }
 
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8">
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-semibold text-brand-black">Pipeline</h1>
-          <p className="text-sm text-brand-muted mt-0.5">
-            {activeCount} active · {byStage("won").length} won
-          </p>
-        </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary text-xs px-3 py-1.5">
-          + New lead
-        </button>
-      </div>
+      <PageHeader
+        title="Pipeline"
+        description={`${activeCount} active · ${byStage("won").length} won`}
+        actions={<Button size="sm" onClick={() => setShowCreate(true)}>+ New lead</Button>}
+      />
 
       <div className="flex flex-wrap gap-3">
         {STAGES.filter(col => !col.isQuizStage || byStage(col.stage).length > 0).map(col => (

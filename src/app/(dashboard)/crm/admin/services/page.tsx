@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
+import { fetchJson } from "@/lib/fetch-json";
+import { Button, EmptyState, ErrorState, LoadingState, Modal, PageHeader } from "@/components/ui";
 import type { ServiceTemplate, ServiceBillingType, ServiceBillingInterval } from "@/types";
 
 const BILLING_TYPES: ServiceBillingType[] = ["recurring", "one_time", "tm"];
@@ -17,6 +19,7 @@ const BLANK_FORM = {
 export default function ServiceCatalogPage() {
   const [templates, setTemplates] = useState<ServiceTemplate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(BLANK_FORM);
@@ -25,15 +28,14 @@ export default function ServiceCatalogPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const r = await fetch("/api/crm/service-templates");
-      const d = await r.json();
-      setTemplates(Array.isArray(d) ? d : []);
-    } catch {
-      setTemplates([]);
-    } finally {
-      setLoading(false);
+    const r = await fetchJson<unknown>("/api/crm/service-templates");
+    if (r.ok) {
+      setTemplates(Array.isArray(r.data) ? r.data : []);
+      setLoadError(null);
+    } else {
+      setLoadError(r.error);
     }
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -95,19 +97,17 @@ export default function ServiceCatalogPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl font-semibold text-brand-black">Service catalog</h1>
-          <p className="text-sm text-brand-muted mt-0.5">
-            Service templates available for client billing. {templates.length} defined.
-          </p>
-        </div>
-        {isAdmin && (
-          <button onClick={() => { setForm(BLANK_FORM); setErr(null); setShowAdd(true); }} className="btn-primary text-xs px-3 py-1.5">
-            + Add service
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Service catalog"
+        description={`Service templates available for client billing. ${templates.length} defined.`}
+        actions={
+          isAdmin && (
+            <Button size="sm" onClick={() => { setForm(BLANK_FORM); setErr(null); setShowAdd(true); }}>
+              + Add service
+            </Button>
+          )
+        }
+      />
 
       {err && !showAdd && (
         <div className="text-xs text-red-700 bg-red-50 border border-red-100 rounded px-3 py-2 mb-3">
@@ -115,14 +115,15 @@ export default function ServiceCatalogPage() {
         </div>
       )}
 
+      {loadError && (
+        <ErrorState message={`Couldn't load service templates: ${loadError}`} onRetry={load} className="mb-4" />
+      )}
       {loading ? (
-        <div className="card animate-pulse h-40" />
+        <LoadingState />
       ) : templates.length === 0 ? (
-        <div className="card text-center py-12">
-          <p className="text-brand-muted text-sm">No service templates yet.</p>
-        </div>
+        loadError ? null : <EmptyState title="No service templates yet." />
       ) : (
-        <div className="card overflow-hidden p-0">
+        <div className="card overflow-x-auto p-0">
           <table className="w-full text-xs">
             <thead className="bg-brand-cream/40 text-brand-muted uppercase tracking-wide">
               <tr>
@@ -170,78 +171,72 @@ export default function ServiceCatalogPage() {
         </div>
       )}
 
-      {showAdd && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg w-full max-w-md shadow-xl">
-            <div className="px-4 py-3 border-b border-brand-border flex items-center justify-between">
-              <h3 className="font-semibold text-brand-black text-sm">Add service</h3>
-              <button onClick={() => setShowAdd(false)} className="text-brand-muted hover:text-brand-black text-lg leading-none">×</button>
-            </div>
-            <div className="p-4 space-y-3">
-              <input
-                autoFocus
-                value={form.name}
-                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                placeholder="Service name"
-                className="w-full rounded border border-brand-border px-2 py-1.5 text-sm"
-              />
-              <textarea
-                value={form.description}
-                onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-                rows={3}
-                placeholder="Short description"
-                className="w-full rounded border border-brand-border px-2 py-1.5 text-xs"
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <div className="text-[10px] uppercase text-brand-muted mb-1">Billing type</div>
-                  <select
-                    value={form.billing_type}
-                    onChange={(e) => setForm((p) => ({ ...p, billing_type: e.target.value as ServiceBillingType }))}
-                    className="w-full rounded border border-brand-border px-2 py-1 text-xs"
-                  >
-                    {BILLING_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                {form.billing_type === "recurring" && (
-                  <div>
-                    <div className="text-[10px] uppercase text-brand-muted mb-1">Interval</div>
-                    <select
-                      value={form.billing_interval}
-                      onChange={(e) => setForm((p) => ({ ...p, billing_interval: e.target.value as ServiceBillingInterval }))}
-                      className="w-full rounded border border-brand-border px-2 py-1 text-xs"
-                    >
-                      {BILLING_INTERVALS.map((i) => <option key={i} value={i}>{i}</option>)}
-                    </select>
-                  </div>
-                )}
-              </div>
-              <label className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={form.is_taxable}
-                  onChange={(e) => setForm((p) => ({ ...p, is_taxable: e.target.checked }))}
-                />
-                Taxable
-              </label>
-              <p className="text-[11px] text-brand-muted">
-                Stripe product is created automatically when you save.
-              </p>
-              {err && <div className="text-xs text-red-700">{err}</div>}
-            </div>
-            <div className="px-4 py-3 border-t border-brand-border flex justify-end gap-2">
-              <button onClick={() => setShowAdd(false)} className="text-xs px-3 py-1 hover:bg-brand-cream rounded">Cancel</button>
-              <button
-                onClick={save}
-                disabled={!form.name.trim() || saving}
-                className={clsx("btn-primary text-xs px-3 py-1.5", saving && "opacity-60")}
+      <Modal
+        open={showAdd}
+        onClose={() => setShowAdd(false)}
+        title="Add service"
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setShowAdd(false)}>Cancel</Button>
+            <Button size="sm" onClick={save} disabled={!form.name.trim() || saving}>
+              {saving ? "Saving…" : "Create"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <input
+            autoFocus
+            value={form.name}
+            onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+            placeholder="Service name"
+            className="w-full rounded border border-brand-border px-2 py-1.5 text-sm"
+          />
+          <textarea
+            value={form.description}
+            onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+            rows={3}
+            placeholder="Short description"
+            className="w-full rounded border border-brand-border px-2 py-1.5 text-xs"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="text-[10px] uppercase text-brand-muted mb-1">Billing type</div>
+              <select
+                value={form.billing_type}
+                onChange={(e) => setForm((p) => ({ ...p, billing_type: e.target.value as ServiceBillingType }))}
+                className="w-full rounded border border-brand-border px-2 py-1 text-xs"
               >
-                {saving ? "Saving…" : "Create"}
-              </button>
+                {BILLING_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
+            {form.billing_type === "recurring" && (
+              <div>
+                <div className="text-[10px] uppercase text-brand-muted mb-1">Interval</div>
+                <select
+                  value={form.billing_interval}
+                  onChange={(e) => setForm((p) => ({ ...p, billing_interval: e.target.value as ServiceBillingInterval }))}
+                  className="w-full rounded border border-brand-border px-2 py-1 text-xs"
+                >
+                  {BILLING_INTERVALS.map((i) => <option key={i} value={i}>{i}</option>)}
+                </select>
+              </div>
+            )}
           </div>
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={form.is_taxable}
+              onChange={(e) => setForm((p) => ({ ...p, is_taxable: e.target.checked }))}
+            />
+            Taxable
+          </label>
+          <p className="text-[11px] text-brand-muted">
+            Stripe product is created automatically when you save.
+          </p>
+          {err && <div className="text-xs text-red-700">{err}</div>}
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

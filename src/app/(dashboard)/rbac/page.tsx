@@ -8,6 +8,8 @@ import {
   MANAGE_PERMISSIONS,
 } from "@/lib/permissions";
 import clsx from "clsx";
+import { Button, ErrorState, LoadingState, Modal, PageHeader } from "@/components/ui";
+import { fetchJson } from "@/lib/fetch-json";
 
 // ─── Create role modal ────────────────────────────────────────────────────────
 
@@ -46,63 +48,50 @@ function CreateRoleModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    <Modal
+      open
+      onClose={onClose}
+      title="Create role"
+      size="sm"
+      closeOnBackdrop
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" form="create-role-form" disabled={saving}>
+            {saving ? "Creating…" : "Create"}
+          </Button>
+        </>
+      }
     >
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-brand-black">Create role</h2>
-          <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg leading-none">×</button>
+      <form id="create-role-form" onSubmit={submit} className="space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-brand-black mb-1">
+            Name <span className="text-red-500">*</span>
+            <span className="font-normal text-brand-muted ml-1">(lowercase, no spaces)</span>
+          </label>
+          <input
+            required
+            pattern="[a-z0-9_-]+"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="e.g. operator"
+            className="w-full text-sm px-3 py-2 border border-brand-border rounded-lg
+                       focus:outline-none focus:border-brand-orange font-mono"
+          />
         </div>
-        <form onSubmit={submit} className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-brand-black mb-1">
-              Name <span className="text-red-500">*</span>
-              <span className="font-normal text-brand-muted ml-1">(lowercase, no spaces)</span>
-            </label>
-            <input
-              required
-              pattern="[a-z0-9_-]+"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. operator"
-              className="w-full text-sm px-3 py-2 border border-brand-border rounded-lg
-                         focus:outline-none focus:border-brand-orange font-mono"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-brand-black mb-1">Description</label>
-            <input
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="What can this role do?"
-              className="w-full text-sm px-3 py-2 border border-brand-border rounded-lg
-                         focus:outline-none focus:border-brand-orange"
-            />
-          </div>
-          {error && <p className="text-xs text-red-600">{error}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-brand-muted border border-brand-border
-                         rounded-lg hover:text-brand-black transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 text-sm font-medium bg-brand-orange text-white rounded-lg
-                         hover:bg-brand-orange-dark transition-colors disabled:opacity-50"
-            >
-              {saving ? "Creating…" : "Create"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div>
+          <label className="block text-xs font-medium text-brand-black mb-1">Description</label>
+          <input
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="What can this role do?"
+            className="w-full text-sm px-3 py-2 border border-brand-border rounded-lg
+                       focus:outline-none focus:border-brand-orange"
+          />
+        </div>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+      </form>
+    </Modal>
   );
 }
 
@@ -223,9 +212,10 @@ export default function RBACPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/admin/rbac");
-    if (!res.ok) { setError("Failed to load roles"); setLoading(false); return; }
-    setRoles(await res.json());
+    const r = await fetchJson<DashboardRole[]>("/api/admin/rbac");
+    if (!r.ok) { setError("Failed to load roles"); setLoading(false); return; }
+    setError(null);
+    setRoles(r.data);
     setLoading(false);
   }, []);
 
@@ -274,7 +264,7 @@ export default function RBACPage() {
     return (
       <div className="p-4 md:p-8 space-y-4">
         <div className="h-8 w-40 bg-brand-border rounded animate-pulse" />
-        <div className="card animate-pulse h-64" />
+        <LoadingState />
       </div>
     );
   }
@@ -285,25 +275,19 @@ export default function RBACPage() {
         <CreateRoleModal onClose={() => setShowCreate(false)} onCreated={load} />
       )}
 
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-semibold text-brand-black">Roles</h1>
-          <p className="text-sm text-brand-muted mt-0.5">
-            {roles.length} role{roles.length !== 1 ? "s" : ""} · permission changes take effect on next login
-          </p>
-        </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="px-3 py-1.5 rounded-md text-xs font-medium bg-brand-orange text-white
-                     hover:bg-brand-orange-dark transition-colors flex items-center gap-1.5"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Create role
-        </button>
-      </div>
+      <PageHeader
+        title="Roles"
+        description={`${roles.length} role${roles.length !== 1 ? "s" : ""} · permission changes take effect on next login`}
+        actions={
+          <Button size="sm" onClick={() => setShowCreate(true)}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Create role
+          </Button>
+        }
+      />
 
       {/* Info banner */}
       <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
@@ -319,7 +303,7 @@ export default function RBACPage() {
       </div>
 
       {error && (
-        <div className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-lg">{error}</div>
+        <ErrorState message={error} />
       )}
 
       {/* Permission matrix */}

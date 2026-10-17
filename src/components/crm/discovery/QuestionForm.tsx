@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { DiscoveryQuestionType } from "@/types";
 import { QUESTION_TYPES, CHOICE_TYPES } from "@/lib/discovery/snapshot";
 import { QuestionInput } from "@/lib/discovery/bank";
+import { Button } from "@/components/ui";
 
 export const INPUT = "w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange";
 export const LABEL = "text-xs text-brand-muted mb-1 block";
@@ -130,25 +131,10 @@ export function QuestionForm({ initial, sections, sectionLabel = "Section", subm
       {footer}
       {error && <p className="text-xs text-red-600">{error}</p>}
       <div className="flex gap-2 pt-2">
-        <button onClick={onCancel} className="btn-ghost flex-1">Cancel</button>
-        <button onClick={submit} disabled={!valid || busy} className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed">
+        <Button variant="ghost" className="flex-1" onClick={onCancel}>Cancel</Button>
+        <Button className="flex-1" onClick={submit} disabled={!valid || busy}>
           {busy ? "Saving…" : submitLabel}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** Modal shell matching NewDiscoveryModal. */
-export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
-  return (
-    <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
-      <div className={clsx("bg-white rounded-xl w-full p-6 shadow-xl max-h-[90vh] overflow-y-auto", wide ? "max-w-2xl" : "max-w-lg")}>
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-semibold text-brand-black">{title}</h2>
-          <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg" aria-label="Close">✕</button>
-        </div>
-        {children}
+        </Button>
       </div>
     </div>
   );

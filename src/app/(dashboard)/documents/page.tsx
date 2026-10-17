@@ -9,6 +9,8 @@ import {
   DOC_STATUS_COLORS, DocStatus, computeHealth, DOC_HEALTH_LABELS,
 } from "@/lib/doc-types";
 import { can } from "@/lib/permissions";
+import { fetchJson } from "@/lib/fetch-json";
+import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
 import FacetRail, { KpiRow, applyFilters, Filters, ClientOption, FacetDoc } from "./FacetRail";
 import Reader, { ReaderDoc } from "./Reader";
 import MetadataDrawer, { DrawerDoc } from "./MetadataDrawer";
@@ -67,69 +69,71 @@ function DocTable({ docs, selectedIds, onToggleSelect, onToggleSelectAll, onOpen
   const allSelected = docs.length > 0 && docs.every((d) => selectedIds.has(d.id));
 
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-brand-border text-left text-[10px] uppercase tracking-wide text-brand-muted">
-          {canManage && (
-            <th className="w-8 px-2 py-2">
-              <input type="checkbox" checked={allSelected} onChange={() => onToggleSelectAll(docs)} />
-            </th>
-          )}
-          <th className="px-2 py-2">Document</th>
-          <th className="px-2 py-2">Type</th>
-          <th className="px-2 py-2">Audience</th>
-          <th className="px-2 py-2">Status</th>
-          <th className="px-2 py-2">Client</th>
-          <th className="px-2 py-2">Chunks</th>
-          <th className="px-2 py-2">Last indexed</th>
-          <th className="px-2 py-2">Updated</th>
-        </tr>
-      </thead>
-      <tbody>
-        {docs.map((doc) => {
-          const statusColor = DOC_STATUS_COLORS[doc.status as DocStatus] ?? "bg-gray-100 text-gray-600 border-gray-200";
-          const clientName = doc.client_id ? clientNameById.get(doc.client_id) ?? "Unknown client" : "Rosably";
-          return (
-            <tr key={doc.id} className="border-b border-brand-border/50 hover:bg-brand-offwhite transition-colors">
-              {canManage && (
-                <td className="px-2 py-2">
-                  <input type="checkbox" checked={selectedIds.has(doc.id)} onChange={() => onToggleSelect(doc.id)} />
+    <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-brand-border text-left text-[10px] uppercase tracking-wide text-brand-muted">
+            {canManage && (
+              <th className="w-8 px-2 py-2">
+                <input type="checkbox" checked={allSelected} onChange={() => onToggleSelectAll(docs)} />
+              </th>
+            )}
+            <th className="px-2 py-2">Document</th>
+            <th className="px-2 py-2">Type</th>
+            <th className="px-2 py-2">Audience</th>
+            <th className="px-2 py-2">Status</th>
+            <th className="px-2 py-2">Client</th>
+            <th className="px-2 py-2">Chunks</th>
+            <th className="px-2 py-2">Last indexed</th>
+            <th className="px-2 py-2">Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {docs.map((doc) => {
+            const statusColor = DOC_STATUS_COLORS[doc.status as DocStatus] ?? "bg-gray-100 text-gray-600 border-gray-200";
+            const clientName = doc.client_id ? clientNameById.get(doc.client_id) ?? "Unknown client" : "Rosably";
+            return (
+              <tr key={doc.id} className="border-b border-brand-border/50 hover:bg-brand-offwhite transition-colors">
+                {canManage && (
+                  <td className="px-2 py-2">
+                    <input type="checkbox" checked={selectedIds.has(doc.id)} onChange={() => onToggleSelect(doc.id)} />
+                  </td>
+                )}
+                <td className="px-2 py-2 min-w-0">
+                  <button onClick={() => onOpenReader(doc)} className="text-left block truncate max-w-[280px]">
+                    <span className="text-sm text-brand-black font-medium hover:text-brand-orange">{doc.name}</span>
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[10px] text-brand-muted font-mono truncate max-w-[240px]">{doc.path}</p>
+                    {canManage && (
+                      <button onClick={() => onOpenDrawer(doc)} title="Edit metadata" className="text-brand-muted hover:text-brand-orange flex-shrink-0">
+                        ✎
+                      </button>
+                    )}
+                    <HealthBadge doc={doc} />
+                  </div>
                 </td>
-              )}
-              <td className="px-2 py-2 min-w-0">
-                <button onClick={() => onOpenReader(doc)} className="text-left block truncate max-w-[280px]">
-                  <span className="text-sm text-brand-black font-medium hover:text-brand-orange">{doc.name}</span>
-                </button>
-                <div className="flex items-center gap-1.5">
-                  <p className="text-[10px] text-brand-muted font-mono truncate max-w-[240px]">{doc.path}</p>
-                  {canManage && (
-                    <button onClick={() => onOpenDrawer(doc)} title="Edit metadata" className="text-brand-muted hover:text-brand-orange flex-shrink-0">
-                      ✎
-                    </button>
-                  )}
-                  <HealthBadge doc={doc} />
-                </div>
-              </td>
-              <td className="px-2 py-2 text-xs text-brand-black whitespace-nowrap">{docTypeLabel(doc.doc_type)}</td>
-              <td className="px-2 py-2 text-xs text-brand-black whitespace-nowrap">{docAudienceLabel(doc.audience)}</td>
-              <td className="px-2 py-2">
-                <span className={clsx("text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap", statusColor)}>
-                  {docStatusLabel(doc.status)}
-                </span>
-              </td>
-              <td className="px-2 py-2 text-xs text-brand-muted whitespace-nowrap">{clientName}</td>
-              <td className="px-2 py-2 text-xs text-brand-muted">{doc.chunk_count ?? "—"}</td>
-              <td className="px-2 py-2 text-xs text-brand-muted whitespace-nowrap">
-                {doc.last_indexed_at ? formatDistanceToNow(parseISO(doc.last_indexed_at), { addSuffix: true }) : "never"}
-              </td>
-              <td className="px-2 py-2 text-xs text-brand-muted whitespace-nowrap">
-                {doc.updated_at ? formatDistanceToNow(parseISO(doc.updated_at), { addSuffix: true }) : "—"}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+                <td className="px-2 py-2 text-xs text-brand-black whitespace-nowrap">{docTypeLabel(doc.doc_type)}</td>
+                <td className="px-2 py-2 text-xs text-brand-black whitespace-nowrap">{docAudienceLabel(doc.audience)}</td>
+                <td className="px-2 py-2">
+                  <span className={clsx("text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap", statusColor)}>
+                    {docStatusLabel(doc.status)}
+                  </span>
+                </td>
+                <td className="px-2 py-2 text-xs text-brand-muted whitespace-nowrap">{clientName}</td>
+                <td className="px-2 py-2 text-xs text-brand-muted">{doc.chunk_count ?? "—"}</td>
+                <td className="px-2 py-2 text-xs text-brand-muted whitespace-nowrap">
+                  {doc.last_indexed_at ? formatDistanceToNow(parseISO(doc.last_indexed_at), { addSuffix: true }) : "never"}
+                </td>
+                <td className="px-2 py-2 text-xs text-brand-muted whitespace-nowrap">
+                  {doc.updated_at ? formatDistanceToNow(parseISO(doc.updated_at), { addSuffix: true }) : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -188,23 +192,27 @@ function DocumentsPageInner() {
   const [readerDoc, setReaderDoc] = useState<DocEntry | null>(null);
   const [readerMode, setReaderMode] = useState<"fullscreen" | "panel">("fullscreen");
   const [drawerDoc, setDrawerDoc] = useState<DocEntry | null>(null);
+  const [permsError, setPermsError] = useState(false);
+  const [clientsError, setClientsError] = useState(false);
 
   const canManage = can(permissions, "manage_documents");
 
   useEffect(() => {
-    fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((data) => {
-      if (data?.permissions) setPermissions(data.permissions);
-    }).catch(() => {});
+    fetchJson<{ permissions?: string[] }>("/api/auth/me").then((r) => {
+      if (r.ok && r.data?.permissions) setPermissions(r.data.permissions);
+      setPermsError(!r.ok);
+    });
   }, []);
 
   const loadDocs = useCallback(() => {
     setListLoading(true);
-    fetch("/api/docs/list").then((r) => r.json()).then((data) => {
-      if (data.error) setListError(data.error);
-      else setDocs(Array.isArray(data) ? data : []);
-      setListLoading(false);
-    }).catch(() => {
-      setListError("Could not load document registry");
+    fetchJson<DocEntry[]>("/api/docs/list").then((r) => {
+      if (r.ok) {
+        setDocs(Array.isArray(r.data) ? r.data : []);
+        setListError(null);
+      } else {
+        setListError(r.error === "Network error" ? "Could not load document registry" : r.error);
+      }
       setListLoading(false);
     });
   }, []);
@@ -212,7 +220,10 @@ function DocumentsPageInner() {
   useEffect(() => { loadDocs(); }, [loadDocs]);
 
   useEffect(() => {
-    fetch("/api/docs/clients").then((r) => r.json()).then((data) => setClients(Array.isArray(data) ? data : [])).catch(() => {});
+    fetchJson<ClientOption[]>("/api/docs/clients").then((r) => {
+      if (r.ok) setClients(Array.isArray(r.data) ? r.data : []);
+      setClientsError(!r.ok);
+    });
   }, []);
 
   // Reflect filters + q in the URL so views are shareable/bookmarkable.
@@ -271,19 +282,15 @@ function DocumentsPageInner() {
 
   return (
     <div className="p-4 md:p-8 pt-16 md:pt-8 pb-24 md:pb-8">
-      <div className="mb-5">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-xl font-semibold text-brand-black">Documents</h1>
-            <p className="text-sm text-brand-muted mt-0.5">
-              {listLoading ? "Loading…" : listError ? "Failed to load document registry" : `${docs.length} document${docs.length !== 1 ? "s" : ""} available`}
-            </p>
-          </div>
+      <PageHeader
+        className="flex-wrap"
+        title="Documents"
+        description={listLoading ? "Loading…" : listError ? "Failed to load document registry" : `${docs.length} document${docs.length !== 1 ? "s" : ""} available`}
+        actions={
           <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => setGrouped((g) => !g)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-brand-border bg-white text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors">
+            <Button size="sm" variant="secondary" onClick={() => setGrouped((g) => !g)}>
               {grouped ? "Flat view" : "Group by type"}
-            </button>
+            </Button>
             <Link href="/images"
               className="px-3 py-1.5 rounded-lg text-xs font-medium border border-brand-border bg-white text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors inline-flex items-center gap-1.5">
               Images
@@ -299,13 +306,26 @@ function DocumentsPageInner() {
               {reindex.state === "running" ? "Indexing…" : reindex.state === "done" ? "Indexed ✓" : reindex.state === "error" ? "Failed ✗" : "Reindex docs"}
             </button>
           </div>
+        }
+      />
+      {(reindex.output || permsError || clientsError) && (
+        <div className="mb-5 space-y-3">
+          {(permsError || clientsError) && (
+            <ErrorState
+              message={
+                permsError && clientsError ? "Couldn't load your permissions or the client list — editing and client filters may be missing."
+                : permsError ? "Couldn't load your permissions — editing actions are hidden."
+                : "Couldn't load the client list — client names and filters may be missing."
+              }
+            />
+          )}
+          {reindex.output && (
+            <pre className="text-xs bg-brand-offwhite rounded-lg px-3 py-2.5 overflow-auto max-h-32 whitespace-pre-wrap text-brand-muted border border-brand-border">
+              {reindex.output}
+            </pre>
+          )}
         </div>
-        {reindex.output && (
-          <pre className="mt-3 text-xs bg-brand-offwhite rounded-lg px-3 py-2.5 overflow-auto max-h-32 whitespace-pre-wrap text-brand-muted border border-brand-border">
-            {reindex.output}
-          </pre>
-        )}
-      </div>
+      )}
 
       <KpiRow docs={docs} filters={filters} q={q} onChange={handleFilterChange} />
 
@@ -329,29 +349,29 @@ function DocumentsPageInner() {
             />
           )}
 
-          <div className="card overflow-x-auto">
-            {listLoading ? (
-              <div className="p-6 space-y-3">
-                {[1, 2, 3, 4].map((i) => <div key={i} className="animate-pulse h-8 bg-brand-offwhite rounded" />)}
-              </div>
-            ) : listError ? (
-              <div className="p-6 text-center"><p className="text-xs text-red-600 font-medium">{listError}</p></div>
-            ) : filteredDocs.length === 0 ? (
-              <div className="p-6 text-center"><p className="text-xs text-brand-muted">No documents found</p></div>
-            ) : grouped ? (
-              <GroupedDocTable
-                docs={filteredDocs} selectedIds={selectedIds} onToggleSelect={toggleSelect} onToggleSelectAll={toggleSelectAll}
-                onOpenReader={(d) => { setReaderDoc(d); setReaderMode("fullscreen"); }}
-                onOpenDrawer={setDrawerDoc} clientNameById={clientNameById} canManage={canManage}
-              />
-            ) : (
-              <DocTable
-                docs={filteredDocs} selectedIds={selectedIds} onToggleSelect={toggleSelect} onToggleSelectAll={toggleSelectAll}
-                onOpenReader={(d) => { setReaderDoc(d); setReaderMode("fullscreen"); }}
-                onOpenDrawer={setDrawerDoc} clientNameById={clientNameById} canManage={canManage}
-              />
-            )}
-          </div>
+          {listLoading ? (
+            <LoadingState />
+          ) : listError ? (
+            <ErrorState message={listError} onRetry={loadDocs} />
+          ) : filteredDocs.length === 0 ? (
+            <EmptyState title="No documents found" />
+          ) : (
+            <div className="card overflow-x-auto">
+              {grouped ? (
+                <GroupedDocTable
+                  docs={filteredDocs} selectedIds={selectedIds} onToggleSelect={toggleSelect} onToggleSelectAll={toggleSelectAll}
+                  onOpenReader={(d) => { setReaderDoc(d); setReaderMode("fullscreen"); }}
+                  onOpenDrawer={setDrawerDoc} clientNameById={clientNameById} canManage={canManage}
+                />
+              ) : (
+                <DocTable
+                  docs={filteredDocs} selectedIds={selectedIds} onToggleSelect={toggleSelect} onToggleSelectAll={toggleSelectAll}
+                  onOpenReader={(d) => { setReaderDoc(d); setReaderMode("fullscreen"); }}
+                  onOpenDrawer={setDrawerDoc} clientNameById={clientNameById} canManage={canManage}
+                />
+              )}
+            </div>
+          )}
         </div>
       </div>
 

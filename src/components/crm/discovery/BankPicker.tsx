@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { DiscoveryQuestion } from "@/types";
 import { questionSearchText } from "@/lib/discovery/bank";
-import { INPUT, LABEL, Modal, TYPE_LABEL } from "./QuestionForm";
+import { fetchJson } from "@/lib/fetch-json";
+import { Button, Modal } from "@/components/ui";
+import { INPUT, LABEL, TYPE_LABEL } from "./QuestionForm";
 
 interface Props {
   /** Bank keys already in the questionnaire; shown but not selectable. */
@@ -19,9 +21,13 @@ export function BankPicker({ excludeKeys, sections, defaultSectionId, onAdd, onC
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
   const [sectionId, setSectionId] = useState(defaultSectionId ?? sections[0]?.id ?? "");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/crm/discovery/questions").then(r => r.json()).then(d => setBank(Array.isArray(d) ? d : []));
+    fetchJson<unknown>("/api/crm/discovery/questions").then(r => {
+      if (r.ok) setBank(Array.isArray(r.data) ? r.data : []);
+      else setLoadError(r.error);
+    });
   }, []);
 
   const shown = useMemo(() => {
@@ -32,11 +38,26 @@ export function BankPicker({ excludeKeys, sections, defaultSectionId, onAdd, onC
   const toggle = (id: string) => setPicked(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
   return (
-    <Modal title="Add from question bank" onClose={onClose} wide>
+    <Modal
+      open
+      title="Add from question bank"
+      onClose={onClose}
+      size="xl"
+      footer={
+        <>
+          <Button variant="ghost" className="flex-1" onClick={onClose}>Cancel</Button>
+          <Button className="flex-1" disabled={!picked.length || !sectionId}
+            onClick={() => onAdd(picked.map(id => bank!.find(q => q.id === id)!).filter(Boolean), sectionId)}>
+            Add {picked.length || ""} question{picked.length === 1 ? "" : "s"}
+          </Button>
+        </>
+      }
+    >
       <div className="space-y-3">
         <input className={INPUT} placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} autoFocus />
         <div className="border border-brand-border rounded-lg max-h-[45vh] overflow-y-auto">
-          {bank === null ? <div className="p-4 text-sm text-brand-muted">Loading…</div>
+          {loadError ? <div role="alert" className="p-4 text-sm text-red-600">Couldn&apos;t load the question bank: {loadError}</div>
+            : bank === null ? <div className="p-4 text-sm text-brand-muted">Loading…</div>
             : shown.length === 0 ? <div className="p-4 text-sm text-brand-muted">No questions match.</div>
             : shown.map(q => {
               const used = excludeKeys.has(q.key);
@@ -58,13 +79,6 @@ export function BankPicker({ excludeKeys, sections, defaultSectionId, onAdd, onC
           <select className={INPUT} value={sectionId} onChange={e => setSectionId(e.target.value)}>
             {sections.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
           </select>
-        </div>
-        <div className="flex gap-2 pt-2">
-          <button onClick={onClose} className="btn-ghost flex-1">Cancel</button>
-          <button disabled={!picked.length || !sectionId} className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => onAdd(picked.map(id => bank!.find(q => q.id === id)!).filter(Boolean), sectionId)}>
-            Add {picked.length || ""} question{picked.length === 1 ? "" : "s"}
-          </button>
         </div>
       </div>
     </Modal>

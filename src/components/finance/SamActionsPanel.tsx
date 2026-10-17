@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
+import { Button, EmptyState, ErrorState, LoadingState } from "@/components/ui";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { SamMarkdown } from "@/components/SamMarkdown";
 import { PendingApproval } from "@/types";
@@ -39,6 +40,7 @@ export function SamActionsPanel() {
   const [pending, setPending]               = useState<PendingApproval[]>([]);
   const [history, setHistory]               = useState<HistoryRow[]>([]);
   const [loading, setLoading]               = useState(true);
+  const [loadError, setLoadError]           = useState(false);
   const [compose, setCompose]               = useState("");
   const [composeSending, setComposeSending] = useState(false);
   const [composeReply, setComposeReply]     = useState<string | null>(null);
@@ -50,8 +52,9 @@ export function SamActionsPanel() {
       fetch("/api/approvals?history=true").then(r => r.json()),
     ]);
 
-    const allPending = pendingRes.status === "fulfilled" && Array.isArray(pendingRes.value)
-      ? pendingRes.value : [];
+    const pendingOk = pendingRes.status === "fulfilled" && Array.isArray(pendingRes.value);
+    setLoadError(!pendingOk);
+    const allPending = pendingOk ? pendingRes.value : [];
     const allHistory = historyRes.status === "fulfilled" && Array.isArray(historyRes.value)
       ? historyRes.value : [];
 
@@ -118,13 +121,9 @@ export function SamActionsPanel() {
             rows={2}
             className="flex-1 border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange resize-none"
           />
-          <button
-            onClick={sendCompose}
-            disabled={composeSending || !compose.trim()}
-            className="btn-primary disabled:opacity-50 px-4 py-2"
-          >
+          <Button onClick={sendCompose} disabled={composeSending || !compose.trim()}>
             {composeSending ? "Sending…" : "Send"}
-          </button>
+          </Button>
         </div>
 
         {/* Typing indicator while awaiting Sam's response */}
@@ -160,13 +159,11 @@ export function SamActionsPanel() {
       </div>
 
       {loading ? (
-        <div className="space-y-3">
-          {[1, 2].map(i => <div key={i} className="card animate-pulse h-28" />)}
-        </div>
+        <LoadingState rows={2} />
+      ) : loadError ? (
+        <ErrorState className="mb-6" message="Couldn't load Sam actions." onRetry={load} />
       ) : pending.length === 0 ? (
-        <div className="card text-center py-6 mb-6">
-          <p className="text-sm text-brand-muted">No pending Sam actions</p>
-        </div>
+        <EmptyState className="mb-6" title="No pending Sam actions" />
       ) : (
         <div className="space-y-3 mb-6">
           {pending.map(a => (

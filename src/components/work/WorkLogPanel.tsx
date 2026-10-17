@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePolling } from "@/lib/use-polling";
+import { Button } from "@/components/ui";
 import type { WorkItemLog, WorkItemLogEntryType, WorkStatus } from "@/types";
 
 const ENTRY_TYPES: WorkItemLogEntryType[] = [
@@ -158,13 +159,9 @@ export function WorkLogPanel({ workItemId, currentUser, workItemStatus }: Props)
               </div>
             )}
           </div>
-          <button
-            onClick={post}
-            disabled={!message.trim() || posting}
-            className="rounded bg-brand-orange text-white px-3 py-1 text-xs disabled:opacity-50"
-          >
+          <Button size="sm" onClick={post} disabled={!message.trim() || posting}>
             {posting ? "..." : "Post"}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -333,19 +330,12 @@ function LogEntry({
         />
         {error && <div className="text-[10px] text-red-600 mt-1">{error}</div>}
         <div className="flex gap-2 mt-1">
-          <button
-            onClick={save}
-            disabled={!draftMessage.trim() || saving}
-            className="rounded bg-brand-orange text-white px-3 py-1 text-xs disabled:opacity-50"
-          >
+          <Button size="sm" onClick={save} disabled={!draftMessage.trim() || saving}>
             {saving ? "..." : "Save"}
-          </button>
-          <button
-            onClick={() => setEditing(false)}
-            className="rounded border border-brand-border px-3 py-1 text-xs"
-          >
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => setEditing(false)}>
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
     );

@@ -27,6 +27,8 @@ type ModalProps = {
   closeOnBackdrop?: boolean;
   /** Extra classes for the panel (e.g. a custom padding). */
   className?: string;
+  /** Block Escape and the ✕ button, e.g. while a save is in flight. */
+  preventClose?: boolean;
 };
 
 /**
@@ -43,18 +45,35 @@ export function Modal({
   size = "md",
   closeOnBackdrop = false,
   className,
+  preventClose = false,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const preventCloseRef = useRef(preventClose);
+  preventCloseRef.current = preventClose;
+
+  // Remember what had focus when the modal opened, so it can get it back on
+  // close. Read during render: by the time effects run, a child with
+  // autoFocus has already moved focus into the modal.
+  const openerRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
+  if (open && !wasOpenRef.current && typeof document !== "undefined") {
+    openerRef.current = document.activeElement as HTMLElement | null;
+  }
+  wasOpenRef.current = open;
 
   useEffect(() => {
     if (!open) return;
-    const opener = document.activeElement as HTMLElement | null;
+    const opener = openerRef.current;
     const panel = panelRef.current;
-    const first = panel?.querySelector<HTMLElement>(FOCUSABLE);
-    (first ?? panel)?.focus();
+    // A child with autoFocus has already taken focus by now (child effects run
+    // first); keep it. Otherwise focus the first field, skipping the ✕ button.
+    if (!panel?.contains(document.activeElement)) {
+      const first = panel?.querySelector<HTMLElement>(`[data-modal-body] :is(${FOCUSABLE})`);
+      (first ?? panel)?.focus();
+    }
 
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -62,7 +81,7 @@ export function Modal({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onCloseRef.current();
+        if (!preventCloseRef.current) onCloseRef.current();
         return;
       }
       if (e.key !== "Tab" || !panel) return;
@@ -91,7 +110,7 @@ export function Modal({
   return (
     <div
       className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center p-4"
-      onMouseDown={closeOnBackdrop ? (e => { if (e.target === e.currentTarget) onClose(); }) : undefined}
+      onMouseDown={closeOnBackdrop ? (e => { if (e.target === e.currentTarget && !preventClose) onClose(); }) : undefined}
     >
       <div
         ref={panelRef}
@@ -110,14 +129,17 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
+            disabled={preventClose}
             aria-label="Close"
-            className="text-brand-muted hover:text-brand-black text-lg leading-none"
+            className="text-brand-muted hover:text-brand-black text-lg leading-none disabled:opacity-40"
           >
             ✕
           </button>
         </div>
-        {children}
-        {footer && <div className="flex justify-end gap-2 mt-6">{footer}</div>}
+        <div data-modal-body>
+          {children}
+          {footer && <div className="flex justify-end gap-2 mt-6">{footer}</div>}
+        </div>
       </div>
     </div>
   );

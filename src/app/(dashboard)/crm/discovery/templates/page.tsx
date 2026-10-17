@@ -5,13 +5,16 @@ import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
 import { DiscoveryNav } from "@/components/crm/discovery/DiscoveryNav";
-import { INPUT, LABEL, Modal } from "@/components/crm/discovery/QuestionForm";
+import { INPUT, LABEL } from "@/components/crm/discovery/QuestionForm";
+import { fetchJson } from "@/lib/fetch-json";
+import { Button, EmptyState, ErrorState, LoadingState, Modal, PageHeader } from "@/components/ui";
 import { DiscoveryTemplate } from "@/types";
 
 export default function TemplatesPage() {
   const router = useRouter();
   const [rows, setRows] = useState<DiscoveryTemplate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -20,8 +23,11 @@ export default function TemplatesPage() {
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
-    fetch(`/api/crm/discovery/templates${showArchived ? "?archived=1" : ""}`).then(r => r.json())
-      .then(d => { setRows(Array.isArray(d) ? d : []); setLoading(false); });
+    fetchJson<unknown>(`/api/crm/discovery/templates${showArchived ? "?archived=1" : ""}`).then(r => {
+      if (r.ok) { setRows(Array.isArray(r.data) ? r.data : []); setLoadError(null); }
+      else setLoadError(r.error);
+      setLoading(false);
+    });
   }, [showArchived]);
   useEffect(load, [load]);
 
@@ -39,21 +45,20 @@ export default function TemplatesPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-        <div>
-          <h1 className="text-lg font-semibold text-brand-black">Templates</h1>
-          <p className="text-sm text-brand-muted">Starting points for new discovery questionnaires</p>
-        </div>
-        <button onClick={() => { setName(""); setCopyFrom(""); setError(""); setCreating(true); }} className="btn-primary text-sm">+ New template</button>
-      </div>
+      <PageHeader
+        title="Templates"
+        description="Starting points for new discovery questionnaires"
+        actions={<Button onClick={() => { setName(""); setCopyFrom(""); setError(""); setCreating(true); }}>+ New template</Button>}
+      />
       <DiscoveryNav />
 
       <label className="flex items-center gap-2 text-xs text-brand-muted mb-4">
         <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} /> Show archived
       </label>
 
-      {loading ? <div className="card animate-pulse h-40" /> : rows.length === 0 ? (
-        <div className="card text-sm text-brand-muted">No templates yet.</div>
+      {loadError && <ErrorState message={`Couldn't load templates: ${loadError}`} onRetry={load} className="mb-4" />}
+      {loading ? <LoadingState /> : rows.length === 0 ? (
+        loadError ? null : <EmptyState title="No templates yet." />
       ) : (
         <div className="card p-0 overflow-hidden">
           {rows.map(t => (
@@ -72,30 +77,35 @@ export default function TemplatesPage() {
         </div>
       )}
 
-      {creating && (
-        <Modal title="New template" onClose={() => setCreating(false)}>
-          <div className="space-y-4">
-            <div>
-              <label className={LABEL}>Name *</label>
-              <input className={INPUT} value={name} onChange={e => setName(e.target.value)} autoFocus />
-            </div>
-            <div>
-              <label className={LABEL}>Start from</label>
-              <select className={INPUT} value={copyFrom} onChange={e => setCopyFrom(e.target.value)}>
-                <option value="">Blank template</option>
-                {rows.filter(t => !t.archived_at).map(t => <option key={t.id} value={t.id}>Copy of {t.name}</option>)}
-              </select>
-            </div>
-            {error && <p className="text-xs text-red-600">{error}</p>}
-            <div className="flex gap-2 pt-2">
-              <button onClick={() => setCreating(false)} className="btn-ghost flex-1">Cancel</button>
-              <button onClick={create} disabled={!name.trim() || busy} className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed">
-                {busy ? "Creating…" : "Create"}
-              </button>
-            </div>
+      <Modal
+        open={creating}
+        title="New template"
+        onClose={() => setCreating(false)}
+        size="lg"
+        footer={
+          <>
+            <Button variant="ghost" className="flex-1" onClick={() => setCreating(false)}>Cancel</Button>
+            <Button className="flex-1" onClick={create} disabled={!name.trim() || busy}>
+              {busy ? "Creating…" : "Create"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className={LABEL}>Name *</label>
+            <input className={INPUT} value={name} onChange={e => setName(e.target.value)} autoFocus />
           </div>
-        </Modal>
-      )}
+          <div>
+            <label className={LABEL}>Start from</label>
+            <select className={INPUT} value={copyFrom} onChange={e => setCopyFrom(e.target.value)}>
+              <option value="">Blank template</option>
+              {rows.filter(t => !t.archived_at).map(t => <option key={t.id} value={t.id}>Copy of {t.name}</option>)}
+            </select>
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+      </Modal>
     </div>
   );
 }

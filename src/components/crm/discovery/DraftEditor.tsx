@@ -12,7 +12,9 @@ import { BankPicker } from "./BankPicker";
 import { QuestionnaireOutline } from "./QuestionnaireOutline";
 import { DeleteDiscoveryButton } from "./DeleteDiscoveryButton";
 import { RecipientFields, useEmailConfigured } from "./EmailInvite";
-import { EMPTY_QUESTION, INPUT, LABEL, Modal, QuestionDraft, QuestionForm } from "./QuestionForm";
+import { EMPTY_QUESTION, INPUT, LABEL, QuestionDraft, QuestionForm } from "./QuestionForm";
+import { fetchJson } from "@/lib/fetch-json";
+import { Button, Modal } from "@/components/ui";
 
 type Detail = DiscoveryInvite & { link: string };
 
@@ -57,8 +59,13 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
   const emailConfigured = useEmailConfigured();
   const [recipient, setRecipient] = useState({ to: invite.contact?.email ?? "", firstName: invite.contact?.first_name ?? "" });
 
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+
   useEffect(() => {
-    fetch("/api/crm/discovery/templates").then(r => r.json()).then(d => setTemplates(Array.isArray(d) ? d : []));
+    fetchJson<unknown>("/api/crm/discovery/templates").then(r => {
+      if (r.ok) setTemplates(Array.isArray(r.data) ? r.data : []);
+      else setTemplatesError(r.error);
+    });
   }, []);
 
   useEffect(() => {
@@ -197,7 +204,7 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
           </div>
           <textarea readOnly className={clsx(INPUT, "h-56 bg-brand-offwhite")} value={sent.email} />
         </div>
-        <button onClick={() => onChanged({ ...invite, status: "sent" })} className="btn-primary">Done</button>
+        <Button onClick={() => onChanged({ ...invite, status: "sent" })}>Done</Button>
       </div>
     );
   }
@@ -219,6 +226,7 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
             {templates.map(t => <option key={t.id} value={t.id}>{t.name}{t.is_default ? " (default)" : ""}</option>)}
           </select>
         </div>
+        {templatesError && <p role="alert" className="text-xs text-red-600">Couldn&apos;t load templates: {templatesError}</p>}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="md:col-span-2">
@@ -264,23 +272,23 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
       )}
 
       <div className="sticky bottom-0 md:bottom-4 mt-6 card flex items-center gap-2 flex-wrap shadow-lg">
-        <button onClick={() => save()} disabled={!dirty || !!busy || !project.title.trim()} className="btn-ghost text-sm disabled:opacity-50">
+        <Button variant="ghost" onClick={() => save()} disabled={!dirty || !!busy || !project.title.trim()}>
           {busy === "save" ? "Saving…" : "Save draft"}
-        </button>
-        <button onClick={preview} disabled={!!busy} className="btn-ghost text-sm">{busy === "preview" ? "Saving…" : "Preview ↗"}</button>
+        </Button>
+        <Button variant="ghost" onClick={preview} disabled={!!busy}>{busy === "preview" ? "Saving…" : "Preview ↗"}</Button>
         {emailConfigured ? (
           <>
-            <button onClick={() => send(true)} disabled={!!busy || !keys.size || !project.title.trim() || !recipient.to.trim()} className="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+            <Button onClick={() => send(true)} disabled={!!busy || !keys.size || !project.title.trim() || !recipient.to.trim()}>
               {busy === "send-email" ? "Sending…" : "Send & email"}
-            </button>
-            <button onClick={() => send(false)} disabled={!!busy || !keys.size || !project.title.trim()} className="btn-ghost text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+            </Button>
+            <Button variant="ghost" onClick={() => send(false)} disabled={!!busy || !keys.size || !project.title.trim()}>
               {busy === "send" ? "Sending…" : "Send (copy link only)"}
-            </button>
+            </Button>
           </>
         ) : (
-          <button onClick={() => send(false)} disabled={!!busy || !keys.size || !project.title.trim()} className="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+          <Button onClick={() => send(false)} disabled={!!busy || !keys.size || !project.title.trim()}>
             {busy === "send" ? "Sending…" : "Send"}
-          </button>
+          </Button>
         )}
         {!keys.size && <span className="text-xs text-brand-muted">Add at least one question to send.</span>}
         {dirty && <span className="text-xs text-amber-700">Unsaved changes</span>}
@@ -295,7 +303,7 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
       )}
 
       {custom && (
-        <Modal title="Custom question" onClose={() => setCustom(null)}>
+        <Modal open size="lg" title="Custom question" onClose={() => setCustom(null)}>
           <QuestionForm
             initial={{ ...EMPTY_QUESTION, section: def.sections.find(s => s.id === custom.sectionId)?.title ?? "" }}
             sections={sectionTitles}
@@ -315,7 +323,7 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
       )}
 
       {editing && (
-        <Modal title="Edit question (this draft only)" onClose={() => setEditing(null)}>
+        <Modal open size="lg" title="Edit question (this draft only)" onClose={() => setEditing(null)}>
           <p className="text-xs text-brand-muted mb-4">Changes apply to this prospect only. The bank and templates are unchanged.</p>
           <QuestionForm
             initial={fieldToDraft(editing, def.sections.find(s => s.fields.some(f => f.id === editing.id))?.title ?? "")}

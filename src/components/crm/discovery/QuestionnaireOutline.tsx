@@ -4,6 +4,7 @@ import { DiscoveryFieldDef, DiscoveryQuestionnaireDef } from "@/types";
 import { allFields, dependentsOf } from "@/lib/discovery/snapshot";
 import { moveAt, moveField, moveFieldToSection, removeField, uniqueSectionId } from "@/lib/discovery/editing";
 import { TYPE_LABEL } from "./QuestionForm";
+import { Button } from "@/components/ui";
 
 interface Props {
   def: DiscoveryQuestionnaireDef;
@@ -108,7 +109,7 @@ export function QuestionnaireOutline({ def, onChange, onAddFromBank, onAddCustom
           )}
         </div>
       ))}
-      {!readOnly && <button className="btn-ghost text-xs" onClick={addSection}>+ Add section</button>}
+      {!readOnly && <Button variant="ghost" size="sm" onClick={addSection}>+ Add section</Button>}
     </div>
   );
 }

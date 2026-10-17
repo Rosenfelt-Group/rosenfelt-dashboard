@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { EmptyState, LoadingState } from "@/components/ui";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { PendingApproval } from "@/types";
 import { parseKickPnL } from "@/lib/parseKickSummary";
@@ -130,14 +131,9 @@ export function OverviewPanel() {
         </div>
 
         {loading ? (
-          <div className="space-y-3">
-            {[1, 2].map(i => <div key={i} className="card animate-pulse h-28" />)}
-          </div>
+          <LoadingState rows={2} />
         ) : approvals.length === 0 ? (
-          <div className="card text-center py-6">
-            <p className="text-sm text-brand-muted">No pending Sam actions</p>
-            <p className="text-xs text-brand-muted mt-1">Sam is running autonomously</p>
-          </div>
+          <EmptyState title="No pending Sam actions" description="Sam is running autonomously" />
         ) : (
           <div className="space-y-3">
             {approvals.slice(0, 5).map(a => (

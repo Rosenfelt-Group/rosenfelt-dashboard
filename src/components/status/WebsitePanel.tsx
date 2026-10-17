@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
 import { usePolling } from "@/lib/use-polling";
+import { Button, ErrorState, LoadingState } from "@/components/ui";
 
 interface CheckResult {
   name: string;
@@ -84,7 +85,7 @@ export default function WebsitePanel({ isAdmin }: { isAdmin: boolean }) {
     }
   };
 
-  if (loading) return <div className="card animate-pulse h-64" />;
+  if (loading) return <LoadingState />;
 
   const failCount = checks.filter((c) => c.status === "fail").length;
   const warnCount = checks.filter((c) => c.status === "warn").length;
@@ -103,20 +104,14 @@ export default function WebsitePanel({ isAdmin }: { isAdmin: boolean }) {
           )}
         </div>
         {isAdmin && (
-          <button
-            onClick={handleRunNow}
-            disabled={running}
-            className="btn-primary text-sm px-4 py-2 disabled:opacity-60"
-          >
+          <Button onClick={handleRunNow} disabled={running}>
             {running ? "Starting…" : "▶ Run Now"}
-          </button>
+          </Button>
         )}
       </div>
 
       {runError && (
-        <div className="card border-red-200 text-sm text-red-600">
-          Failed to trigger run: {runError}
-        </div>
+        <ErrorState message={`Failed to trigger run: ${runError}`} />
       )}
 
       {running && (
@@ -150,42 +145,44 @@ export default function WebsitePanel({ isAdmin }: { isAdmin: boolean }) {
       {/* Checks table */}
       {hasData && (
         <div className="card overflow-hidden p-0">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-brand-muted border-b border-brand-border bg-brand-offwhite">
-                <th className="px-4 py-2.5 font-medium">Check</th>
-                <th className="px-4 py-2.5 font-medium">Status</th>
-                <th className="px-4 py-2.5 font-medium">Actual</th>
-                <th className="px-4 py-2.5 font-medium">Duration</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-brand-border">
-              {checks.map((check, i) => (
-                <tr key={i} className="text-brand-black">
-                  <td className="px-4 py-2.5 text-sm font-medium">{check.name}</td>
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={clsx(
-                          "w-2.5 h-2.5 rounded-full flex-shrink-0",
-                          CHECK_DOT[check.status] ?? "bg-gray-300",
-                        )}
-                      />
-                      <span className="text-xs text-brand-muted capitalize">
-                        {check.status}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-brand-muted max-w-xs truncate">
-                    {check.actual || "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-brand-muted whitespace-nowrap">
-                    {check.duration_ms}ms
-                  </td>
+          <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-brand-muted border-b border-brand-border bg-brand-offwhite">
+                  <th className="px-4 py-2.5 font-medium">Check</th>
+                  <th className="px-4 py-2.5 font-medium">Status</th>
+                  <th className="px-4 py-2.5 font-medium">Actual</th>
+                  <th className="px-4 py-2.5 font-medium">Duration</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-brand-border">
+                {checks.map((check, i) => (
+                  <tr key={i} className="text-brand-black">
+                    <td className="px-4 py-2.5 text-sm font-medium">{check.name}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={clsx(
+                            "w-2.5 h-2.5 rounded-full flex-shrink-0",
+                            CHECK_DOT[check.status] ?? "bg-gray-300",
+                          )}
+                        />
+                        <span className="text-xs text-brand-muted capitalize">
+                          {check.status}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-brand-muted max-w-xs truncate">
+                      {check.actual || "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-brand-muted whitespace-nowrap">
+                      {check.duration_ms}ms
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { INPUT } from "./QuestionForm";
+import { Button } from "@/components/ui";
 
 // Whether the app can send email. null while loading; email controls stay hidden until it's true.
 export function useEmailConfigured(): boolean | null {
@@ -34,7 +35,7 @@ export function ResendInviteEmail({ inviteId, defaultTo, defaultFirstName }: { i
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   if (!configured) return null;
-  if (!open) return <button onClick={() => setOpen(true)} className="btn-ghost text-xs px-3 py-1.5">Resend email</button>;
+  if (!open) return <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>Resend email</Button>;
 
   async function send() {
     setBusy(true); setMsg(null);
@@ -51,10 +52,10 @@ export function ResendInviteEmail({ inviteId, defaultTo, defaultFirstName }: { i
     <div className="w-full space-y-2 pt-2">
       <RecipientFields to={r.to} firstName={r.firstName} onChange={setR} />
       <div className="flex items-center gap-2">
-        <button onClick={send} disabled={busy || !r.to.trim()} className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50">
+        <Button size="sm" onClick={send} disabled={busy || !r.to.trim()}>
           {busy ? "Sending…" : "Send email"}
-        </button>
-        <button onClick={() => { setOpen(false); setMsg(null); }} className="btn-ghost text-xs px-3 py-1.5">Cancel</button>
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => { setOpen(false); setMsg(null); }}>Cancel</Button>
         {msg && <span className={clsx("text-xs", msg.ok ? "text-green-700" : "text-red-600")}>{msg.text}</span>}
       </div>
     </div>

@@ -9,6 +9,8 @@ import { CopyButton } from "@/components/crm/CopyButton";
 import { DiscoveryNav } from "@/components/crm/discovery/DiscoveryNav";
 import { DiscoveryInvite, DiscoveryStatus } from "@/types";
 import { PROJECT_TYPES, STATUS_META } from "@/lib/discovery";
+import { fetchJson } from "@/lib/fetch-json";
+import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
 
 type Row = DiscoveryInvite & { link: string };
 
@@ -33,11 +35,16 @@ function DiscoveryList() {
   const params = useSearchParams();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<DiscoveryStatus | "active" | "">("active");
   const [showNew, setShowNew] = useState(params.get("new") === "1");
 
   const load = useCallback(() => {
-    fetch("/api/crm/discovery").then(r => r.json()).then(d => { setRows(Array.isArray(d) ? d : []); setLoading(false); });
+    fetchJson<unknown>("/api/crm/discovery").then(r => {
+      if (r.ok) { setRows(Array.isArray(r.data) ? r.data : []); setLoadError(null); }
+      else setLoadError(r.error);
+      setLoading(false);
+    });
   }, []);
   useEffect(load, [load]);
 
@@ -51,13 +58,11 @@ function DiscoveryList() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-        <div>
-          <h1 className="text-lg font-semibold text-brand-black">Discovery</h1>
-          <p className="text-sm text-brand-muted">Pre-call questionnaires · {counts.drafts ? `${counts.drafts} draft${counts.drafts === 1 ? "" : "s"} · ` : ""}{counts.waiting} waiting · {counts.submitted} submitted</p>
-        </div>
-        <button onClick={() => setShowNew(true)} className="btn-primary text-sm">+ New discovery</button>
-      </div>
+      <PageHeader
+        title="Discovery"
+        description={<>Pre-call questionnaires · {counts.drafts ? `${counts.drafts} draft${counts.drafts === 1 ? "" : "s"} · ` : ""}{counts.waiting} waiting · {counts.submitted} submitted</>}
+        actions={<Button onClick={() => setShowNew(true)}>+ New discovery</Button>}
+      />
       <DiscoveryNav />
 
       <div className="flex gap-2 mb-4 flex-wrap">
@@ -69,12 +74,15 @@ function DiscoveryList() {
         ))}
       </div>
 
+      {loadError && <ErrorState message={`Couldn't load questionnaires: ${loadError}`} onRetry={load} className="mb-4" />}
       {loading ? (
-        <div className="card animate-pulse h-40" />
+        <LoadingState />
       ) : visible.length === 0 ? (
-        <div className="card text-sm text-brand-muted">
-          {rows.length === 0 ? "No discovery questionnaires yet. Create one to send to an organization before your first call." : "Nothing in this view."}
-        </div>
+        loadError ? null : (
+          <EmptyState
+            title={rows.length === 0 ? "No discovery questionnaires yet. Create one to send to an organization before your first call." : "Nothing in this view."}
+          />
+        )
       ) : (
         <div className="card p-0 overflow-hidden">
           {visible.map(r => {
@@ -115,7 +123,7 @@ function DiscoveryList() {
 
 export default function DiscoveryPage() {
   return (
-    <Suspense fallback={<div className="p-8"><div className="card animate-pulse h-40" /></div>}>
+    <Suspense fallback={<div className="p-8"><LoadingState /></div>}>
       <DiscoveryList />
     </Suspense>
   );

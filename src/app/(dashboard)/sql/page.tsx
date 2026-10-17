@@ -1,14 +1,13 @@
 import { SupabaseSqlQuery } from "@/components/engineering/SupabaseSqlQuery";
+import { PageHeader } from "@/components/ui";
 
 export default function SqlPage() {
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8 max-w-5xl">
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold text-brand-black">SQL Query</h1>
-        <p className="text-sm text-brand-muted mt-0.5">
-          Run queries against the Rosably Supabase database — Tab to autocomplete, ⌘S to save
-        </p>
-      </div>
+      <PageHeader
+        title="SQL Query"
+        description="Run queries against the Rosably Supabase database — Tab to autocomplete, ⌘S to save"
+      />
       <SupabaseSqlQuery />
     </div>
   );

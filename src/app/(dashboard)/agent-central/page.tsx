@@ -5,6 +5,8 @@ import clsx from "clsx";
 import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow } from "date-fns";
 import type { AgentStatus } from "@/types";
+import { ErrorState, PageHeader } from "@/components/ui";
+import { fetchJson } from "@/lib/fetch-json";
 
 // Static agent config — source of truth for tool counts and roles
 const AGENTS = [
@@ -53,12 +55,13 @@ const AGENTS = [
 export default function AgentCentralPage() {
   const [agentStatus, setAgentStatus] = useState<AgentStatus[]>([]);
   const [loading, setLoading]         = useState(true);
+  const [loadError, setLoadError]     = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const data = await fetch("/api/agent-status")
-      .then(r => r.json())
-      .catch(() => []);
-    setAgentStatus(Array.isArray(data) ? data : []);
+    const r = await fetchJson<unknown>("/api/agent-status");
+    setLoadError(r.ok ? null : r.error);
+    // On failure keep the last good statuses rather than blanking the cards.
+    if (r.ok) setAgentStatus(Array.isArray(r.data) ? r.data : []);
     setLoading(false);
   }, []);
 
@@ -74,23 +77,30 @@ export default function AgentCentralPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
-        <h1 className="text-xl font-semibold text-brand-black">Agent Central</h1>
-        <div className="flex gap-2 flex-wrap">
-          <Link href="/agents/history"
-            className="px-3 py-1.5 rounded-lg border border-brand-border text-sm text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors">
-            History →
-          </Link>
-          <Link href="/agents/intelligence"
-            className="px-3 py-1.5 rounded-lg border border-brand-border text-sm text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors">
-            Intelligence →
-          </Link>
-          <Link href="/work"
-            className="px-3 py-1.5 rounded-lg border border-brand-border text-sm text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors">
-            Work board →
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Agent Central"
+        className="flex-wrap"
+        actions={
+          <div className="flex gap-2 flex-wrap">
+            <Link href="/agents/history"
+              className="px-3 py-1.5 rounded-lg border border-brand-border text-sm text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors">
+              History →
+            </Link>
+            <Link href="/agents/intelligence"
+              className="px-3 py-1.5 rounded-lg border border-brand-border text-sm text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors">
+              Intelligence →
+            </Link>
+            <Link href="/work"
+              className="px-3 py-1.5 rounded-lg border border-brand-border text-sm text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors">
+              Work board →
+            </Link>
+          </div>
+        }
+      />
+
+      {loadError && (
+        <ErrorState message={`Couldn't load agent status: ${loadError}`} onRetry={load} className="mb-4" />
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

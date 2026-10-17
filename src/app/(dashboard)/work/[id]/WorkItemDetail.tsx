@@ -8,6 +8,7 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { WorkLogPanel } from "@/components/work/WorkLogPanel";
 import { WorkDocsPanel } from "@/components/work/WorkDocsPanel";
 import { SourceBadge } from "@/components/work/SourceBadge";
+import { Button, PageHeader, Tabs } from "@/components/ui";
 import type {
   AgentName,
   TaskPriority,
@@ -476,10 +477,15 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
             className="w-full text-xl font-semibold text-brand-black mt-2 rounded border border-brand-border px-2 py-1 focus:outline-none focus:border-brand-orange"
           />
         ) : (
-          <h1 className="text-xl font-semibold text-brand-black mt-2">
-            <span className="text-brand-muted font-normal mr-2">#{item.ref}</span>
-            {item.title}
-          </h1>
+          <PageHeader
+            className="mt-2 !mb-0"
+            title={
+              <>
+                <span className="text-brand-muted font-normal mr-2">#{item.ref}</span>
+                {item.title}
+              </>
+            }
+          />
         )}
         <div className="flex items-center gap-2 mt-1 text-xs text-brand-muted">
           <SourceBadge
@@ -753,22 +759,18 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-2">
-            <button
-              onClick={requestPrompt}
-              disabled={writePromptPending}
-              className="rounded bg-brand-orange text-white text-sm px-3 py-1.5 disabled:opacity-60"
-            >
+            <Button onClick={requestPrompt} disabled={writePromptPending}>
               {writePromptPending ? "Jordan is writing the prompt…" : "Write Prompt"}
-            </button>
+            </Button>
             <div className="flex flex-col">
-              <button
+              <Button
+                variant="secondary"
                 onClick={requestStatus}
                 disabled={!canDispatchToAgent || statusCheckPending}
                 title={!canDispatchToAgent ? "Assign an agent first" : undefined}
-                className="rounded border border-brand-border bg-white text-sm px-3 py-1.5 hover:bg-brand-cream disabled:opacity-60"
               >
                 {statusCheckPending ? "Status requested…" : "Get Status"}
-              </button>
+              </Button>
               {statusCheckPending && (
                 <span className="text-[10px] text-brand-muted mt-0.5">
                   Agent will update the log shortly
@@ -776,36 +778,28 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
               )}
             </div>
             {item.status !== "done" && (
-              <button
-                onClick={() => patch({ status: "done" })}
-                disabled={busy}
-                className="rounded border border-brand-border bg-white text-sm px-3 py-1.5 hover:bg-brand-cream"
-              >
+              <Button variant="secondary" onClick={() => patch({ status: "done" })} disabled={busy}>
                 Mark Done
-              </button>
+              </Button>
             )}
             {item.status !== "on_hold" && (
-              <button
-                onClick={() => patch({ status: "on_hold" })}
-                disabled={busy}
-                className="rounded border border-brand-border bg-white text-sm px-3 py-1.5 hover:bg-brand-cream"
-              >
+              <Button variant="secondary" onClick={() => patch({ status: "on_hold" })} disabled={busy}>
                 Put On Hold
-              </button>
+              </Button>
             )}
           </div>
         </div>
 
         {/* Right: 40% — tabbed */}
         <div className="flex-[2] lg:border-l border-brand-border bg-white min-h-[60vh] lg:min-h-[calc(100vh-100px)] flex flex-col">
-          <div className="flex border-b border-brand-border">
-            <TabButton active={tab === "log"} onClick={() => setTab("log")}>
-              Log
-            </TabButton>
-            <TabButton active={tab === "docs"} onClick={() => setTab("docs")}>
-              Documents
-            </TabButton>
-          </div>
+          <Tabs
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { id: "log", label: "Log" },
+              { id: "docs", label: "Documents" },
+            ]}
+          />
           <div className="flex-1 overflow-hidden">
             {tab === "log" ? (
               <WorkLogPanel
@@ -833,29 +827,5 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       </div>
       {children}
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={clsx(
-        "flex-1 px-4 py-2 text-sm font-medium transition",
-        active
-          ? "text-brand-orange border-b-2 border-brand-orange"
-          : "text-brand-muted hover:text-brand-black",
-      )}
-    >
-      {children}
-    </button>
   );
 }

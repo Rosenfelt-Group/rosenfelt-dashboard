@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
 import { usePolling } from "@/lib/use-polling";
+import { Button, LoadingState } from "@/components/ui";
 
 // Casey Phase 1 security patch DETECTION — read-only view of the patch_runs table.
 // DETECTION ONLY: this panel surfaces what needs patching; it triggers nothing.
@@ -214,7 +215,7 @@ export default function PatchStatusPanel({ isAdmin }: { isAdmin: boolean }) {
 
   const toggle = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
-  if (loading) return <div className="card animate-pulse h-64" />;
+  if (loading) return <LoadingState />;
 
   const scans = groupScans(rows);
   const latest = scans[0];
@@ -242,13 +243,9 @@ export default function PatchStatusPanel({ isAdmin }: { isAdmin: boolean }) {
           )}
         </div>
         {isAdmin ? (
-          <button
-            onClick={handleRescan}
-            disabled={scanning}
-            className="btn-primary text-sm px-4 py-2 disabled:opacity-60"
-          >
+          <Button onClick={handleRescan} disabled={scanning}>
             {scanning ? "Scanning…" : "▶ Rescan"}
-          </button>
+          </Button>
         ) : (
           <span className="text-[11px] text-brand-muted">Detection only — applies nothing</span>
         )}
@@ -371,32 +368,34 @@ export default function PatchStatusPanel({ isAdmin }: { isAdmin: boolean }) {
       {history.length > 0 && (
         <div className="card">
           <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-3">Scan History</p>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-brand-muted border-b border-brand-border">
-                <th className="pb-2 font-medium">When</th>
-                <th className="pb-2 font-medium">Status</th>
-                <th className="pb-2 font-medium">Sources</th>
-                <th className="pb-2 font-medium">By</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-brand-border">
-              {history.map((scan) => (
-                <tr key={scan.run_at} className="text-brand-black">
-                  <td className="py-2 text-xs">{new Date(scan.run_at).toLocaleString()}</td>
-                  <td className="py-2">
-                    <span className={clsx("uppercase text-[10px] font-semibold", STATUS_BADGE[scan.overall])}>
-                      {STATUS_LABEL[scan.overall]}
-                    </span>
-                  </td>
-                  <td className="py-2 text-xs text-brand-muted">
-                    {scan.counts.clean} clean · {scan.counts.needs_attention} attn · {scan.counts.error} err
-                  </td>
-                  <td className="py-2 text-xs text-brand-muted">{scan.triggered_by}</td>
+          <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-brand-muted border-b border-brand-border">
+                  <th className="pb-2 font-medium">When</th>
+                  <th className="pb-2 font-medium">Status</th>
+                  <th className="pb-2 font-medium">Sources</th>
+                  <th className="pb-2 font-medium">By</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-brand-border">
+                {history.map((scan) => (
+                  <tr key={scan.run_at} className="text-brand-black">
+                    <td className="py-2 text-xs">{new Date(scan.run_at).toLocaleString()}</td>
+                    <td className="py-2">
+                      <span className={clsx("uppercase text-[10px] font-semibold", STATUS_BADGE[scan.overall])}>
+                        {STATUS_LABEL[scan.overall]}
+                      </span>
+                    </td>
+                    <td className="py-2 text-xs text-brand-muted">
+                      {scan.counts.clean} clean · {scan.counts.needs_attention} attn · {scan.counts.error} err
+                    </td>
+                    <td className="py-2 text-xs text-brand-muted">{scan.triggered_by}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

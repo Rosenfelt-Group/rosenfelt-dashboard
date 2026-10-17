@@ -7,6 +7,7 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
 import { usePolling } from "@/lib/use-polling";
+import { EmptyState, ErrorState, LoadingState, PageHeader, Tabs } from "@/components/ui";
 
 const STATUS_STYLES = {
   approved:            "bg-green-50 text-green-700",
@@ -131,9 +132,8 @@ export default function ApprovalsPage() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-8 space-y-4">
-        <div className="card animate-pulse h-16" />
-        <div className="card animate-pulse h-64" />
+      <div className="p-4 md:p-8">
+        <LoadingState />
       </div>
     );
   }
@@ -141,33 +141,24 @@ export default function ApprovalsPage() {
   if (loadError) {
     return (
       <div className="p-4 md:p-8">
-        <div className="card text-sm text-red-600">Couldn&apos;t load approvals: {loadError}</div>
+        <ErrorState message={`Couldn't load approvals: ${loadError}`} onRetry={() => load()} />
       </div>
     );
   }
 
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8 max-w-4xl space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold text-brand-black">Approvals</h1>
-        <p className="text-sm text-brand-muted mt-0.5">
-          {pending.length} pending · {history.length} in history
-        </p>
-      </div>
+      <PageHeader title="Approvals" description={`${pending.length} pending · ${history.length} in history`} />
 
       {/* Tab switcher */}
-      <div className="flex gap-1 border-b border-brand-border">
-        {(["pending", "history"] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={clsx(
-              "px-4 py-2 text-sm font-medium transition-colors capitalize relative",
-              tab === t ? "text-brand-black" : "text-brand-muted hover:text-brand-black"
-            )}>
-            {t === "pending" ? `Pending (${pending.length})` : `History (${history.length})`}
-            {tab === t && <span className="absolute bottom-0 inset-x-0 h-0.5 bg-brand-orange rounded-full" />}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: "pending", label: `Pending (${pending.length})` },
+          { id: "history", label: `History (${history.length})` },
+        ]}
+      />
 
       {/* ── PENDING ── */}
       {tab === "pending" && (
@@ -221,9 +212,7 @@ export default function ApprovalsPage() {
           </div>
 
           {filteredHistory.length === 0 ? (
-            <div className="card py-12 text-center">
-              <p className="text-sm text-brand-muted">No history yet</p>
-            </div>
+            <EmptyState title="No history yet" />
           ) : (
             <div className="card p-0 overflow-hidden">
               {filteredHistory.map(item => <HistoryRow key={item.id} item={item} />)}

@@ -10,6 +10,8 @@ import { safeHref } from "@/lib/safe-url";
 import { STAGES } from "@/lib/crm/stages";
 import { STATUS_META } from "@/lib/discovery";
 import { BUSINESS_TABS, parseBusinessTab, BusinessTab } from "@/lib/crm/business-tabs";
+import { fetchJson } from "@/lib/fetch-json";
+import { Button, EmptyState, ErrorState, LoadingState, PageHeader, Tabs } from "@/components/ui";
 
 const ROLE_OPTIONS: { value: CRMContactRole; label: string }[] = [
   { value: "decision_maker", label: "Decision maker" },
@@ -46,6 +48,8 @@ function BusinessDetail() {
   const [leads, setLeads] = useState<CRMLead[]>([]);
   const [invites, setInvites] = useState<(DiscoveryInvite & { link: string })[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [partialError, setPartialError] = useState<string | null>(null);
 
   const [showAddContact, setShowAddContact] = useState(false);
   const [contactForm, setContactForm] = useState<ContactForm>(BLANK_CONTACT);
@@ -56,17 +60,20 @@ function BusinessDetail() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/crm/businesses/${id}`).then(r => r.json()),
-      fetch("/api/crm/contacts").then(r => r.json()),
-      fetch(`/api/crm/businesses/${id}/research`).then(r => r.json()),
-      fetch("/api/crm/leads").then(r => r.json()),
-      fetch(`/api/crm/discovery?business_id=${id}`).then(r => r.json()),
+      fetchJson<CRMBusiness>(`/api/crm/businesses/${id}`),
+      fetchJson<unknown>("/api/crm/contacts"),
+      fetchJson<unknown>(`/api/crm/businesses/${id}/research`),
+      fetchJson<unknown>("/api/crm/leads"),
+      fetchJson<unknown>(`/api/crm/discovery?business_id=${id}`),
     ]).then(([b, allContacts, r, allLeads, inv]) => {
-      setBusiness(b?.id ? b : null);
-      setContacts(Array.isArray(allContacts) ? allContacts.filter((c: CRMContact) => c.business_id === id) : []);
-      setResearch(Array.isArray(r) ? r : []);
-      setLeads(Array.isArray(allLeads) ? allLeads.filter((l: CRMLead) => l.business_id === id) : []);
-      setInvites(Array.isArray(inv) ? inv : []);
+      if (b.ok) setBusiness(b.data?.id ? b.data : null);
+      else if (b.status !== 404) setLoadError(b.error);
+      if (allContacts.ok) setContacts(Array.isArray(allContacts.data) ? allContacts.data.filter((c: CRMContact) => c.business_id === id) : []);
+      if (r.ok) setResearch(Array.isArray(r.data) ? r.data : []);
+      if (allLeads.ok) setLeads(Array.isArray(allLeads.data) ? allLeads.data.filter((l: CRMLead) => l.business_id === id) : []);
+      if (inv.ok) setInvites(Array.isArray(inv.data) ? inv.data : []);
+      const failed = [allContacts, r, allLeads, inv].find(x => !x.ok);
+      if (failed && !failed.ok) setPartialError(failed.error);
       setLoading(false);
     });
   }, [id]);
@@ -120,12 +127,14 @@ function BusinessDetail() {
   }
 
   if (loading) {
-    return <div className="p-8"><div className="card animate-pulse h-64" /></div>;
+    return <div className="p-8"><LoadingState /></div>;
   }
   if (!business) {
     return (
       <div className="p-8">
-        <p className="text-brand-muted">Business not found.</p>
+        {loadError
+          ? <ErrorState message={`Couldn't load this business: ${loadError}`} />
+          : <p className="text-brand-muted">Business not found.</p>}
         <Link href="/crm/businesses" className="text-brand-orange text-sm mt-2 block">← Back to businesses</Link>
       </div>
     );
@@ -137,48 +146,40 @@ function BusinessDetail() {
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
 
       <div className="card mb-4">
-        <h1 className="text-lg font-semibold text-brand-black">{business.name}</h1>
-        <div className="flex flex-wrap gap-3 mt-2 text-sm text-brand-muted">
-          {business.industry && <span>{business.industry}</span>}
-          {business.size && <span>{business.size} employees</span>}
-          {site && (
-            <a href={site} target="_blank" rel="noopener noreferrer" className="text-brand-orange hover:underline">
-              {business.website}
-            </a>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-3 mt-1 text-sm text-brand-muted">
-          {business.email && <span>{business.email}</span>}
-          {business.phone && <span>{business.phone}</span>}
-        </div>
+        <PageHeader
+          className="!mb-0"
+          title={business.name}
+          description={
+            <>
+              <span className="flex flex-wrap gap-3 mt-2">
+                {business.industry && <span>{business.industry}</span>}
+                {business.size && <span>{business.size} employees</span>}
+                {site && (
+                  <a href={site} target="_blank" rel="noopener noreferrer" className="text-brand-orange hover:underline">
+                    {business.website}
+                  </a>
+                )}
+              </span>
+              <span className="flex flex-wrap gap-3 mt-1">
+                {business.email && <span>{business.email}</span>}
+                {business.phone && <span>{business.phone}</span>}
+              </span>
+            </>
+          }
+        />
       </div>
 
-      <div role="tablist" className="flex items-center border-b border-brand-border mb-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
-        {BUSINESS_TABS.map(t => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => selectTab(t.id)}
-            className={clsx(
-              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap flex-shrink-0 touch-manipulation transition-colors",
-              tab === t.id
-                ? "border-brand-orange text-brand-orange"
-                : "border-transparent text-brand-muted hover:text-brand-black hover:border-brand-border"
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {partialError && <ErrorState message={`Some sections couldn't load: ${partialError}`} className="mb-4" />}
+
+      <Tabs tabs={BUSINESS_TABS} value={tab} onChange={selectTab} className="mb-4" />
 
       {tab === "contacts" && (
         <div className="card">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-brand-black">Contacts ({contacts.length})</h2>
-            <button onClick={() => setShowAddContact(v => !v)} className="btn-ghost text-xs px-3 py-1.5">
+            <Button variant="ghost" size="sm" onClick={() => setShowAddContact(v => !v)}>
               {showAddContact ? "Cancel" : "+ Add contact"}
-            </button>
+            </Button>
           </div>
 
           {showAddContact && (
@@ -242,13 +243,14 @@ function BusinessDetail() {
                 />
                 Primary contact
               </label>
-              <button
+              <Button
+                size="sm"
+                className="w-full"
                 onClick={addContact}
                 disabled={savingContact || !contactForm.first_name.trim()}
-                className="btn-primary text-xs px-3 py-1.5 w-full disabled:opacity-50"
               >
                 {savingContact ? "Saving…" : "Save contact"}
-              </button>
+              </Button>
             </div>
           )}
 
@@ -287,9 +289,9 @@ function BusinessDetail() {
         <div className="card">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-brand-black">Research</h2>
-            <button onClick={runResearch} disabled={researching} className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50">
+            <Button size="sm" onClick={runResearch} disabled={researching}>
               {researching ? "Running… (up to ~30s)" : "Run research"}
-            </button>
+            </Button>
           </div>
           {researchErr && <p className="text-xs text-red-700 mb-2">{researchErr}</p>}
           {research.length === 0 ? (
@@ -312,11 +314,11 @@ function BusinessDetail() {
 
       {tab === "rooms" && <EngagementsPanel businessId={id} />}
 
-      {tab === "discovery" && (
+      {tab === "discovery" && (invites.length === 0 ? (
+        <EmptyState title="No discovery questionnaires for this business yet." />
+      ) : (
         <div className="card p-0 overflow-hidden">
-          {invites.length === 0 ? (
-            <p className="text-xs text-brand-muted p-4">No discovery questionnaires for this business yet.</p>
-          ) : invites.map(r => {
+          {invites.map(r => {
             const st = STATUS_META[r.status];
             const last = r.submitted_at ?? r.last_saved_at ?? r.opened_at ?? r.sent_at ?? r.created_at;
             return (
@@ -330,13 +332,13 @@ function BusinessDetail() {
             );
           })}
         </div>
-      )}
+      ))}
 
-      {tab === "leads" && (
+      {tab === "leads" && (leads.length === 0 ? (
+        <EmptyState title="No leads linked to this business." />
+      ) : (
         <div className="card p-0 overflow-hidden">
-          {leads.length === 0 ? (
-            <p className="text-xs text-brand-muted p-4">No leads linked to this business.</p>
-          ) : leads.map(l => {
+          {leads.map(l => {
             const meta = STAGES.find(s => s.stage === l.stage);
             return (
               <Link key={l.id} href={`/crm/leads/${l.id}`} className="flex items-center gap-3 px-4 py-3 border-b border-brand-border last:border-b-0 hover:bg-brand-offwhite">
@@ -351,7 +353,7 @@ function BusinessDetail() {
             );
           })}
         </div>
-      )}
+      ))}
     </div>
   );
 }
@@ -359,7 +361,7 @@ function BusinessDetail() {
 // useSearchParams needs a Suspense boundary during prerender.
 export default function BusinessDetailPage() {
   return (
-    <Suspense fallback={<div className="p-8"><div className="card animate-pulse h-64" /></div>}>
+    <Suspense fallback={<div className="p-8"><LoadingState /></div>}>
       <BusinessDetail />
     </Suspense>
   );
