@@ -28,20 +28,45 @@ describe("formatEmailSection", () => {
     expect(s).toContain("⚠️ Email needs attention: bounce rate 2.0%.");
   });
 
-  it("does not warn on a 2% rate below 50 sends unless there is a hard bounce", () => {
+  it("does not warn on a 2% rate below 50 sends for a soft bounce", () => {
     const s = formatEmailSection({ Sent: 40, Bounced: 1, SpamComplaints: 0 }, [bounce({ inactive: false, tag: null })]);
     expect(s).not.toContain("⚠️");
     expect(s).toContain("Bounce — a@example.com — \"Your invite\" (Other)");
   });
 
-  it("warns on any hard bounce under 50 sends", () => {
+  it("warns on an unresolved hard bounce under 50 sends", () => {
     const s = formatEmailSection({ Sent: 10, Bounced: 1, SpamComplaints: 0 }, [bounce()]);
     expect(s).toContain("⚠️ Email needs attention: 1 hard bounce.");
   });
 
-  it("does not warn on a single hard bounce at >= 50 sends below 2%", () => {
+  it("warns on an unresolved hard bounce at >= 50 sends even below 2%", () => {
     const s = formatEmailSection({ Sent: 200, Bounced: 1, SpamComplaints: 0 }, [bounce()]);
+    expect(s).toContain("⚠️ Email needs attention: 1 hard bounce.");
+  });
+
+  it("does not warn for a resolved hard bounce but still lists it", () => {
+    const s = formatEmailSection({ Sent: 10, Bounced: 1, SpamComplaints: 0 }, [bounce({ resolution: "dismissed" })]);
     expect(s).not.toContain("⚠️");
+    expect(s).toContain("Hard bounce — a@example.com");
+  });
+
+  it("does not warn for a resolved complaint but still lists it and keeps Postmark's total", () => {
+    const s = formatEmailSection({ Sent: 500, Bounced: 0, SpamComplaints: 1 }, [spam({ resolution: "dismissed" })]);
+    expect(s).not.toContain("⚠️");
+    expect(s).toContain("Spam complaints 1");
+    expect(s).toContain("Spam complaint — a@example.com — \"Your invite\" (Dashboard · room invite) — fixed: dismissed");
+  });
+
+  it("counts only unresolved rows in the warning when resolved and unresolved are mixed", () => {
+    const s = formatEmailSection({ Sent: 10, Bounced: 2, SpamComplaints: 1 },
+      [bounce({ resolution: "resent" }), bounce({ recipient: "b@example.com" }), spam({ resolution: "dismissed" })]);
+    expect(s).toContain("⚠️ Email needs attention: 1 hard bounce.");
+  });
+
+  it("skips the problem-based warning when the details query failed", () => {
+    const s = formatEmailSection({ Sent: 10, Bounced: 1, SpamComplaints: 1 }, null);
+    expect(s).not.toContain("⚠️");
+    expect(s).toContain("Couldn't read bounce details this week.");
   });
 
   it("warns on any spam complaint", () => {

@@ -15,21 +15,29 @@ SB_CRED = nodes["Query: Work Items"]["credentials"]
 START = "const claudeResp = $input.first().json;"
 HOOK = "const reportText = claudeResp.content?.[0]?.text || '⚠️ Audit report generation failed.';"
 MARK = "// --- Email delivery section (generated from scripts/n8n/weekly-audit-email-section.js) ---"
+END = "// --- end Email delivery section ---"
 
 fr = nodes["Format Report"]
 code = fr["parameters"]["jsCode"]
-if MARK not in code:
-    assert START in code and HOOK in code
-    code = code.replace(START, "const claudeResp = $('Call Claude API').first().json;")
-    glue = """
+GLUE = """
 const stats = $('Postmark: Weekly Stats').first().json;
 const problemItems = $('Query: Email Problems').all().map(i => i.json);
 const problems = problemItems.some(j => j.error) ? null : problemItems.filter(j => j.record_type);
 const reportText = baseReportText + '\\n\\n' + formatEmailSection(stats, problems);
 """
+BLOCK = MARK + "\n" + SRC + GLUE + END + "\n"
+if MARK in code:
+    # Regenerate: replace the previously pasted block (new ones end with END, the first version ended at the reportText line).
+    i = code.index(MARK)
+    tail = END + "\n" if END in code else "formatEmailSection(stats, problems);\n"
+    j = code.index(tail, i) + len(tail)
+    code = code[:i] + BLOCK + code[j:]
+else:
+    assert START in code and HOOK in code
+    code = code.replace(START, "const claudeResp = $('Call Claude API').first().json;")
     code = code.replace(HOOK, HOOK.replace("const reportText", "const baseReportText"))
-    code = code.replace("const auditDate = prev.auditDate;", "const auditDate = prev.auditDate;\n" + MARK + "\n" + SRC + glue, 1)
-    fr["parameters"]["jsCode"] = code
+    code = code.replace("const auditDate = prev.auditDate;", "const auditDate = prev.auditDate;\n" + BLOCK, 1)
+fr["parameters"]["jsCode"] = code
 
 def http(name, x, params, **kw):
     n = {"parameters": params, "name": name, "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
