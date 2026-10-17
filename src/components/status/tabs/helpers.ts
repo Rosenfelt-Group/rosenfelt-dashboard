@@ -1,5 +1,6 @@
 // Pure formatting/parsing helpers shared by the status page tabs.
 import { formatDistanceToNow, parseISO } from "date-fns";
+import type { EmailEvent } from "@/lib/email/events";
 
 export function ago(ts: string | number | null) {
   if (!ts) return null;
@@ -63,4 +64,20 @@ export function decodeHtmlEntities(s: string): string {
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
     .replace(/&([a-z]+);/gi, (m, name) => HTML_NAMED_ENTITIES[name.toLowerCase()] ?? m);
+}
+
+// Plain-English name for a Postmark tag ("n8n-stripe-buyer" -> "n8n · stripe-buyer").
+export function sourceLabel(tag: string | null): string {
+  if (!tag) return "Other";
+  if (tag === "dashboard-room-invite") return "Dashboard · room invite";
+  if (tag === "dashboard-discovery-invite") return "Dashboard · discovery invite";
+  if (tag.startsWith("n8n-")) return `n8n · ${tag.slice(4)}`;
+  if (tag === "wordpress") return "WordPress";
+  return "Other";
+}
+
+export function problemLabel(e: EmailEvent): string {
+  if (e.record_type === "Bounce") return e.description ? `Hard bounce: ${e.description}` : "Hard bounce";
+  if (e.record_type === "SpamComplaint") return "Spam complaint";
+  return "Blocked";
 }

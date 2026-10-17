@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { decodeHtmlEntities, formatUptime, runMeta, vercelStateMeta } from "./helpers";
+import { decodeHtmlEntities, formatUptime, problemLabel, runMeta, sourceLabel, vercelStateMeta } from "./helpers";
+import type { EmailEvent } from "@/lib/email/events";
 
 describe("formatUptime", () => {
   it("formats days+hours, hours+minutes and minutes", () => {
@@ -21,5 +22,24 @@ describe("status metas", () => {
     expect(runMeta("completed", "failure").label).toBe("Failed");
     expect(vercelStateMeta("CANCELED").label).toBe("Cancelled");
     expect(vercelStateMeta("WEIRD").label).toBe("WEIRD");
+  });
+});
+
+describe("sourceLabel", () => {
+  it("names each mail source in plain English", () => {
+    expect(sourceLabel("dashboard-room-invite")).toBe("Dashboard · room invite");
+    expect(sourceLabel("dashboard-discovery-invite")).toBe("Dashboard · discovery invite");
+    expect(sourceLabel("n8n-stripe-buyer")).toBe("n8n · stripe-buyer");
+    expect(sourceLabel("wordpress")).toBe("WordPress");
+    expect(sourceLabel(null)).toBe("Other");
+  });
+});
+
+describe("problemLabel", () => {
+  const ev = (o: Partial<EmailEvent>) => o as EmailEvent;
+  it("describes bounces, complaints and blocks", () => {
+    expect(problemLabel(ev({ record_type: "Bounce", description: "Mailbox does not exist" }))).toBe("Hard bounce: Mailbox does not exist");
+    expect(problemLabel(ev({ record_type: "SpamComplaint" }))).toBe("Spam complaint");
+    expect(problemLabel(ev({ record_type: "SubscriptionChange" }))).toBe("Blocked");
   });
 });

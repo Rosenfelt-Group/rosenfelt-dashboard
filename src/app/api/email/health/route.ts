@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.response;
   const canManage = (await requirePermission(req, "manage_email")).ok;
 
+  const includeResolved = req.nextUrl.searchParams.get("includeResolved") === "1";
   const now = new Date();
   const sinceDate = new Date(now.getTime() - 7 * DAY_MS);
   const since = sinceDate.toISOString();
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [counts, problems] = await Promise.all([windowCounts(since), listProblems({ since })]);
+    const [counts, problems] = await Promise.all([windowCounts(since), listProblems({ since, includeResolved })]);
     const health = computeHealth({
       sent: stats?.sent ?? null,
       delivered: counts.delivered,
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
       postmarkError,
     });
     return NextResponse.json({
-      health, window, stats, bySource, problems, lastProblem: problems[0] ?? null, canManage,
+      health, window, stats, bySource, problems, lastProblem: problems.find((p) => !p.resolved_at) ?? null, canManage,
     });
   } catch (e) {
     console.error("email health: events store failed:", e);

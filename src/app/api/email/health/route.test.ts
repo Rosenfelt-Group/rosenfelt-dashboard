@@ -57,6 +57,17 @@ describe("GET /api/email/health", () => {
     expect(b.window.from < b.window.to).toBe(true);
   });
 
+  it("includeResolved=1 passes through to the store; lastProblem stays the newest unresolved one", async () => {
+    const resolved = { id: "e0", record_type: "Bounce", recipient: "z@b.co", resolved_at: "2026-10-16T00:00:00Z" };
+    vi.mocked(listProblems).mockResolvedValue([resolved, event] as never);
+    const b = await (await GET(new NextRequest("http://x/api/email/health?includeResolved=1"))).json();
+    expect(vi.mocked(listProblems).mock.calls[0][0].includeResolved).toBe(true);
+    expect(b.problems).toHaveLength(2);
+    expect(b.lastProblem).toEqual(event);
+    await GET(req());
+    expect(vi.mocked(listProblems).mock.calls[1][0].includeResolved).toBe(false);
+  });
+
   it("canManage is true with manage_email", async () => {
     s.perms = ["view_overview", "manage_email"];
     expect((await (await GET(req())).json()).canManage).toBe(true);

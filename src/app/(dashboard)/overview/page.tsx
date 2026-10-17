@@ -4,6 +4,7 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { AgentStatusCard, deriveAgentStatus, type AgentHealth } from "@/components/AgentStatusCard";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { StatCard } from "@/components/StatCard";
+import { EmailHealthCard } from "@/components/EmailHealthCard";
 import { CollapsibleCard } from "@/components/CollapsibleCard";
 import { CronConfigPanel } from "@/components/CronConfigPanel";
 import { DashboardStats, WorkflowLog, PendingApproval, AgentStatus, Agent } from "@/types";
@@ -219,6 +220,8 @@ export default function OverviewPage() {
           sub="last 7 days"
         />
       </div>
+
+      <EmailHealthCard />
 
       {/* Agent status at a glance */}
       <div className="mb-6">
