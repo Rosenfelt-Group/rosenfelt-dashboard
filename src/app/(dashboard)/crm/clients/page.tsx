@@ -7,6 +7,7 @@ import clsx from "clsx";
 import { AgentBadge } from "@/components/AgentBadge";
 import { Agent } from "@/types";
 import { CRMNav } from "@/components/CRMNav";
+import { fetchJson } from "@/lib/fetch-json";
 
 type StatusFilter = "active" | "inactive" | "all";
 const STATUS_FILTERS: StatusFilter[] = ["active", "inactive", "all"];
@@ -63,6 +64,7 @@ function ClientsPageInner() {
 
   const [clients, setClients] = useState<CRMClient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [availableBusinesses, setAvailableBusinesses] = useState<CRMBusiness[]>([]);
   const [availableContacts, setAvailableContacts] = useState<CRMContact[]>([]);
@@ -82,9 +84,11 @@ function ClientsPageInner() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/crm/clients?status=${statusFilter}`)
-      .then(r => r.json())
-      .then(d => { setClients(Array.isArray(d) ? d : []); setLoading(false); });
+    fetchJson<unknown>(`/api/crm/clients?status=${statusFilter}`).then(r => {
+      if (r.ok) { setClients(Array.isArray(r.data) ? r.data : []); setLoadError(null); }
+      else setLoadError(r.error);
+      setLoading(false);
+    });
   }, [statusFilter]);
 
   async function openCreate() {
@@ -188,6 +192,9 @@ function ClientsPageInner() {
         })}
       </div>
 
+      {loadError && (
+        <div className="card text-sm text-red-600 mb-4">Couldn&apos;t load clients: {loadError}</div>
+      )}
       {loading ? (
         <div className="card animate-pulse h-40" />
       ) : clients.length === 0 ? (

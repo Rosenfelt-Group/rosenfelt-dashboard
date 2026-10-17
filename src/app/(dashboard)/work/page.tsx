@@ -2,7 +2,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
-import { supabase } from "@/lib/supabase";
+import { usePolling } from "@/lib/use-polling";
 import { AgentBadge } from "@/components/AgentBadge";
 import { KanbanColumn } from "@/components/work/KanbanColumn";
 import { ConfigureColumnsMenu } from "@/components/work/ConfigureColumnsMenu";
@@ -347,16 +347,20 @@ function WorkPageInner() {
   }, [filters]);
 
   // Fetch items — server-filters by itemType so client/internal swap re-queries.
-  const load = useCallback(async (itemType: ItemTypeFilter) => {
-    setLoading(true);
+  // `silent` refreshes in place (polling) without the loading state, and keeps
+  // the current items if a background refresh fails.
+  const load = useCallback(async (itemType: ItemTypeFilter, silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch(`/api/work?archived=false&itemType=${itemType}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setItems(Array.isArray(data) ? data : []);
+      if (!silent) setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
+      if (!silent) setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -379,25 +383,12 @@ function WorkPageInner() {
     reloadSprintOptions();
   }, [reloadSprintOptions]);
 
-  // Realtime updates on work_items: refetch (cheaper than reconciling).
-  // Re-subscribe when itemType changes so the refetch carries the right filter.
-  useEffect(() => {
-    const channel = supabase
-      .channel("work-items-kanban")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "work_items" },
-        () => {
-          load(filters.itemType);
-          // A new item may introduce a previously-unseen sprint number
-          reloadSprintOptions();
-        },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [load, filters.itemType, reloadSprintOptions]);
+  // Poll for changes made elsewhere (agents, n8n, other tabs).
+  usePolling(() => {
+    load(filters.itemType, true);
+    // A new item may introduce a previously-unseen sprint number
+    reloadSprintOptions();
+  }, 15_000);
 
   const setFilters = useCallback(
     (next: Filters) => {
@@ -409,7 +400,7 @@ function WorkPageInner() {
 
   const move = useCallback(
     async (id: string, next: WorkStatus) => {
-      // Optimistic UI; Realtime corrects any drift
+      // Optimistic UI; polling corrects any drift
       setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: next } : i)));
       try {
         const res = await fetch(`/api/work/${id}`, {

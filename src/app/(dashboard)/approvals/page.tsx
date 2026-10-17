@@ -1,12 +1,12 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PendingApproval } from "@/types";
 import { can } from "@/lib/permissions";
 import { ApprovalCard, LinkedInCarouselDetail } from "@/components/ApprovalCard";
 import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
-import { supabase } from "@/lib/supabase";
+import { usePolling } from "@/lib/use-polling";
 
 const STATUS_STYLES = {
   approved:            "bg-green-50 text-green-700",
@@ -83,46 +83,25 @@ export default function ApprovalsPage() {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/approvals").then(r => r.json()),
-      fetch("/api/approvals?history=true").then(r => r.json()),
-    ]).then(([p, h]) => {
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const load = useCallback(async (silent = false) => {
+    try {
+      const [pr, hr] = await Promise.all([fetch("/api/approvals"), fetch("/api/approvals?history=true")]);
+      if (!pr.ok || !hr.ok) throw new Error(`HTTP ${pr.ok ? hr.status : pr.status}`);
+      const [p, h] = await Promise.all([pr.json(), hr.json()]);
       setPending(Array.isArray(p) ? p : []);
       setHistory(Array.isArray(h) ? h.filter((x: PendingApproval) => x.status !== "pending") : []);
+      setLoadError(null);
+    } catch (e) {
+      if (!silent) setLoadError(e instanceof Error ? e.message : "Failed to load approvals");
+    } finally {
       setLoading(false);
-    });
-
-    const channel = supabase
-      .channel("approvals-page")
-      // New approval from an agent → add to pending list
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "pending_approvals" },
-        (payload) => {
-          const row = payload.new as PendingApproval;
-          if (row.status !== "pending") return;
-          setPending(prev => [row, ...prev]);
-        }
-      )
-      // Approval resolved externally (e.g., another tab or Telegram) → move to history
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "pending_approvals" },
-        (payload) => {
-          const row = payload.new as PendingApproval;
-          if (row.status === "pending") return;
-          setPending(prev => prev.filter(a => a.id !== row.id));
-          setHistory(prev => {
-            if (prev.some(a => a.id === row.id)) return prev;
-            return [row, ...prev];
-          });
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+    }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+  // Pick up approvals created by agents or resolved elsewhere (another tab, Telegram).
+  usePolling(() => load(true), 10_000);
 
   async function handleApproval(
     id: string,
@@ -155,6 +134,14 @@ export default function ApprovalsPage() {
       <div className="p-4 md:p-8 space-y-4">
         <div className="card animate-pulse h-16" />
         <div className="card animate-pulse h-64" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-4 md:p-8">
+        <div className="card text-sm text-red-600">Couldn&apos;t load approvals: {loadError}</div>
       </div>
     );
   }

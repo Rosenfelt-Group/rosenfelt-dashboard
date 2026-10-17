@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { fetchJson } from "@/lib/fetch-json";
 import { CRMBusiness } from "@/types";
 import { CRMNav } from "@/components/CRMNav";
 import Link from "next/link";
@@ -37,6 +38,7 @@ function formFromBusiness(b: CRMBusiness): Form {
 export default function BusinessesPage() {
   const [businesses, setBusinesses] = useState<CRMBusiness[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   // editingId === null + showModal === true → create mode
   // editingId === '<uuid>' → edit mode
@@ -47,9 +49,11 @@ export default function BusinessesPage() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/crm/businesses")
-      .then(r => r.json())
-      .then(d => { setBusinesses(Array.isArray(d) ? d : []); setLoading(false); });
+    fetchJson<unknown>("/api/crm/businesses").then(r => {
+      if (r.ok) setBusinesses(Array.isArray(r.data) ? r.data : []);
+      else setLoadError(r.error);
+      setLoading(false);
+    });
   }, []);
 
   function openCreate() {
@@ -131,6 +135,9 @@ export default function BusinessesPage() {
         />
       </div>
 
+      {loadError && (
+        <div className="card text-sm text-red-600 mb-4">Couldn&apos;t load businesses: {loadError}</div>
+      )}
       {loading ? (
         <div className="card animate-pulse h-40" />
       ) : filtered.length === 0 ? (

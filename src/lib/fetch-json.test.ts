@@ -13,11 +13,11 @@ describe("fetchJson", () => {
   });
   it("uses body.error for non-ok JSON", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ error: "nope" }, 400)));
-    expect(await fetchJson("/x")).toEqual({ ok: false, error: "nope" });
+    expect(await fetchJson("/x")).toEqual({ ok: false, error: "nope", status: 400 });
   });
   it("falls back to HTTP status when non-ok JSON has no error", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({}, 500)));
-    expect(await fetchJson("/x")).toEqual({ ok: false, error: "Request failed (HTTP 500)" });
+    expect(await fetchJson("/x")).toEqual({ ok: false, error: "Request failed (HTTP 500)", status: 500 });
   });
   it("reports non-JSON (HTML login redirect) responses", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<html/>", { status: 200, headers: { "content-type": "text/html" } })));

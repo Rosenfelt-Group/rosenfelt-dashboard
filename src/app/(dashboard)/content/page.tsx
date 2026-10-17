@@ -1,10 +1,10 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ContentIdea } from "@/types";
 import { can } from "@/lib/permissions";
 import clsx from "clsx";
 import { formatDistanceToNow, parseISO } from "date-fns";
-import { supabase } from "@/lib/supabase";
+import { usePolling } from "@/lib/use-polling";
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -414,24 +414,24 @@ export default function ContentPage() {
       .then(d => { if (d?.permissions) setPermissions(d.permissions); }).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    fetch("/api/content-ideas").then(r => r.json())
-      .then(d => { setIdeas(Array.isArray(d) ? d : []); setLoading(false); });
-
-    const channel = supabase
-      .channel("content-ideas-changes")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "content_ideas" }, (payload) => {
-        const row = payload.new as ContentIdea;
-        if (row.status !== "discarded") setIdeas(prev => [row, ...prev]);
-      })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "content_ideas" }, (payload) => {
-        const updated = payload.new as ContentIdea;
-        setIdeas(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated } : i));
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadIdeas = useCallback(async (silent = false) => {
+    try {
+      const r = await fetch("/api/content-ideas");
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      setIdeas(Array.isArray(d) ? d : []);
+      setLoadError(null);
+    } catch (e) {
+      if (!silent) setLoadError(e instanceof Error ? e.message : "Failed to load ideas");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { loadIdeas(); }, [loadIdeas]);
+  // Pick up ideas added or updated by agents (Riley's research, Avery's drafts).
+  usePolling(() => loadIdeas(true), 15_000);
 
   async function handleWrite(idea: ContentIdea) {
     setWriting(prev => new Set([...prev, idea.id]));
@@ -482,6 +482,7 @@ export default function ContentPage() {
   }
 
   if (loading) return <div className="p-8"><div className="card animate-pulse h-64" /></div>;
+  if (loadError) return <div className="p-8"><div className="card text-sm text-red-600">Couldn&apos;t load content ideas: {loadError}</div></div>;
 
   const isAdmin = can(permissions, "manage_approvals");
 

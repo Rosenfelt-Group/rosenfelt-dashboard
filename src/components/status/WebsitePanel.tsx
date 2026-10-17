@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
-import { supabase } from "@/lib/supabase";
+import { usePolling } from "@/lib/use-polling";
 
 interface CheckResult {
   name: string;
@@ -64,20 +64,9 @@ export default function WebsitePanel({ isAdmin }: { isAdmin: boolean }) {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-    const channel = supabase
-      .channel("website-panel")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "regression_runs" },
-        () => load(),
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [load]);
+  // Regression runs land from Casey; refresh while visible.
+  useEffect(() => { load(); }, [load]);
+  usePolling(load, 30_000);
 
   const handleRunNow = async () => {
     setRunning(true);

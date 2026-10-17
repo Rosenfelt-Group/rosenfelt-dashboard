@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { fetchJson } from "@/lib/fetch-json";
 import { CRMContact, CRMBusiness, CRMContactRole } from "@/types";
 import { CRMNav } from "@/components/CRMNav";
 
@@ -47,6 +48,7 @@ function formFromContact(c: CRMContact): Form {
 export default function ContactsPage() {
   const [contacts, setContacts] = useState<CRMContact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -56,9 +58,11 @@ export default function ContactsPage() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/crm/contacts")
-      .then(r => r.json())
-      .then(d => { setContacts(Array.isArray(d) ? d : []); setLoading(false); });
+    fetchJson<unknown>("/api/crm/contacts").then(r => {
+      if (r.ok) setContacts(Array.isArray(r.data) ? r.data : []);
+      else setLoadError(r.error);
+      setLoading(false);
+    });
   }, []);
 
   async function loadBusinessesIfNeeded() {
@@ -154,6 +158,9 @@ export default function ContactsPage() {
         />
       </div>
 
+      {loadError && (
+        <div className="card text-sm text-red-600 mb-4">Couldn&apos;t load contacts: {loadError}</div>
+      )}
       {loading ? (
         <div className="card animate-pulse h-40" />
       ) : filtered.length === 0 ? (

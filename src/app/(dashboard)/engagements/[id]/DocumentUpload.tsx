@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { fetchJson } from "@/lib/rooms/fetch-json";
+import { fetchJson } from "@/lib/fetch-json";
 import { DOC_ACCEPT, DOC_MAX_BYTES, targetAfterPrep } from "@/lib/rooms/doc-limits";
 
 type Prep = { deliverable_id: string; upload_id: string; filename: string; signed_url: string; content_type: string };
