@@ -11,8 +11,8 @@ const s = vi.hoisted(() => ({
 
 vi.mock("@/lib/discovery/send", () => ({ finalizeSend: s.finalize }));
 
-vi.mock("@/lib/email/gmail", async (orig) => {
-  const real = await orig<typeof import("@/lib/email/gmail")>();
+vi.mock("@/lib/email", async (orig) => {
+  const real = await orig<typeof import("@/lib/email")>();
   return { ...real, sendEmail: s.sendEmail, isEmailConfigured: () => s.configured };
 });
 
@@ -36,7 +36,7 @@ vi.mock("@/lib/supabase-admin", () => ({
 
 import { POST as send } from "./route";
 import { POST as resend } from "../email/route";
-import { EmailError } from "@/lib/email/gmail";
+import { EmailError } from "@/lib/email";
 
 const ID = "3e9c4f31-5a6d-4e8f-9aa1-2c3d4e5f6071";
 const ctx = { params: Promise.resolve({ id: ID }) };

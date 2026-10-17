@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { emailInvite, EmailSchema } from "@/lib/discovery/email";
-import { isValidEmail } from "@/lib/email/gmail";
+import { isValidEmail } from "@/lib/email";
 
 type Ctx = { params: Promise<{ id: string }> };
 

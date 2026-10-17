@@ -1,5 +1,5 @@
 // Plain-text invite email for a room link. Brian can copy it into his own mail client, or the
-// access email route sends it via Gmail (src/lib/email/gmail.ts).
+// access email route sends it via src/lib/email (Postmark, or Gmail as fallback).
 export const DEFAULT_LINK_DAYS = 60;
 
 export type RoomInviteEmail = { subject: string; body: string };

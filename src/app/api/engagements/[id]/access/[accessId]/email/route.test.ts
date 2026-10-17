@@ -24,12 +24,12 @@ vi.mock("@/lib/supabase-admin", () => {
   return { supabaseAdmin: { schema: () => ({ from: query }) } };
 });
 vi.mock("@/lib/rooms/session-user", () => ({ sessionUsername: async () => "brian" }));
-vi.mock("@/lib/email/gmail", async (orig) => {
-  const real = await orig<typeof import("@/lib/email/gmail")>();
+vi.mock("@/lib/email", async (orig) => {
+  const real = await orig<typeof import("@/lib/email")>();
   return { ...real, sendEmail: s.send };
 });
 import { POST } from "./route";
-import { EmailError } from "@/lib/email/gmail";
+import { EmailError } from "@/lib/email";
 
 const ENG = "11111111-1111-4111-8111-111111111111";
 const ACC = "22222222-2222-4222-8222-222222222222";
