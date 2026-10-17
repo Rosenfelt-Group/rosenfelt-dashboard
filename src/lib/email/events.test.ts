@@ -11,7 +11,7 @@ vi.mock("@/lib/supabase-admin", () => ({
       from: (table: string) => {
         s.calls.push(["from", table]);
         const b: Record<string, unknown> = {};
-        for (const m of ["select", "neq", "gte", "is", "eq", "ilike", "order", "limit", "update", "insert"]) {
+        for (const m of ["select", "neq", "gte", "is", "eq", "ilike", "filter", "order", "limit", "update", "insert"]) {
           b[m] = (...a: unknown[]) => { s.calls.push([m, ...a]); return b; };
         }
         b.then = (res: (v: unknown) => unknown) => Promise.resolve(s.result).then(res);
@@ -58,11 +58,18 @@ describe("windowCounts", () => {
 });
 
 describe("resolveEvents", () => {
-  it("only touches unresolved rows, matches recipient case-insensitively with wildcards escaped", async () => {
+  it("only touches unresolved rows, matches recipient exactly and case-insensitively", async () => {
     s.result.data = [{ id: "1" }, { id: "2" }];
     await expect(resolveEvents({ recipient: "a_b%@x.co" }, "dismissed", "brian")).resolves.toBe(2);
     expect(has("is", "resolved_at", null)).toBe(true);
-    expect(has("ilike", "recipient", "a\\_b\\%@x.co")).toBe(true);
+    expect(has("filter", "recipient", "imatch", "^a_b%@x\\.co$")).toBe(true);
+    expect(s.calls.some((c) => c[0] === "ilike")).toBe(false);
+  });
+  it("does not turn * (or other pattern characters) in a recipient into a wildcard", async () => {
+    s.result.data = [{ id: "1" }];
+    await resolveEvents({ recipient: "*@x.co" }, "dismissed", "brian");
+    expect(has("filter", "recipient", "imatch", "^\\*@x\\.co$")).toBe(true);
+    expect(s.calls.some((c) => c[0] === "ilike")).toBe(false);
   });
   it("does nothing without a filter", async () => {
     await expect(resolveEvents({}, "dismissed", "b")).resolves.toBe(0);

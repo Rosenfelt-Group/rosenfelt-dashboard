@@ -66,7 +66,8 @@ export async function resolveEvents(
     .update({ resolved_at: new Date().toISOString(), resolved_by: by, resolution })
     .is("resolved_at", null);
   if (filter.id) q = q.eq("id", filter.id);
-  if (filter.recipient) q = q.ilike("recipient", filter.recipient.replace(/[\\%_]/g, "\\$&"));
+  // Anchored, regex-escaped imatch: exact + case-insensitive. (ilike would treat PostgREST's `*` as a wildcard.)
+  if (filter.recipient) q = q.filter("recipient", "imatch", `^${filter.recipient.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
   const { data, error } = await q.select("id");
   if (error) throw new Error(`email_events resolve failed: ${error.message}`);
   return data?.length ?? 0;
