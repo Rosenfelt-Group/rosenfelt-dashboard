@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canResend, decodeHtmlEntities, formatUptime, problemLabel, runMeta, sourceLabel, vercelStateMeta } from "./helpers";
+import { canResend, decodeHtmlEntities, formatUptime, lastProblemText, problemLabel, runMeta, sourceLabel, vercelStateMeta } from "./helpers";
 import type { EmailEvent } from "@/lib/email/events";
 
 describe("formatUptime", () => {
@@ -38,9 +38,25 @@ describe("sourceLabel", () => {
 describe("problemLabel", () => {
   const ev = (o: Partial<EmailEvent>) => o as EmailEvent;
   it("describes bounces, complaints and blocks", () => {
-    expect(problemLabel(ev({ record_type: "Bounce", description: "Mailbox does not exist" }))).toBe("Hard bounce: Mailbox does not exist");
+    expect(problemLabel(ev({ record_type: "Bounce", inactive: true, description: "Mailbox does not exist" }))).toBe("Hard bounce: Mailbox does not exist");
+    expect(problemLabel(ev({ record_type: "Bounce", inactive: true, description: null }))).toBe("Hard bounce");
     expect(problemLabel(ev({ record_type: "SpamComplaint" }))).toBe("Spam complaint");
-    expect(problemLabel(ev({ record_type: "SubscriptionChange" }))).toBe("Blocked");
+    expect(problemLabel(ev({ record_type: "SubscriptionChange", inactive: true }))).toBe("Blocked");
+  });
+  it("tells soft bounces and reactivations apart by inactive", () => {
+    expect(problemLabel(ev({ record_type: "Bounce", inactive: false, description: "Mailbox full" }))).toBe("Soft bounce: Mailbox full");
+    expect(problemLabel(ev({ record_type: "Bounce", inactive: null, description: null }))).toBe("Soft bounce");
+    expect(problemLabel(ev({ record_type: "SubscriptionChange", inactive: false }))).toBe("Unblocked");
+  });
+});
+
+describe("lastProblemText", () => {
+  const at = "2026-10-16T15:00:00Z";
+  const ev = (o: Partial<EmailEvent>) => ({ occurred_at: at, recipient: "a@b.co", description: null, ...o }) as EmailEvent;
+  it("reads 'hard bounce to' for a bounce and 'blocked:' for a block", () => {
+    expect(lastProblemText(ev({ record_type: "Bounce", inactive: true, description: "Mailbox not found" }))).toBe("Oct 16, hard bounce to a@b.co");
+    expect(lastProblemText(ev({ record_type: "SubscriptionChange", inactive: true }))).toBe("Oct 16, blocked: a@b.co");
+    expect(lastProblemText(ev({ record_type: "SpamComplaint", inactive: true }))).toBe("Oct 16, spam complaint to a@b.co");
   });
 });
 

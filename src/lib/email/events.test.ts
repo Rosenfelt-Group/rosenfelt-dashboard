@@ -11,7 +11,7 @@ vi.mock("@/lib/supabase-admin", () => ({
       from: (table: string) => {
         s.calls.push(["from", table]);
         const b: Record<string, unknown> = {};
-        for (const m of ["select", "neq", "gte", "is", "eq", "ilike", "filter", "order", "limit", "update", "insert", "maybeSingle"]) {
+        for (const m of ["select", "neq", "or", "gte", "is", "eq", "ilike", "filter", "order", "limit", "update", "insert", "maybeSingle"]) {
           b[m] = (...a: unknown[]) => { s.calls.push([m, ...a]); return b; };
         }
         b.then = (res: (v: unknown) => unknown) => Promise.resolve(s.result).then(res);
@@ -37,6 +37,10 @@ describe("listProblems", () => {
     expect(has("is", "resolved_at", null)).toBe(true);
     expect(has("order", "occurred_at", { ascending: false })).toBe(true);
     expect(has("limit", 200)).toBe(true);
+  });
+  it("lists only hard bounces/blocks (inactive) and spam complaints, never soft bounces or reactivations", async () => {
+    await listProblems({ since: "x", includeResolved: true });
+    expect(has("or", "inactive.is.true,record_type.eq.SpamComplaint")).toBe(true);
   });
   it("includes resolved when asked", async () => {
     await listProblems({ since: "x", includeResolved: true });

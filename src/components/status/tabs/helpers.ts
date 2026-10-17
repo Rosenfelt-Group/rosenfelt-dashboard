@@ -77,10 +77,22 @@ export function sourceLabel(tag: string | null): string {
   return "Other";
 }
 
-export function problemLabel(e: EmailEvent): string {
-  if (e.record_type === "Bounce") return e.description ? `Hard bounce: ${e.description}` : "Hard bounce";
+// A Bounce is hard when Postmark deactivated the address (inactive); a SubscriptionChange is a block when
+// SuppressSending was true (stored as inactive), otherwise a reactivation.
+export function problemLabel(e: Pick<EmailEvent, "record_type" | "inactive" | "description">): string {
+  if (e.record_type === "Bounce") {
+    const kind = e.inactive === true ? "Hard bounce" : "Soft bounce";
+    return e.description ? `${kind}: ${e.description}` : kind;
+  }
   if (e.record_type === "SpamComplaint") return "Spam complaint";
-  return "Blocked";
+  return e.inactive === true ? "Blocked" : "Unblocked";
+}
+
+/** "Last problem" wording: day + short type, e.g. "Oct 16, hard bounce to a@b.co" or "Oct 16, blocked: a@b.co". */
+export function lastProblemText(e: Pick<EmailEvent, "record_type" | "inactive" | "description" | "recipient" | "occurred_at">): string {
+  const day = new Date(e.occurred_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const type = problemLabel(e).split(":")[0].toLowerCase();
+  return e.record_type === "SubscriptionChange" ? `${day}, ${type}: ${e.recipient}` : `${day}, ${type} to ${e.recipient}`;
 }
 
 // True only for tags the resend route can rebuild (list shared with lib/email/resend.ts).

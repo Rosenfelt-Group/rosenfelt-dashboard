@@ -28,9 +28,11 @@ export type EmailAction = "unblock" | "block" | "dismiss" | "resend";
 
 const db = () => supabaseAdmin.schema("public");
 
+// Problems are rows that stopped mail: hard bounces and blocks (inactive = true; for a SubscriptionChange that is
+// Postmark's SuppressSending) and spam complaints. Soft bounces and reactivations are stored but never listed.
 export async function listProblems(opts: { since: string; includeResolved?: boolean }): Promise<EmailEvent[]> {
   let q = db().from("email_events").select("*")
-    .neq("record_type", "Delivery").gte("occurred_at", opts.since);
+    .neq("record_type", "Delivery").or("inactive.is.true,record_type.eq.SpamComplaint").gte("occurred_at", opts.since);
   if (!opts.includeResolved) q = q.is("resolved_at", null);
   const { data, error } = await q.order("occurred_at", { ascending: false }).limit(200);
   if (error) throw new Error(`email_events list failed: ${error.message}`);

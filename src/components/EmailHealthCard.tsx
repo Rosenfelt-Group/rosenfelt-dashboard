@@ -5,7 +5,7 @@ import clsx from "clsx";
 import type { EmailEvent } from "@/lib/email/events";
 import { usePolling } from "@/lib/use-polling";
 import { fetchJson } from "@/lib/fetch-json";
-import { problemLabel } from "@/components/status/tabs/helpers";
+import { lastProblemText } from "@/components/status/tabs/helpers";
 
 export type EmailHealthResponse = {
   health: {
@@ -27,13 +27,6 @@ export const HEALTH_LEVELS = {
   amber: { word: "Needs attention", dot: "bg-amber-400", text: "text-amber-700" },
   red: { word: "Problem", dot: "bg-red-500", text: "text-red-700" },
 } as const;
-
-/** "Last problem" wording: day + short type, e.g. "Oct 16, Hard bounce to a@b.co". */
-export function lastProblemText(e: EmailEvent): string {
-  const day = new Date(e.occurred_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const type = problemLabel(e).split(":")[0].toLowerCase();
-  return `${day}, ${type} to ${e.recipient}`;
-}
 
 export function EmailHealthCard() {
   const [data, setData] = useState<EmailHealthResponse | null>(null);
