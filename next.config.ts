@@ -8,6 +8,19 @@ const nextConfig: NextConfig = {
       { source: "/billing", destination: "/finance?tab=stripe", permanent: false },
       { source: "/sales",   destination: "/content/research",   permanent: false },
       { source: "/backup",  destination: "/tools",              permanent: false },
+      // 2026-10-17 merges (work item #1316)
+      { source: "/control-center",      destination: "/overview",                  permanent: false },
+      { source: "/agent-central",       destination: "/agents",                    permanent: false },
+      { source: "/agents/history",      destination: "/agents?tab=activity",       permanent: false },
+      { source: "/agents/intelligence", destination: "/agents/jordan?tab=prompts", permanent: false },
+      { source: "/chat",                destination: "/agents/jordan?tab=chat",    permanent: false },
+      { source: "/crm/leads",           destination: "/crm?view=list",             permanent: false },
+      { source: "/quiz",                destination: "/analytics?tab=quiz",        permanent: false },
+      { source: "/images",              destination: "/documents?tab=images",      permanent: false },
+      { source: "/users",               destination: "/tools?tab=users",           permanent: false },
+      { source: "/rbac",                destination: "/tools?tab=roles",           permanent: false },
+      { source: "/sql",                 destination: "/tools?tab=sql",             permanent: false },
+      { source: "/engineering",         destination: "/tools?tab=terminal",        permanent: false },
     ];
   },
   experimental: {

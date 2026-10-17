@@ -30,7 +30,23 @@ const STATUS_DOT: Record<LiveStatus, string> = {
   idle:    "bg-brand-status-idle",
 };
 
-export function AgentStatusCard({ status }: { status: AgentStatus }) {
+/** Result of the /api/agent-status/health probe for one agent. */
+export type AgentHealth = "up" | "down" | "unknown";
+
+const HEALTH_META: Record<AgentHealth, { label: string; className: string }> = {
+  up:      { label: "Up",      className: "bg-green-50 text-green-700" },
+  down:    { label: "Down",    className: "bg-red-50 text-red-700" },
+  unknown: { label: "Unknown", className: "bg-brand-offwhite text-brand-muted" },
+};
+
+export function AgentStatusCard({
+  status,
+  health,
+}: {
+  status: AgentStatus;
+  /** Server reachability; omit while the probe is still running. */
+  health?: AgentHealth;
+}) {
   const meta = AGENT_META[status.agent] ?? { name: status.agent, role: "" };
   const live = deriveAgentStatus(status);
 
@@ -42,6 +58,15 @@ export function AgentStatusCard({ status }: { status: AgentStatus }) {
           <p className="text-sm font-semibold text-brand-black truncate">{meta.name}</p>
           <span className={clsx("w-1.5 h-1.5 rounded-full flex-shrink-0", STATUS_DOT[live])} aria-hidden="true" />
           <span className="text-[11px] text-brand-muted">{STATUS_LABEL[live]}</span>
+          <span
+            className={clsx(
+              "ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0",
+              health ? HEALTH_META[health].className : "bg-brand-offwhite text-brand-muted animate-pulse"
+            )}
+            title="Server health check"
+          >
+            {health ? HEALTH_META[health].label : "checking…"}
+          </span>
         </div>
         <p className="text-xs text-brand-muted truncate">{meta.role}</p>
         <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-brand-muted flex-wrap">

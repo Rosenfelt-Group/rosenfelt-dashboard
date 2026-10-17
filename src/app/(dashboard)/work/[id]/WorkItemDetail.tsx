@@ -8,6 +8,7 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { WorkLogPanel } from "@/components/work/WorkLogPanel";
 import { WorkDocsPanel } from "@/components/work/WorkDocsPanel";
 import { SourceBadge } from "@/components/work/SourceBadge";
+import { ALL_STATUSES, STATUS_LABEL, STATUS_PILL } from "@/components/work/work-constants";
 import { Button, PageHeader, Tabs } from "@/components/ui";
 import type {
   AgentName,
@@ -19,36 +20,7 @@ import type {
   WorkType,
 } from "@/types";
 
-const STATUS_OPTIONS: WorkStatus[] = [
-  "inbox", "approved", "prompt_ready", "in_progress", "open",
-  "on_hold", "done", "deferred", "cancelled", "rejected",
-];
-
-const STATUS_PILL: Record<WorkStatus, string> = {
-  inbox:        "bg-gray-100 text-gray-700",
-  approved:     "bg-blue-100 text-blue-700",
-  prompt_ready: "bg-violet-100 text-violet-700",
-  in_progress:  "bg-amber-100 text-amber-700",
-  open:         "bg-slate-100 text-slate-700",
-  on_hold:      "bg-indigo-100 text-indigo-700",
-  done:         "bg-green-100 text-green-700",
-  deferred:     "bg-yellow-100 text-yellow-800",
-  cancelled:    "bg-gray-200 text-gray-600",
-  rejected:     "bg-red-100 text-red-700",
-};
-
-const STATUS_LABEL: Record<WorkStatus, string> = {
-  inbox:        "Inbox",
-  approved:     "Approved",
-  prompt_ready: "Prompt ready",
-  in_progress:  "In progress",
-  open:         "Open",
-  on_hold:      "On hold",
-  done:         "Done",
-  deferred:     "Deferred",
-  cancelled:    "Cancelled",
-  rejected:     "Rejected",
-};
+const STATUS_OPTIONS: WorkStatus[] = ALL_STATUSES;
 
 const PRIORITY_OPTIONS: TaskPriority[] = ["high", "medium", "low"];
 const ASSIGN_OPTIONS: (AgentName | "unassigned")[] = [

@@ -118,7 +118,7 @@ export function AgentsTab() {
         </table>
       </div>
       <div className="flex items-center justify-between mt-2">
-        <Link href="/agents/history" className="text-xs text-brand-orange hover:underline">
+        <Link href="/agents?tab=activity" className="text-xs text-brand-orange hover:underline">
           View full execution history →
         </Link>
         {checkedAt && (

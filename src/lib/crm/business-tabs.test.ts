@@ -3,10 +3,11 @@ import { BUSINESS_TABS, parseBusinessTab } from "./business-tabs";
 
 describe("parseBusinessTab", () => {
   it("lists the tabs in order", () => {
-    expect(BUSINESS_TABS.map(t => t.label)).toEqual(["Contacts", "Research", "Rooms", "Discovery", "Leads"]);
+    expect(BUSINESS_TABS.map(t => t.label)).toEqual(["Contacts", "Research", "Rooms", "Discovery", "Leads", "Clients"]);
   });
   it("accepts known tab ids", () => {
     expect(parseBusinessTab("rooms")).toBe("rooms");
+    expect(parseBusinessTab("clients")).toBe("clients");
   });
   it("falls back to contacts for missing or unknown values", () => {
     expect(parseBusinessTab(null)).toBe("contacts");

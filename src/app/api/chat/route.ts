@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requirePermission } from "@/lib/requirePermission";
+
+// Chat with an agent (and read its dashboard chat history) requires use_chat.
+const CHAT_PERMISSION = "use_chat";
 
 export const maxDuration = 60;
 
@@ -38,6 +42,9 @@ const AGENT_CONFIG: Record<string, AgentConfig> = {
 };
 
 export async function POST(req: NextRequest) {
+  const check = await requirePermission(req, CHAT_PERMISSION);
+  if (!check.ok) return check.response;
+
   try {
     const { message, agent, chatId } = await req.json();
 
@@ -45,7 +52,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing message or agent" }, { status: 400 });
     }
 
-    const config = AGENT_CONFIG[agent];
+    const config = Object.hasOwn(AGENT_CONFIG, agent) ? AGENT_CONFIG[agent] : undefined;
     if (!config) {
       return NextResponse.json({ error: `Unknown agent: ${agent}` }, { status: 400 });
     }
@@ -85,9 +92,15 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const check = await requirePermission(req, CHAT_PERMISSION);
+  if (!check.ok) return check.response;
+
   const { searchParams } = new URL(req.url);
   const agent = searchParams.get("agent") || "jordan";
   const chatId = searchParams.get("chatId") || "dashboard_brian";
+  if (!Object.hasOwn(AGENT_CONFIG, agent)) {
+    return NextResponse.json({ error: `Unknown agent: ${agent}` }, { status: 400 });
+  }
 
   try {
     const { data } = await supabaseAdmin

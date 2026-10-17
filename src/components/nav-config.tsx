@@ -23,22 +23,21 @@ export interface NavItem {
 
 export const NAV_GROUPS: { operations: NavItem[]; growth: NavItem[]; workspace: NavItem[] } = {
   operations: [
-    { id: "overview", label: "Overview",       href: "/overview",       icon: "grid",     active: ["/overview"] },
-    { id: "control",  label: "Control Center", href: "/control-center", icon: "activity", active: ["/control-center"] },
-    { id: "work",     label: "Work",           href: "/work",           icon: "kanban",   active: ["/work"] },
-    { id: "approvals",label: "Approvals",      href: "/approvals",      icon: "check",    active: ["/approvals"] },
-    { id: "agents",   label: "Agents",         href: "/agent-central",  icon: "brain",    active: ["/agent-central", "/agents", "/chat"] },
+    { id: "overview", label: "Overview",  href: "/overview",  icon: "grid",   active: ["/overview"] },
+    { id: "work",     label: "Work",      href: "/work",      icon: "kanban", active: ["/work"] },
+    { id: "approvals",label: "Approvals", href: "/approvals", icon: "check",  active: ["/approvals"] },
+    { id: "agents",   label: "Agents",    href: "/agents",    icon: "brain",  active: ["/agents"] },
   ],
   growth: [
     { id: "crm",      label: "CRM",     href: "/crm",       icon: "users",    active: ["/crm", "/engagements"] },
     { id: "content",  label: "Content", href: "/content",   icon: "edit",     active: ["/content"] },
-    { id: "reports",  label: "Reports", href: "/analytics", icon: "barChart", active: ["/analytics", "/quiz"] },
+    { id: "reports",  label: "Reports", href: "/analytics", icon: "barChart", active: ["/analytics"] },
   ],
   workspace: [
-    { id: "documents", label: "Documents", href: "/documents", icon: "folder",     active: ["/documents", "/images"] },
+    { id: "documents", label: "Documents", href: "/documents", icon: "folder",     active: ["/documents"] },
     { id: "finance",   label: "Finance",   href: "/finance",   icon: "dollar",     active: ["/finance"] },
     { id: "marketing", label: "Marketing", href: "/marketing", icon: "trendingUp", active: ["/marketing"] },
-    { id: "admin",     label: "Admin",     href: "/tools",     icon: "wrench",     active: ["/tools", "/users", "/rbac", "/sql", "/engineering"] },
+    { id: "admin",     label: "Admin",     href: "/tools",     icon: "wrench",     active: ["/tools"] },
     { id: "status",    label: "Status",    href: "/status",    icon: "shield",     active: ["/status"] },
   ],
 };
@@ -58,15 +57,8 @@ export interface SubPage {
 }
 
 export const SUB_PAGES: Record<string, SubPage[]> = {
-  agents: [
-    { label: "Agent Central", href: "/agent-central",       icon: "brain"   },
-    { label: "History",       href: "/agents/history",      icon: "history" },
-    { label: "Prompts",       href: "/agents/intelligence", icon: "shield"  },
-    { label: "Chat",          href: "/chat",                icon: "chat"    },
-  ],
   crm: [
     { label: "Pipeline",   href: "/crm",                 icon: "kanban" },
-    { label: "Leads",      href: "/crm/leads",           icon: "users"  },
     { label: "Contacts",   href: "/crm/contacts",        icon: "users"  },
     { label: "Businesses", href: "/crm/businesses",      icon: "folder" },
     { label: "Clients",    href: "/crm/clients",         icon: "users"  },
@@ -78,21 +70,6 @@ export const SUB_PAGES: Record<string, SubPage[]> = {
     { label: "Ideas",    href: "/content",          icon: "edit"     },
     { label: "Keywords", href: "/content/keywords", icon: "barChart" },
     { label: "Research", href: "/content/research", icon: "folder"   },
-  ],
-  reports: [
-    { label: "Analytics", href: "/analytics", icon: "barChart" },
-    { label: "Quiz",      href: "/quiz",      icon: "package"  },
-  ],
-  documents: [
-    { label: "Documents", href: "/documents", icon: "folder" },
-    { label: "Images",    href: "/images",    icon: "image"  },
-  ],
-  admin: [
-    { label: "Overview", href: "/tools",       icon: "wrench"   },
-    { label: "Users",    href: "/users",       icon: "users"    },
-    { label: "RBAC",     href: "/rbac",        icon: "lock"     },
-    { label: "SQL",      href: "/sql",         icon: "database" },
-    { label: "SSH",      href: "/engineering", icon: "terminal" },
   ],
 };
 

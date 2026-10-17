@@ -42,7 +42,9 @@ export const STATUS_PILL: Record<WorkStatus, string> = {
 
 export const STATUS_LABEL: Record<WorkStatus, string> = {
   inbox:        "Inbox",
-  approved:     "Approved",
+  // Stored value stays "approved"; shown as "Triaged" so it isn't confused
+  // with the separate Approvals queue.
+  approved:     "Triaged",
   prompt_ready: "Prompt ready",
   in_progress:  "In progress",
   open:         "Open",

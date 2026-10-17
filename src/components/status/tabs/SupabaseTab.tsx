@@ -213,7 +213,7 @@ export function SupabaseTab() {
 
       <div className="card flex items-center justify-between">
         <p className="text-sm text-brand-muted">Run queries against the database in the dedicated SQL page.</p>
-        <Link href="/sql" className="text-xs text-brand-orange hover:underline flex-shrink-0 ml-4">Open SQL →</Link>
+        <Link href="/tools?tab=sql" className="text-xs text-brand-orange hover:underline flex-shrink-0 ml-4">Open SQL →</Link>
       </div>
     </div>
   );

@@ -56,7 +56,7 @@ export function OverviewPanel() {
       { label: "Business Net (MTD)", value: kickNet,                    sub: kick?.connected ? "via Kick" : "Kick offline",   error: !kick?.connected,        href: "?tab=bookkeeping"  },
       { label: "Stripe MRR",         value: mrr,                        sub: "live subscriptions",                             error: !stripe || !!stripe.error, href: "?tab=stripe"       },
       { label: "AI Cost (7d)",       value: aiCost,                     sub: "across all agents",                              error: !usage || !!usage.error,   href: "?tab=cost"         },
-      { label: "Sam Pending",        value: String(samPending.length),  sub: samPending.length === 1 ? "action awaiting review" : "actions awaiting review", error: false, href: "?tab=sam-actions" },
+      { label: "Sam Pending",        value: String(samPending.length),  sub: samPending.length === 1 ? "action awaiting review" : "actions awaiting review", error: false, href: "/approvals?agent=sam" },
     ]);
     setApprovals(samPending);
     setLoading(false);
@@ -125,7 +125,7 @@ export function OverviewPanel() {
               <span className="ml-2 text-xs text-brand-muted font-normal">{approvals.length} waiting</span>
             )}
           </h2>
-          <Link href="?tab=sam-actions" className="text-xs text-brand-orange hover:underline">
+          <Link href="/approvals?agent=sam" className="text-xs text-brand-orange hover:underline">
             All approvals →
           </Link>
         </div>
@@ -140,7 +140,7 @@ export function OverviewPanel() {
               <ApprovalCard key={a.id} approval={a} onAction={handleApproval} isAdmin />
             ))}
             {approvals.length > 5 && (
-              <Link href="?tab=sam-actions" className="block text-center text-xs text-brand-orange py-2 hover:underline">
+              <Link href="/approvals?agent=sam" className="block text-center text-xs text-brand-orange py-2 hover:underline">
                 +{approvals.length - 5} more →
               </Link>
             )}

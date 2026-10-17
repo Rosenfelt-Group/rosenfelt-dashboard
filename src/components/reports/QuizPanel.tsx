@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import clsx from "clsx";
-import { EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
 
 type Lead = {
   id: string;
@@ -42,7 +42,8 @@ function snapshotUrl(token: string) {
   return `https://rosably.com/wp-content/uploads/snapshot.html?token=${token}`;
 }
 
-export default function QuizPage() {
+/** Quiz funnel (GA4 events) and assessment leads from the website quiz. */
+export function QuizPanel() {
   const [leads,      setLeads]      = useState<Lead[]>([]);
   const [funnel,     setFunnel]     = useState<FunnelData | null>(null);
   const [leadsErr,   setLeadsErr]   = useState("");
@@ -75,12 +76,8 @@ export default function QuizPage() {
   const topCount = funnel?.steps[0]?.count ?? 0;
 
   return (
-    <div className="p-4 md:p-8 pb-24 md:pb-8 space-y-8">
-      <PageHeader
-        className="!mb-0"
-        title="Quiz Analytics"
-        description="Assessment leads + funnel conversion · rolling 30 days"
-      />
+    <div className="space-y-8">
+      <p className="text-sm text-brand-muted">Assessment leads + funnel conversion · rolling 30 days</p>
 
       {/* ── Funnel ─────────────────────────────────────────────────────────── */}
       <section>

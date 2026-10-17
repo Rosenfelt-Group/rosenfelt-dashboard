@@ -1,6 +1,5 @@
 "use client";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { formatDistanceToNow, parseISO } from "date-fns";
@@ -10,7 +9,8 @@ import {
 } from "@/lib/doc-types";
 import { can } from "@/lib/permissions";
 import { fetchJson } from "@/lib/fetch-json";
-import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
+import { Button, EmptyState, ErrorState, LoadingState, PageHeader, Tabs } from "@/components/ui";
+import { ImagesPanel } from "@/components/documents/ImagesPanel";
 import FacetRail, { KpiRow, applyFilters, Filters, ClientOption, FacetDoc } from "./FacetRail";
 import Reader, { ReaderDoc } from "./Reader";
 import MetadataDrawer, { DrawerDoc } from "./MetadataDrawer";
@@ -161,15 +161,40 @@ function GroupedDocTable(props: Parameters<typeof DocTable>[0]) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+const TABS = [
+  { id: "documents", label: "Documents" },
+  { id: "images",    label: "Images"    },
+] as const;
+type Tab = typeof TABS[number]["id"];
+
 export default function DocumentsPage() {
   return (
     <Suspense fallback={<div className="p-4 md:p-8" />}>
-      <DocumentsPageInner />
+      <DocumentsShell />
     </Suspense>
   );
 }
 
-function DocumentsPageInner() {
+function DocumentsShell() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab: Tab = searchParams.get("tab") === "images" ? "images" : "documents";
+
+  // Documents filters live in the URL too; switching tab starts each tab from a clean query.
+  function setTab(id: Tab) {
+    router.replace(id === "documents" ? "/documents" : `/documents?tab=${id}`, { scroll: false });
+  }
+
+  return (
+    <div className="p-4 md:p-8 pt-16 md:pt-8 pb-24 md:pb-8">
+      <PageHeader title="Documents" className="mb-4" />
+      <Tabs tabs={TABS} value={tab} onChange={setTab} className="mb-5" />
+      {tab === "documents" ? <DocumentsPanel /> : <ImagesPanel />}
+    </div>
+  );
+}
+
+function DocumentsPanel() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const reindex = useReindex();
@@ -281,33 +306,27 @@ function DocumentsPageInner() {
   }
 
   return (
-    <div className="p-4 md:p-8 pt-16 md:pt-8 pb-24 md:pb-8">
-      <PageHeader
-        className="flex-wrap"
-        title="Documents"
-        description={listLoading ? "Loading…" : listError ? "Failed to load document registry" : `${docs.length} document${docs.length !== 1 ? "s" : ""} available`}
-        actions={
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button size="sm" variant="secondary" onClick={() => setGrouped((g) => !g)}>
-              {grouped ? "Flat view" : "Group by type"}
-            </Button>
-            <Link href="/images"
-              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-brand-border bg-white text-brand-muted hover:bg-brand-offwhite hover:text-brand-black transition-colors inline-flex items-center gap-1.5">
-              Images
-            </Link>
-            <button onClick={reindex.run} disabled={reindex.state === "running"} title="Sync doc_chunks with current markdown files"
-              className={clsx(
-                "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border",
-                reindex.state === "running" ? "bg-brand-offwhite text-brand-muted border-brand-border cursor-not-allowed" :
-                reindex.state === "done" ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100" :
-                reindex.state === "error" ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-100" :
-                "bg-white text-brand-muted border-brand-border hover:bg-brand-offwhite hover:text-brand-black"
-              )}>
-              {reindex.state === "running" ? "Indexing…" : reindex.state === "done" ? "Indexed ✓" : reindex.state === "error" ? "Failed ✗" : "Reindex docs"}
-            </button>
-          </div>
-        }
-      />
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <p className="text-sm text-brand-muted">
+          {listLoading ? "Loading…" : listError ? "Failed to load document registry" : `${docs.length} document${docs.length !== 1 ? "s" : ""} available`}
+        </p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button size="sm" variant="secondary" onClick={() => setGrouped((g) => !g)}>
+            {grouped ? "Flat view" : "Group by type"}
+          </Button>
+          <button onClick={reindex.run} disabled={reindex.state === "running"} title="Sync doc_chunks with current markdown files"
+            className={clsx(
+              "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+              reindex.state === "running" ? "bg-brand-offwhite text-brand-muted border-brand-border cursor-not-allowed" :
+              reindex.state === "done" ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100" :
+              reindex.state === "error" ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-100" :
+              "bg-white text-brand-muted border-brand-border hover:bg-brand-offwhite hover:text-brand-black"
+            )}>
+            {reindex.state === "running" ? "Indexing…" : reindex.state === "done" ? "Indexed ✓" : reindex.state === "error" ? "Failed ✗" : "Reindex docs"}
+          </button>
+        </div>
+      </div>
       {(reindex.output || permsError || clientsError) && (
         <div className="mb-5 space-y-3">
           {(permsError || clientsError) && (

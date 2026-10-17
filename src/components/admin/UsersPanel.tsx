@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
-import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
+import { Button, EmptyState, ErrorState, LoadingState } from "@/components/ui";
 import { fetchJson } from "@/lib/fetch-json";
 
 type Role = string;
@@ -25,7 +25,8 @@ function RoleBadge({ role }: { role: Role }) {
   );
 }
 
-export default function UsersPage() {
+/** Dashboard user accounts: add, change role, reset password, delete. Needs manage_users. */
+export function UsersPanel() {
   const [users, setUsers] = useState<DashboardUser[]>([]);
   const [availableRoles, setAvailableRoles] = useState<string[]>(["admin", "viewer"]);
   const [loading, setLoading] = useState(true);
@@ -114,24 +115,17 @@ export default function UsersPage() {
   }
 
   if (loading) {
-    return (
-      <div className="p-4 md:p-8">
-        <LoadingState />
-      </div>
-    );
+    return <LoadingState />;
   }
 
   return (
-    <div className="p-4 md:p-8 pb-24 md:pb-8 max-w-3xl space-y-5">
-      <PageHeader
-        title="Users"
-        description={`${users.length} dashboard user${users.length !== 1 ? "s" : ""}`}
-        actions={
-          <Button size="sm" onClick={() => { setShowAdd(v => !v); setAddError(""); }}>
-            {showAdd ? "Cancel" : "+ Add user"}
-          </Button>
-        }
-      />
+    <div className="max-w-3xl space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-brand-muted">{`${users.length} dashboard user${users.length !== 1 ? "s" : ""}`}</p>
+        <Button size="sm" onClick={() => { setShowAdd(v => !v); setAddError(""); }}>
+          {showAdd ? "Cancel" : "+ Add user"}
+        </Button>
+      </div>
 
       {error && <ErrorState message={error} />}
 

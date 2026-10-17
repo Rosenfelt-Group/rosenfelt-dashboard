@@ -64,18 +64,3 @@ export function decodeHtmlEntities(s: string): string {
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
     .replace(/&([a-z]+);/gi, (m, name) => HTML_NAMED_ENTITIES[name.toLowerCase()] ?? m);
 }
-
-export function parseKickSummary(summary: string | null | undefined) {
-  if (!summary) return null;
-  const money = summary.match(/income=\$([\d,.-]+), expenses=\$([\d,.-]+), net=\$([\d,.-]+)/);
-  const period = summary.match(/\(([^,]+), ([\d-]+)\.\.([\d-]+)\)/);
-  if (!money) return null;
-  return {
-    income: money[1],
-    expenses: money[2],
-    net: money[3],
-    periodLabel: period?.[1] ?? null,
-    start: period?.[2] ?? null,
-    end: period?.[3] ?? null,
-  };
-}

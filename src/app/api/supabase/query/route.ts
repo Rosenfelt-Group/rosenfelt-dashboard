@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { verifySessionToken, COOKIE_NAME } from "@/lib/session";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
-  const cookieToken = req.cookies.get(COOKIE_NAME)?.value;
-  if (!cookieToken) {
-    return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
-  }
-  const session = await verifySessionToken(cookieToken);
-  if (!session) {
-    return NextResponse.json({ detail: "Invalid session" }, { status: 401 });
-  }
+  // Runs arbitrary SQL as the service role: admins only.
+  const check = await requireAdmin(req);
+  if (!check.ok) return check.response;
 
   const { sql } = await req.json().catch(() => ({}));
   if (!sql || typeof sql !== "string" || !sql.trim()) {

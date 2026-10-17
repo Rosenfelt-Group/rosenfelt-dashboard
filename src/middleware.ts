@@ -3,11 +3,10 @@ import { verifySessionToken, COOKIE_NAME } from "@/lib/session";
 
 // Pages that require a specific permission to access.
 // Users without the permission are redirected to /overview.
-const PROTECTED_PAGES: Record<string, string> = {
-  "/chat":  "use_chat",
-  "/users": "manage_users",
-  "/rbac":  "manage_rbac",
-};
+// (Empty since 2026-10-17: the old /users, /rbac and /chat pages became tabs
+// under /tools and /agents/[name], which hide them by permission, and their
+// APIs enforce access server-side.)
+const PROTECTED_PAGES: Record<string, string> = {};
 
 export async function middleware(request: NextRequest) {
   const token = request.cookies.get(COOKIE_NAME)?.value;

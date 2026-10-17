@@ -8,7 +8,7 @@ import {
   MANAGE_PERMISSIONS,
 } from "@/lib/permissions";
 import clsx from "clsx";
-import { Button, ErrorState, LoadingState, Modal, PageHeader } from "@/components/ui";
+import { Button, ErrorState, LoadingState, Modal } from "@/components/ui";
 import { fetchJson } from "@/lib/fetch-json";
 
 // ─── Create role modal ────────────────────────────────────────────────────────
@@ -203,7 +203,8 @@ function PermissionMatrix({
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-export default function RBACPage() {
+/** Roles and their permissions matrix. Needs manage_rbac. */
+export function RolesPanel() {
   const [roles, setRoles] = useState<DashboardRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -261,24 +262,20 @@ export default function RBACPage() {
   }
 
   if (loading) {
-    return (
-      <div className="p-4 md:p-8 space-y-4">
-        <div className="h-8 w-40 bg-brand-border rounded animate-pulse" />
-        <LoadingState />
-      </div>
-    );
+    return <LoadingState />;
   }
 
   return (
-    <div className="p-4 md:p-8 pt-16 md:pt-8 pb-24 md:pb-8 max-w-5xl space-y-5">
+    <div className="max-w-5xl space-y-5">
       {showCreate && (
         <CreateRoleModal onClose={() => setShowCreate(false)} onCreated={load} />
       )}
 
-      <PageHeader
-        title="Roles"
-        description={`${roles.length} role${roles.length !== 1 ? "s" : ""} · permission changes take effect on next login`}
-        actions={
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-brand-muted">
+          {`${roles.length} role${roles.length !== 1 ? "s" : ""} · permission changes take effect on next login`}
+        </p>
+        <div className="shrink-0">
           <Button size="sm" onClick={() => setShowCreate(true)}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -286,8 +283,8 @@ export default function RBACPage() {
             </svg>
             Create role
           </Button>
-        }
-      />
+        </div>
+      </div>
 
       {/* Info banner */}
       <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">

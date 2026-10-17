@@ -206,7 +206,13 @@ export default function LeadDetailPage() {
       <div className="card mb-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-lg font-semibold text-brand-black">{lead.business?.name ?? "—"}</h1>
+            <h1 className="text-lg font-semibold text-brand-black">
+              {lead.business_id && lead.business ? (
+                <Link href={`/crm/businesses/${lead.business_id}`} className="hover:text-brand-orange hover:underline">
+                  {lead.business.name}
+                </Link>
+              ) : (lead.business?.name ?? "—")}
+            </h1>
             <p className="text-sm text-brand-muted mt-0.5">{contactName}</p>
             {lead.contact?.email && (
               <p className="text-sm text-brand-orange mt-0.5">{lead.contact.email}</p>
