@@ -15,6 +15,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { Button, ErrorState, PageHeader } from "@/components/ui";
 
 type OverviewRow = { date: string; sessions: number; users: number; pageviews: number };
 type SourceRow   = { channel: string; sessions: number };
@@ -81,15 +82,6 @@ function CardSkeleton({ height = 280 }: { height?: number }) {
   );
 }
 
-function ErrorCard({ message }: { message: string }) {
-  return (
-    <div className="card border-red-200 bg-red-50">
-      <p className="text-sm font-medium text-red-800">Analytics error</p>
-      <p className="text-sm text-red-700 mt-1">{message}</p>
-    </div>
-  );
-}
-
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
@@ -144,62 +136,57 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-brand-black">Analytics</h1>
-          <p className="text-sm text-brand-muted mt-0.5">
-            Google Analytics 4 · rosably.com
-          </p>
-        </div>
+      <PageHeader
+        className="!mb-0 flex-col sm:flex-row sm:items-center [&>*:last-child]:shrink"
+        title="Analytics"
+        description="Google Analytics 4 · rosably.com"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {(["7", "30", "90"] as const).map(p => (
+              <button
+                key={p}
+                onClick={() => setPreset(p)}
+                className={clsx(
+                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  preset === p
+                    ? "bg-brand-orange text-white"
+                    : "bg-white border border-brand-border text-brand-muted hover:text-brand-black",
+                )}
+              >
+                Last {p} days
+              </button>
+            ))}
 
-        <div className="flex flex-wrap items-center gap-2">
-          {(["7", "30", "90"] as const).map(p => (
-            <button
-              key={p}
-              onClick={() => setPreset(p)}
-              className={clsx(
-                "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                preset === p
-                  ? "bg-brand-orange text-white"
-                  : "bg-white border border-brand-border text-brand-muted hover:text-brand-black",
-              )}
-            >
-              Last {p} days
-            </button>
-          ))}
+            <div className="flex items-center gap-1.5 pl-2 ml-1 border-l border-brand-border">
+              <input
+                type="date"
+                value={custom.start}
+                max={custom.end}
+                onChange={e => { setCustom(c => ({ ...c, start: e.target.value })); setPreset("custom"); }}
+                className="px-2 py-1.5 rounded-lg border border-brand-border text-sm text-brand-black bg-white"
+              />
+              <span className="text-brand-muted text-sm">to</span>
+              <input
+                type="date"
+                value={custom.end}
+                min={custom.start}
+                max={todayIso()}
+                onChange={e => { setCustom(c => ({ ...c, end: e.target.value })); setPreset("custom"); }}
+                className="px-2 py-1.5 rounded-lg border border-brand-border text-sm text-brand-black bg-white"
+              />
+            </div>
 
-          <div className="flex items-center gap-1.5 pl-2 ml-1 border-l border-brand-border">
-            <input
-              type="date"
-              value={custom.start}
-              max={custom.end}
-              onChange={e => { setCustom(c => ({ ...c, start: e.target.value })); setPreset("custom"); }}
-              className="px-2 py-1.5 rounded-lg border border-brand-border text-sm text-brand-black bg-white"
-            />
-            <span className="text-brand-muted text-sm">to</span>
-            <input
-              type="date"
-              value={custom.end}
-              min={custom.start}
-              max={todayIso()}
-              onChange={e => { setCustom(c => ({ ...c, end: e.target.value })); setPreset("custom"); }}
-              className="px-2 py-1.5 rounded-lg border border-brand-border text-sm text-brand-black bg-white"
-            />
+            <Button variant="secondary" onClick={load} disabled={loading} title="Refresh">
+              {loading ? "Loading…" : "Refresh"}
+            </Button>
           </div>
-
-          <button
-            onClick={load}
-            disabled={loading}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-brand-border text-brand-muted hover:text-brand-black disabled:opacity-50"
-            title="Refresh"
-          >
-            {loading ? "Loading…" : "Refresh"}
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Top-level error (config / network) */}
-      {error && !loading && <ErrorCard message={error} />}
+      {error && !loading && (
+        <ErrorState message={<><span className="font-medium">Analytics error:</span> {error}</>} onRetry={load} />
+      )}
 
       {/* Section A — Traffic Overview */}
       {loading ? (

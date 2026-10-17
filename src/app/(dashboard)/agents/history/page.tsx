@@ -1,8 +1,10 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { WorkflowLog, ConversationTurn, Agent } from "@/types";
 import clsx from "clsx";
 import { formatDistanceToNow, parseISO, format } from "date-fns";
+import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
+import { fetchJson } from "@/lib/fetch-json";
 
 // actions_summary + session_id now live on the canonical WorkflowLog type.
 type WorkflowLogExtended = WorkflowLog;
@@ -242,12 +244,17 @@ export default function AgentHistoryPage() {
   const [loading,      setLoading]      = useState(true);
   const [agentTab,     setAgentTab]     = useState<Agent | "all">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "success" | "error">("all");
+  const [loadError,    setLoadError]    = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch("/api/agent-history")
-      .then(r => r.json())
-      .then(d => { setLogs(d); setLoading(false); });
+  const load = useCallback(async () => {
+    setLoading(true);
+    const r = await fetchJson<WorkflowLogExtended[]>("/api/agent-history");
+    if (r.ok) { setLogs(Array.isArray(r.data) ? r.data : []); setLoadError(null); }
+    else setLoadError(r.error);
+    setLoading(false);
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const total       = logs.length;
   const errors      = logs.filter(l => l.status === "error").length;
@@ -278,11 +285,21 @@ export default function AgentHistoryPage() {
     );
   }
 
+  const header = <PageHeader title="Agent History" description="Execution logs from all agents" />;
+
+  if (loadError) {
+    return (
+      <div className="p-4 md:p-8">
+        {header}
+        <ErrorState message={`Couldn't load agent history: ${loadError}`} onRetry={load} />
+      </div>
+    );
+  }
+
   if (total === 0) {
     return (
       <div className="p-4 md:p-8">
-        <h1 className="text-xl font-semibold text-brand-black mb-1">Agent History</h1>
-        <p className="text-sm text-brand-muted mb-8">Execution logs from all agents</p>
+        {header}
         <div className="card flex flex-col items-center justify-center py-16 text-center">
           <div className="w-12 h-12 rounded-full bg-brand-offwhite flex items-center justify-center mb-4">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -301,10 +318,7 @@ export default function AgentHistoryPage() {
 
   return (
     <div className="p-4 md:p-8 space-y-6 pb-24 md:pb-8">
-      <div>
-        <h1 className="text-xl font-semibold text-brand-black">Agent History</h1>
-        <p className="text-sm text-brand-muted mt-0.5">Execution logs from all agents</p>
-      </div>
+      {header}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -358,15 +372,13 @@ export default function AgentHistoryPage() {
           </div>
         </div>
 
-        <div className="card p-0 overflow-hidden">
-          {filtered.length === 0 ? (
-            <div className="py-12 text-center">
-              <p className="text-sm text-brand-muted">No logs match this filter</p>
-            </div>
-          ) : (
-            filtered.map(log => <LogRow key={log.id} log={log} />)
-          )}
-        </div>
+        {filtered.length === 0 ? (
+          <EmptyState title="No logs match this filter" />
+        ) : (
+          <div className="card p-0 overflow-hidden">
+            {filtered.map(log => <LogRow key={log.id} log={log} />)}
+          </div>
+        )}
         <p className="text-xs text-brand-muted mt-2 text-right">
           Showing {filtered.length} of {total} executions
         </p>

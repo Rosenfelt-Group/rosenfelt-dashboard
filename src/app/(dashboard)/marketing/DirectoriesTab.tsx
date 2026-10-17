@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
+import { Button, ErrorState } from "@/components/ui";
 import AddDirectoryModal from "./AddDirectoryModal";
 
 interface Directory {
@@ -282,17 +283,12 @@ export default function DirectoriesTab() {
           </select>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleResearch} disabled={researching}
-            className={clsx("px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors",
-              researching
-                ? "bg-brand-offwhite text-brand-muted border-brand-border cursor-not-allowed"
-                : "bg-white border-brand-border text-brand-muted hover:bg-brand-offwhite hover:text-brand-black")}>
+          <Button size="sm" variant="secondary" onClick={handleResearch} disabled={researching}>
             {researching ? "Researching…" : "Research with Avery"}
-          </button>
-          <button onClick={() => setShowAdd(true)}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-orange text-white hover:bg-brand-orange/90 transition-colors">
+          </Button>
+          <Button size="sm" onClick={() => setShowAdd(true)}>
             + Add Directory
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -314,7 +310,7 @@ export default function DirectoriesTab() {
         {loading ? (
           <div className="p-8 text-center text-xs text-brand-muted">Loading…</div>
         ) : !loading && dirs.length === 0 && error ? (
-          <div className="p-8 text-center text-xs text-red-600">{error}</div>
+          <ErrorState className="border-0 shadow-none" message={error} onRetry={load} />
         ) : (
           <table className="w-full text-left">
             <thead>

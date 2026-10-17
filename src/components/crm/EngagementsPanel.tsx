@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { fetchJson } from "@/lib/fetch-json";
+import { Button, EmptyState, ErrorState } from "@/components/ui";
 
 type Eng = { id: string; title: string; relationship: string; status: string; created_at: string };
 
@@ -55,20 +56,16 @@ export function EngagementsPanel({ businessId }: { businessId: string }) {
             <option value="partner">Partner</option>
           </select>
           {err && <p className="text-sm text-red-600">{err}</p>}
-          <button disabled={busy || !title.trim()} onClick={create}
-            className="px-3 py-1.5 text-sm rounded bg-brand-orange text-white disabled:opacity-50">
+          <Button size="sm" disabled={busy || !title.trim()} onClick={create}>
             Create room
-          </button>
+          </Button>
         </div>
       )}
 
       {loadErr ? (
-        <p className="text-sm text-red-600">
-          Couldn&apos;t load rooms: {loadErr}{" "}
-          <button onClick={load} className="underline">Retry</button>
-        </p>
+        <ErrorState message={`Couldn't load rooms: ${loadErr}`} onRetry={load} />
       ) : rows.length === 0 ? (
-        <p className="text-sm text-brand-muted">No rooms yet.</p>
+        <EmptyState title="No rooms yet." />
       ) : (
         <ul className="divide-y divide-brand-border border border-brand-border rounded">
           {rows.map(r => (

@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { KickTransaction } from "@/app/api/kick/transactions/route";
 import { parseKickPnL } from "@/lib/parseKickSummary";
 import { SamMarkdown } from "@/components/SamMarkdown";
+import { Button, EmptyState, LoadingState } from "@/components/ui";
 
 type PnL = { income: number; expenses: number; net: number; start: string | null; end: string | null } | null;
 type FilterType = "all" | "income" | "expense";
@@ -147,9 +148,7 @@ export function BookkeepingPanel() {
               {[1,2,3].map(i => <div key={i} className="card animate-pulse h-20" />)}
             </div>
           ) : pnlError || !pnl ? (
-            <div className="card mb-5 text-center py-6">
-              <p className="text-sm text-brand-muted">Kick is offline — ask Sam via chat for P&L data.</p>
-            </div>
+            <EmptyState className="mb-5" title="Kick is offline — ask Sam via chat for P&L data." />
           ) : (
             <>
               {pnl.start && pnl.end && (
@@ -193,15 +192,11 @@ export function BookkeepingPanel() {
 
           {/* Ledger */}
           {txLoading ? (
-            <div className="card animate-pulse h-48" />
+            <LoadingState />
           ) : txError ? (
-            <div className="card text-center py-8">
-              <p className="text-sm text-brand-muted">Sam is offline — ask via chat for transaction data.</p>
-            </div>
+            <EmptyState title="Sam is offline — ask via chat for transaction data." />
           ) : visibleTx.length === 0 ? (
-            <div className="card text-center py-8">
-              <p className="text-sm text-brand-muted">No transactions found.</p>
-            </div>
+            <EmptyState title="No transactions found." />
           ) : (
             <div className="border border-brand-border rounded-xl overflow-hidden">
               {visibleTx.map((tx, i) => (
@@ -280,13 +275,9 @@ export function BookkeepingPanel() {
               placeholder="Ask Sam about your finances…"
               className="flex-1 border border-brand-border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-brand-orange"
             />
-            <button
-              onClick={sendChat}
-              disabled={chatLoading || !chatInput.trim()}
-              className="bg-brand-orange text-white rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50"
-            >
+            <Button size="sm" onClick={sendChat} disabled={chatLoading || !chatInput.trim()}>
               Send
-            </button>
+            </Button>
           </div>
         </div>
 

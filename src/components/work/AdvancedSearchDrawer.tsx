@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { AgentBadge } from "@/components/AgentBadge";
+import { Button } from "@/components/ui";
+import { fetchJson } from "@/lib/fetch-json";
 import type { AgentName, WorkItem, WorkStatus } from "@/types";
 import {
   WORK_TYPES,
@@ -98,6 +100,7 @@ export function AdvancedSearchDrawer({ open, onClose }: { open: boolean; onClose
   const [includeArchived, setIncludeArchived] = useState(false);
 
   const [phaseOptions, setPhaseOptions] = useState<number[]>([]);
+  const [phaseError, setPhaseError] = useState<string | null>(null);
   const [results, setResults] = useState<WorkItem[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -116,10 +119,10 @@ export function AdvancedSearchDrawer({ open, onClose }: { open: boolean; onClose
 
   useEffect(() => {
     if (!open) return;
-    fetch("/api/work/sprint-numbers")
-      .then((r) => r.json())
-      .then((d) => setPhaseOptions(Array.isArray(d) ? d : []))
-      .catch(() => setPhaseOptions([]));
+    fetchJson<number[]>("/api/work/sprint-numbers").then((r) => {
+      setPhaseOptions(r.ok && Array.isArray(r.data) ? r.data : []);
+      setPhaseError(r.ok ? null : r.error);
+    });
   }, [open]);
 
   function toggle(setter: React.Dispatch<React.SetStateAction<Set<string>>>, v: string) {
@@ -350,6 +353,9 @@ export function AdvancedSearchDrawer({ open, onClose }: { open: boolean; onClose
               renderOption={(v) => (v === PHASE_NONE ? "None" : `Phase ${v}`)}
             />
           </div>
+          {phaseError && (
+            <p className="text-[11px] text-red-600" role="alert">Couldn&apos;t load phases: {phaseError}</p>
+          )}
 
           <div>
             <div className="text-[11px] text-brand-muted mb-1">Item type</div>
@@ -393,13 +399,9 @@ export function AdvancedSearchDrawer({ open, onClose }: { open: boolean; onClose
           </label>
 
           <div className="flex items-center gap-2 pt-1">
-            <button
-              onClick={() => runSearch(0)}
-              disabled={loading}
-              className="rounded bg-brand-orange text-white text-xs px-4 py-1.5 hover:opacity-90 disabled:opacity-50"
-            >
+            <Button size="sm" onClick={() => runSearch(0)} disabled={loading}>
               {loading && offset === 0 ? "Searching…" : "Search"}
-            </button>
+            </Button>
             <button onClick={reset} className="text-xs text-brand-muted hover:text-brand-black">Reset</button>
           </div>
 

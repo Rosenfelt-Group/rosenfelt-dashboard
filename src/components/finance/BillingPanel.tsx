@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import clsx from "clsx";
 import type Stripe from "stripe";
+import { Button, EmptyState, ErrorState, LoadingState, Modal, Tabs } from "@/components/ui";
 
 type StripeMode = "live" | "test";
 type Tab = "subscriptions" | "invoices" | "customers" | "refunds";
@@ -113,69 +114,68 @@ function RefundModal({ invoice, mode, onClose, onDone }: RefundModalProps) {
     setTimeout(onDone, 2000);
   }
 
+  const noPaymentIntent = !invoicePaymentIntentId(invoice);
+
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-xl">
-        {succeeded ? (
-          <div className="text-center py-4">
-            <div className="text-3xl mb-3">✓</div>
-            <p className="text-sm font-semibold text-brand-black">Refund issued</p>
-            <p className="text-xs text-brand-muted mt-1">{succeeded} will be returned to the customer.</p>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-brand-black">Refund invoice</h2>
-              <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
+    <Modal
+      open
+      onClose={onClose}
+      title="Refund invoice"
+      size="sm"
+      footer={succeeded ? undefined : (
+        <>
+          <Button variant="ghost" className="flex-1" onClick={onClose}>Cancel</Button>
+          <Button className="flex-1" onClick={submit} disabled={loading || noPaymentIntent}>
+            {loading ? "Refunding…" : "Refund"}
+          </Button>
+        </>
+      )}
+    >
+      {succeeded ? (
+        <div className="text-center py-4">
+          <div className="text-3xl mb-3">✓</div>
+          <p className="text-sm font-semibold text-brand-black">Refund issued</p>
+          <p className="text-xs text-brand-muted mt-1">{succeeded} will be returned to the customer.</p>
+        </div>
+      ) : (
+        <>
+          <p className="text-sm text-brand-muted mb-4">
+            Invoice total: <span className="font-medium text-brand-black">{fmt(invoice.amount_paid)}</span>
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-brand-muted mb-1 block">Amount (leave blank for full refund)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                max={total}
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                placeholder={`${total.toFixed(2)}`}
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+              />
             </div>
-            <p className="text-sm text-brand-muted mb-4">
-              Invoice total: <span className="font-medium text-brand-black">{fmt(invoice.amount_paid)}</span>
-            </p>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Amount (leave blank for full refund)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  max={total}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  placeholder={`${total.toFixed(2)}`}
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Reason</label>
-                <select
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={reason}
-                  onChange={e => setReason(e.target.value)}
-                >
-                  <option value="requested_by_customer">Requested by customer</option>
-                  <option value="duplicate">Duplicate</option>
-                  <option value="fraudulent">Fraudulent</option>
-                </select>
-              </div>
-              {error && <p className="text-xs text-red-500">{error}</p>}
-            </div>
-            <div className="flex gap-2 mt-5">
-              <button onClick={onClose} className="btn-ghost flex-1">Cancel</button>
-              <button
-                onClick={submit}
-                disabled={loading || !invoicePaymentIntentId(invoice)}
-                className="btn-primary flex-1 disabled:opacity-50"
+            <div>
+              <label className="text-xs text-brand-muted mb-1 block">Reason</label>
+              <select
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                value={reason}
+                onChange={e => setReason(e.target.value)}
               >
-                {loading ? "Refunding…" : "Refund"}
-              </button>
+                <option value="requested_by_customer">Requested by customer</option>
+                <option value="duplicate">Duplicate</option>
+                <option value="fraudulent">Fraudulent</option>
+              </select>
             </div>
-            {!invoicePaymentIntentId(invoice) && (
-              <p className="text-xs text-brand-muted mt-2 text-center">No payment intent attached to this invoice.</p>
+            {error && <p className="text-xs text-red-500">{error}</p>}
+            {noPaymentIntent && (
+              <p className="text-xs text-brand-muted text-center">No payment intent attached to this invoice.</p>
             )}
-          </>
-        )}
-      </div>
-    </div>
+          </div>
+        </>
+      )}
+    </Modal>
   );
 }
 
@@ -270,14 +270,19 @@ export function BillingPanel() {
 
       {/* Error state */}
       {error && !loading && (
-        <div className="card mb-5 border-red-200 bg-red-50">
-          <p className="text-sm text-red-600">{error}</p>
-          {error.includes("not set") && (
-            <p className="text-xs text-red-500 mt-1">
-              Add <code>{mode === "test" ? "STRIPE_SECRET_KEY_TEST" : "STRIPE_SECRET_KEY"}</code> to Vercel env vars, then redeploy.
-            </p>
-          )}
-        </div>
+        <ErrorState
+          className="mb-5"
+          message={
+            <span>
+              {error}
+              {error.includes("not set") && (
+                <span className="block text-xs text-red-500 mt-1">
+                  Add <code>{mode === "test" ? "STRIPE_SECRET_KEY_TEST" : "STRIPE_SECRET_KEY"}</code> to Vercel env vars, then redeploy.
+                </span>
+              )}
+            </span>
+          }
+        />
       )}
 
       {/* Summary stats */}
@@ -298,34 +303,25 @@ export function BillingPanel() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 border-b border-brand-border">
-        {(["subscriptions", "invoices", "customers", "refunds"] as Tab[]).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={clsx(
-              "px-4 py-2 text-sm font-medium capitalize transition-colors border-b-2 -mb-px",
-              tab === t
-                ? "border-brand-orange text-brand-orange"
-                : "border-transparent text-brand-muted hover:text-brand-black"
-            )}
-          >
-            {t}
-            {t === "subscriptions" && data && <span className="ml-1.5 text-xs opacity-60">({activeSubs.length})</span>}
-            {t === "invoices" && data && <span className="ml-1.5 text-xs opacity-60">({data.invoices.length})</span>}
-            {t === "customers" && data && <span className="ml-1.5 text-xs opacity-60">({data.stats.customerCount})</span>}
-            {t === "refunds" && data && <span className="ml-1.5 text-xs opacity-60">({data.stats.refundCount})</span>}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        className="mb-4"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: "subscriptions", label: <>Subscriptions{data && <span className="ml-1.5 text-xs opacity-60">({activeSubs.length})</span>}</> },
+          { id: "invoices", label: <>Invoices{data && <span className="ml-1.5 text-xs opacity-60">({data.invoices.length})</span>}</> },
+          { id: "customers", label: <>Customers{data && <span className="ml-1.5 text-xs opacity-60">({data.stats.customerCount})</span>}</> },
+          { id: "refunds", label: <>Refunds{data && <span className="ml-1.5 text-xs opacity-60">({data.stats.refundCount})</span>}</> },
+        ]}
+      />
 
-      {loading && <div className="card animate-pulse h-40" />}
+      {loading && <LoadingState />}
 
       {/* Subscriptions */}
       {!loading && tab === "subscriptions" && data && (
         <div className="space-y-3">
           {data.subscriptions.length === 0 ? (
-            <div className="card text-center py-10 text-sm text-brand-muted">No subscriptions yet.</div>
+            <EmptyState title="No subscriptions yet." />
           ) : data.subscriptions.map(sub => {
             const item = sub.items.data[0];
             const price = item?.price;
@@ -381,7 +377,7 @@ export function BillingPanel() {
       {!loading && tab === "invoices" && data && (
         <div className="space-y-3">
           {data.invoices.length === 0 ? (
-            <div className="card text-center py-10 text-sm text-brand-muted">No invoices yet.</div>
+            <EmptyState title="No invoices yet." />
           ) : data.invoices.map(inv => {
             const canRefund = inv.status === "paid" && !!invoicePaymentIntentId(inv);
             return (
@@ -432,7 +428,7 @@ export function BillingPanel() {
       {!loading && tab === "customers" && data && (
         <div className="space-y-3">
           {data.customers.length === 0 ? (
-            <div className="card text-center py-10 text-sm text-brand-muted">No customers yet.</div>
+            <EmptyState title="No customers yet." />
           ) : data.customers.map(cust => {
             const custSubs = data.subscriptions.filter(s =>
               (typeof s.customer === "string" ? s.customer : s.customer?.id) === cust.id
@@ -479,7 +475,7 @@ export function BillingPanel() {
       {!loading && tab === "refunds" && data && (
         <div className="space-y-3">
           {data.refunds.length === 0 ? (
-            <div className="card text-center py-10 text-sm text-brand-muted">No refunds yet.</div>
+            <EmptyState title="No refunds yet." />
           ) : data.refunds.map(refund => {
             const pi = refund.payment_intent;
             const piId = typeof pi === "string" ? pi : pi?.id ?? null;

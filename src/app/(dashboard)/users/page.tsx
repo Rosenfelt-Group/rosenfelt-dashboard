@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
+import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
+import { fetchJson } from "@/lib/fetch-json";
 
 type Role = string;
 
@@ -46,14 +48,13 @@ export default function UsersPage() {
 
   async function load() {
     const [usersRes, rolesRes] = await Promise.all([
-      fetch("/api/admin/users"),
-      fetch("/api/admin/rbac"),
+      fetchJson<DashboardUser[]>("/api/admin/users"),
+      fetchJson<{ name: string }[]>("/api/admin/rbac"),
     ]);
     if (!usersRes.ok) { setError("Failed to load users"); setLoading(false); return; }
-    setUsers(await usersRes.json());
+    setUsers(usersRes.data);
     if (rolesRes.ok) {
-      const roles = await rolesRes.json();
-      setAvailableRoles(roles.map((r: { name: string }) => r.name));
+      setAvailableRoles(rolesRes.data.map(r => r.name));
     }
     setLoading(false);
   }
@@ -114,31 +115,25 @@ export default function UsersPage() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-8 space-y-4">
-        <div className="card animate-pulse h-16" />
-        <div className="card animate-pulse h-48" />
+      <div className="p-4 md:p-8">
+        <LoadingState />
       </div>
     );
   }
 
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8 max-w-3xl space-y-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-brand-black">Users</h1>
-          <p className="text-sm text-brand-muted mt-0.5">{users.length} dashboard user{users.length !== 1 ? "s" : ""}</p>
-        </div>
-        <button
-          onClick={() => { setShowAdd(v => !v); setAddError(""); }}
-          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-orange text-white hover:opacity-90 transition-opacity"
-        >
-          {showAdd ? "Cancel" : "+ Add user"}
-        </button>
-      </div>
+      <PageHeader
+        title="Users"
+        description={`${users.length} dashboard user${users.length !== 1 ? "s" : ""}`}
+        actions={
+          <Button size="sm" onClick={() => { setShowAdd(v => !v); setAddError(""); }}>
+            {showAdd ? "Cancel" : "+ Add user"}
+          </Button>
+        }
+      />
 
-      {error && (
-        <div className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-lg">{error}</div>
-      )}
+      {error && <ErrorState message={error} />}
 
       {/* Add user form */}
       {showAdd && (
@@ -169,99 +164,97 @@ export default function UsersPage() {
             </select>
           </div>
           {addError && <p className="text-xs text-red-600">{addError}</p>}
-          <button
-            type="submit"
-            disabled={addSaving}
-            className="px-4 py-2 rounded-lg text-xs font-medium bg-brand-orange text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
+          <Button type="submit" size="sm" disabled={addSaving}>
             {addSaving ? "Creating..." : "Create user"}
-          </button>
+          </Button>
         </form>
       )}
 
       {/* Users table */}
-      <div className="card p-0 overflow-hidden">
-        {users.length === 0 ? (
-          <div className="py-12 text-center text-sm text-brand-muted">No users found</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-brand-border bg-brand-offwhite">
-                <th className="text-left px-4 py-3 text-xs font-medium text-brand-muted">Username</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-brand-muted">Role</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-brand-muted hidden sm:table-cell">Added</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-brand-muted">Password</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id} className="border-b border-brand-border last:border-0">
-                  <td className="px-4 py-3 font-medium text-brand-black">{user.username}</td>
-                  <td className="px-4 py-3">
-                    <select
-                      value={user.role}
-                      onChange={e => handleRoleChange(user.id, e.target.value)}
-                      className="text-xs border border-brand-border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
-                    >
-                      {availableRoles.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3 text-brand-muted hidden sm:table-cell">
-                    {formatDistanceToNow(parseISO(user.created_at), { addSuffix: true })}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="password"
-                        placeholder="New password"
-                        value={resetPasswords[user.id] ?? ""}
-                        onChange={e => setResetPasswords(prev => ({ ...prev, [user.id]: e.target.value }))}
-                        className="text-xs border border-brand-border rounded px-2 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
-                      />
-                      {resetPasswords[user.id] && (
+      {users.length === 0 ? (
+        <EmptyState title="No users found" />
+      ) : (
+        <div className="card p-0 overflow-hidden">
+          <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-brand-border bg-brand-offwhite">
+                  <th className="text-left px-4 py-3 text-xs font-medium text-brand-muted">Username</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-brand-muted">Role</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-brand-muted hidden sm:table-cell">Added</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-brand-muted">Password</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id} className="border-b border-brand-border last:border-0">
+                    <td className="px-4 py-3 font-medium text-brand-black">{user.username}</td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={user.role}
+                        onChange={e => handleRoleChange(user.id, e.target.value)}
+                        className="text-xs border border-brand-border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
+                      >
+                        {availableRoles.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3 text-brand-muted hidden sm:table-cell">
+                      {formatDistanceToNow(parseISO(user.created_at), { addSuffix: true })}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="password"
+                          placeholder="New password"
+                          value={resetPasswords[user.id] ?? ""}
+                          onChange={e => setResetPasswords(prev => ({ ...prev, [user.id]: e.target.value }))}
+                          className="text-xs border border-brand-border rounded px-2 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
+                        />
+                        {resetPasswords[user.id] && (
+                          <button
+                            onClick={() => handleResetPassword(user.id)}
+                            disabled={resetSaving[user.id]}
+                            className="text-xs px-2 py-1 rounded bg-brand-offwhite text-brand-black hover:bg-brand-border transition-colors disabled:opacity-50"
+                          >
+                            {resetSaving[user.id] ? "..." : "Save"}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {confirmDelete === user.id ? (
+                        <div className="flex items-center gap-2 justify-end">
+                          <span className="text-xs text-brand-muted">Sure?</span>
+                          <button
+                            onClick={() => handleDelete(user.id)}
+                            className="text-xs px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+                          >
+                            Delete
+                          </button>
+                          <button
+                            onClick={() => setConfirmDelete(null)}
+                            className="text-xs px-2 py-1 rounded bg-brand-offwhite text-brand-muted hover:bg-brand-border transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
                         <button
-                          onClick={() => handleResetPassword(user.id)}
-                          disabled={resetSaving[user.id]}
-                          className="text-xs px-2 py-1 rounded bg-brand-offwhite text-brand-black hover:bg-brand-border transition-colors disabled:opacity-50"
-                        >
-                          {resetSaving[user.id] ? "..." : "Save"}
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {confirmDelete === user.id ? (
-                      <div className="flex items-center gap-2 justify-end">
-                        <span className="text-xs text-brand-muted">Sure?</span>
-                        <button
-                          onClick={() => handleDelete(user.id)}
-                          className="text-xs px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+                          onClick={() => setConfirmDelete(user.id)}
+                          className="text-xs text-brand-muted hover:text-red-600 transition-colors"
                         >
                           Delete
                         </button>
-                        <button
-                          onClick={() => setConfirmDelete(null)}
-                          className="text-xs px-2 py-1 rounded bg-brand-offwhite text-brand-muted hover:bg-brand-border transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setConfirmDelete(user.id)}
-                        className="text-xs text-brand-muted hover:text-red-600 transition-colors"
-                      >
-                        Delete
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

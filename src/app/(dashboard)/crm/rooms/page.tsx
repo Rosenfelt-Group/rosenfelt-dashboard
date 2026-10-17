@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { fetchJson } from "@/lib/fetch-json";
+import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
 
 type Room = {
   id: string;
@@ -98,10 +99,10 @@ function NewRoomPanel({ onCancel }: { onCancel: () => void }) {
       </div>
       {err && <p className="text-sm text-red-600">{err}</p>}
       <div className="flex gap-2">
-        <button disabled={!canSubmit} onClick={create} className="btn-primary text-sm disabled:opacity-50">
+        <Button disabled={!canSubmit} onClick={create}>
           {busy ? "Creating…" : "Create room"}
-        </button>
-        <button onClick={onCancel} disabled={busy} className="text-sm text-brand-muted">Cancel</button>
+        </Button>
+        <Button variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
       </div>
     </div>
   );
@@ -124,29 +125,24 @@ export default function RoomsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-        <div>
-          <h1 className="text-lg font-semibold text-brand-black">Rooms</h1>
-          <p className="text-sm text-brand-muted">Engagement rooms · {rows.length} total</p>
-        </div>
-        <button onClick={() => setShowNew(s => !s)} className="btn-primary text-sm">
-          {showNew ? "Close" : "New room"}
-        </button>
-      </div>
+      <PageHeader
+        title="Rooms"
+        description={`Engagement rooms · ${rows.length} total`}
+        actions={
+          <Button onClick={() => setShowNew(s => !s)}>
+            {showNew ? "Close" : "New room"}
+          </Button>
+        }
+      />
 
       {showNew && <NewRoomPanel onCancel={() => setShowNew(false)} />}
 
       {loading ? (
-        <div className="card animate-pulse h-40" />
+        <LoadingState />
       ) : error ? (
-        <div className="card text-sm text-red-600">
-          Couldn&apos;t load rooms: {error}{" "}
-          <button onClick={load} className="underline">Retry</button>
-        </div>
+        <ErrorState message={`Couldn't load rooms: ${error}`} onRetry={load} />
       ) : rows.length === 0 ? (
-        <div className="card text-sm text-brand-muted">
-          No rooms yet. Create one for an organization to share prototypes and gather feedback.
-        </div>
+        <EmptyState title="No rooms yet. Create one for an organization to share prototypes and gather feedback." />
       ) : (
         <div className="card p-0 overflow-x-auto">
           <table className="w-full text-sm">

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { PendingApproval } from "@/types";
 import { AgentBadge } from "./AgentBadge";
+import { Button } from "@/components/ui";
 import { formatDistanceToNow } from "date-fns";
 
 interface ApprovalCardProps {
@@ -323,13 +324,9 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
           <div className="flex gap-1.5 flex-shrink-0">
             {isStackAudit ? (
               <>
-                <button
-                  onClick={handleSendAudit}
-                  disabled={loading !== null}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-orange text-white hover:bg-brand-orange/90 transition-colors disabled:opacity-50"
-                >
+                <Button size="sm" onClick={handleSendAudit} disabled={loading !== null}>
                   {loading === "send_audit" ? "Sending…" : "Send Audit to Client"}
-                </button>
+                </Button>
                 <button
                   onClick={() => handle("rejected")}
                   disabled={loading !== null}
@@ -478,12 +475,9 @@ export function ApprovalCard({ approval, onAction, isAdmin = false }: ApprovalCa
             className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm text-brand-black placeholder:text-brand-muted focus:outline-none focus:ring-2 focus:ring-brand-orange/30 resize-none"
           />
           <div className="flex gap-2 justify-end">
-            <button
-              onClick={() => { setShowRevise(false); setRevisionNotes(""); }}
-              className="px-3 py-1.5 text-xs rounded-lg text-brand-muted hover:bg-brand-offwhite transition-colors"
-            >
+            <Button size="sm" variant="ghost" onClick={() => { setShowRevise(false); setRevisionNotes(""); }}>
               Cancel
-            </button>
+            </Button>
             <button
               onClick={() => handle("revision_requested", revisionNotes)}
               disabled={loading !== null || !revisionNotes.trim()}

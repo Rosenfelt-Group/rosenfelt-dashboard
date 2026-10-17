@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { formatDistanceToNow, parseISO } from "date-fns";
+import { Button, ErrorState, LoadingState, Modal, PageHeader, Tabs } from "@/components/ui";
+import { fetchJson } from "@/lib/fetch-json";
 
 type Agent = "jordan" | "riley" | "avery" | "casey" | "sam";
 
@@ -190,64 +192,52 @@ function MemoryModal({ memory, onSave, onClose }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 backdrop-blur-sm"
-         onClick={e => { if (e.target === e.currentTarget && !saving) onClose(); }}>
-      <div className="bg-white w-full md:max-w-lg md:rounded-xl rounded-t-2xl shadow-xl flex flex-col max-h-[85vh]">
-        <div className="md:hidden flex justify-center pt-3 pb-1">
-          <div className="w-10 h-1 bg-brand-border rounded-full" />
+    <Modal
+      open
+      onClose={onClose}
+      title={memory.id ? "Edit Memory" : "Add Memory"}
+      size="lg"
+      closeOnBackdrop={!saving}
+      footer={
+        <>
+          <Button className="flex-1" onClick={save} disabled={!key.trim() || !value.trim() || saving}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+          <Button variant="ghost" className="px-5" onClick={onClose} disabled={saving}>Cancel</Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs font-medium text-brand-muted mb-1">Key</label>
+          <input value={key} onChange={e => setKey(e.target.value)}
+            className="w-full text-sm border border-brand-border rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange"
+            placeholder="e.g. brian_prefers_bullet_points" />
         </div>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-brand-border">
-          <h2 className="text-base font-semibold text-brand-black">
-            {memory.id ? "Edit Memory" : "Add Memory"}
-          </h2>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full text-brand-muted hover:bg-brand-offwhite">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
-          </button>
+        <div>
+          <label className="block text-xs font-medium text-brand-muted mb-1">Value</label>
+          <textarea value={value} onChange={e => setValue(e.target.value)} rows={4}
+            className="w-full text-sm border border-brand-border rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange resize-none"
+            placeholder="What should the agent remember?" />
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-brand-muted mb-1">Key</label>
-            <input value={key} onChange={e => setKey(e.target.value)}
-              className="w-full text-sm border border-brand-border rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange"
-              placeholder="e.g. brian_prefers_bullet_points" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-brand-muted mb-1">Value</label>
-            <textarea value={value} onChange={e => setValue(e.target.value)} rows={4}
-              className="w-full text-sm border border-brand-border rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange resize-none"
-              placeholder="What should the agent remember?" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-brand-muted mb-1">Category</label>
-            <select value={category} onChange={e => setCategory(e.target.value as AgentMemory["category"])}
-              className="w-full text-sm border border-brand-border rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange">
-              <option value="preference">Preference — how Brian likes things done</option>
-              <option value="procedure">Procedure — how to handle a specific situation</option>
-              <option value="known_issue">Known Issue — a bug or problem to be aware of</option>
-              <option value="project_context">Project Context — current work context</option>
-              <option value="general">General — everything else</option>
-            </select>
-          </div>
+        <div>
+          <label className="block text-xs font-medium text-brand-muted mb-1">Category</label>
+          <select value={category} onChange={e => setCategory(e.target.value as AgentMemory["category"])}
+            className="w-full text-sm border border-brand-border rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange">
+            <option value="preference">Preference — how Brian likes things done</option>
+            <option value="procedure">Procedure — how to handle a specific situation</option>
+            <option value="known_issue">Known Issue — a bug or problem to be aware of</option>
+            <option value="project_context">Project Context — current work context</option>
+            <option value="general">General — everything else</option>
+          </select>
         </div>
-        <div className="px-5 py-4 border-t border-brand-border space-y-3">
-          {error && (
-            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-              Couldn&apos;t save: {error}
-            </p>
-          )}
-          <div className="flex gap-2">
-            <button onClick={save}
-              disabled={!key.trim() || !value.trim() || saving}
-              className="btn-primary flex-1 disabled:opacity-40">
-              {saving ? "Saving…" : "Save"}
-            </button>
-            <button onClick={onClose} disabled={saving} className="btn-ghost px-5 disabled:opacity-40">Cancel</button>
-          </div>
-        </div>
+        {error && (
+          <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            Couldn&apos;t save: {error}
+          </p>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -270,6 +260,8 @@ export default function AgentPromptsPage() {
   const [editingMemory,  setEditingMemory]  = useState<(Partial<AgentMemory> & { agent: Agent }) | null>(null);
   const [dirty,         setDirty]         = useState(false);
   const [memoryError,   setMemoryError]   = useState<string | null>(null);
+  const [loadError,     setLoadError]     = useState<string | null>(null);
+  const [promptError,   setPromptError]   = useState<string | null>(null);
 
   useEffect(() => {
     loadAgent(activeAgent);
@@ -281,28 +273,39 @@ export default function AgentPromptsPage() {
     setShowVersions(false);
     setPreviewVersion(null);
 
-    const [promptRes, versionsRes, memoryRes] = await Promise.all([
-      fetch(`/api/agent-prompts?agent=${agent}`).then(r => r.json()),
-      fetch(`/api/agent-prompts/versions?agent=${agent}`).then(r => r.json()),
-      fetch(`/api/agent-memory?agent=${agent}`).then(r => r.json()),
+    setPromptError(null);
+
+    const [promptR, versionsR, memoryR] = await Promise.all([
+      fetchJson<AgentPrompt | null>(`/api/agent-prompts?agent=${agent}`),
+      fetchJson<PromptVersion[]>(`/api/agent-prompts/versions?agent=${agent}`),
+      fetchJson<AgentMemory[]>(`/api/agent-memory?agent=${agent}`),
     ]);
+    const failed = [promptR, versionsR, memoryR].find(r => !r.ok);
+    setLoadError(failed && !failed.ok ? failed.error : null);
+    const promptRes = promptR.ok ? promptR.data : null;
 
     setPromptMeta(promptRes);
     setPrompt(promptRes?.prompt ?? "");
     setPromptDraft(promptRes?.prompt ?? "");
-    setVersions(versionsRes ?? []);
-    setMemories(memoryRes ?? []);
+    setVersions(versionsR.ok ? versionsR.data ?? [] : []);
+    setMemories(memoryR.ok ? memoryR.data ?? [] : []);
     setLoading(false);
   }
 
   async function handleSavePrompt() {
     if (!dirty) return;
     setSaving(true);
-    await fetch("/api/agent-prompts", {
+    setPromptError(null);
+    const saveRes = await fetchJson("/api/agent-prompts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ agent: activeAgent, prompt: promptDraft, note: saveNote }),
     });
+    if (!saveRes.ok) {
+      setPromptError(`Couldn't save the prompt: ${saveRes.error}`);
+      setSaving(false);
+      return;
+    }
     setPrompt(promptDraft);
     setDirty(false);
     setSaveNote("");
@@ -389,9 +392,8 @@ export default function AgentPromptsPage() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-8 space-y-4">
-        <div className="card animate-pulse h-16" />
-        <div className="card animate-pulse h-96" />
+      <div className="p-4 md:p-8">
+        <LoadingState />
       </div>
     );
   }
@@ -408,12 +410,11 @@ export default function AgentPromptsPage() {
 
       <div className="p-4 md:p-8 pb-24 md:pb-8 space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-brand-black">Agent Intelligence</h1>
-            <p className="text-sm text-brand-muted mt-0.5">Prompts, memory, and behavioral tuning</p>
-          </div>
-        </div>
+        <PageHeader title="Agent Intelligence" description="Prompts, memory, and behavioral tuning" />
+
+        {loadError && (
+          <ErrorState message={`Couldn't load ${activeAgent}'s settings: ${loadError}`} onRetry={() => loadAgent(activeAgent)} />
+        )}
 
         {/* Agent tabs */}
         <div className="flex gap-2">
@@ -429,18 +430,14 @@ export default function AgentPromptsPage() {
         </div>
 
         {/* Prompt / Memory tab switcher */}
-        <div className="flex gap-1 border-b border-brand-border">
-          {(["prompt", "memory"] as const).map(t => (
-            <button key={t} onClick={() => setActiveTab(t)}
-              className={clsx(
-                "px-4 py-2 text-sm font-medium transition-colors capitalize relative",
-                activeTab === t ? "text-brand-black" : "text-brand-muted hover:text-brand-black"
-              )}>
-              {t === "memory" ? `Memory (${memories.length})` : "System Prompt"}
-              {activeTab === t && <span className="absolute bottom-0 inset-x-0 h-0.5 bg-brand-orange rounded-full" />}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          value={activeTab}
+          onChange={setActiveTab}
+          tabs={[
+            { id: "prompt", label: "System Prompt" },
+            { id: "memory", label: `Memory (${memories.length})` },
+          ]}
+        />
 
         {/* ── PROMPT TAB ── */}
         {activeTab === "prompt" && (
@@ -520,6 +517,8 @@ export default function AgentPromptsPage() {
               />
             </div>
 
+            {promptError && <ErrorState message={promptError} />}
+
             {dirty && (
               <div className="flex gap-2 items-center">
                 <input
@@ -528,14 +527,12 @@ export default function AgentPromptsPage() {
                   className="flex-1 text-sm border border-brand-border rounded-lg px-3 py-2 focus:outline-none focus:border-brand-orange"
                   placeholder="Optional note about this change..."
                 />
-                <button onClick={handleSavePrompt} disabled={saving}
-                  className="btn-primary disabled:opacity-40 whitespace-nowrap">
+                <Button onClick={handleSavePrompt} disabled={saving} className="whitespace-nowrap">
                   {saving ? "Saving…" : "Save prompt"}
-                </button>
-                <button onClick={() => { setPromptDraft(prompt); setDirty(false); }}
-                  className="btn-ghost whitespace-nowrap">
+                </Button>
+                <Button variant="ghost" onClick={() => { setPromptDraft(prompt); setDirty(false); }} className="whitespace-nowrap">
                   Discard
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -576,11 +573,9 @@ export default function AgentPromptsPage() {
                   </button>
                 ))}
               </div>
-              <button
-                onClick={() => setEditingMemory({ agent: activeAgent })}
-                className="btn-primary text-xs py-1.5 ml-2 flex-shrink-0">
+              <Button size="sm" onClick={() => setEditingMemory({ agent: activeAgent })} className="ml-2 flex-shrink-0">
                 + Add
-              </button>
+              </Button>
             </div>
 
             {filteredMemories.length === 0 ? (

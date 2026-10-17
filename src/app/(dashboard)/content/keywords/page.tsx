@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { KeywordTracker } from "@/types";
 import clsx from "clsx";
+import { Button, EmptyState, ErrorState, LoadingState, Modal, PageHeader } from "@/components/ui";
+import { fetchJson } from "@/lib/fetch-json";
 
 // ─── Display helpers ──────────────────────────────────────────────────────────
 
@@ -141,15 +143,22 @@ function KeywordModal({
   const labelCls = "block text-xs font-medium text-brand-muted mb-1";
 
   return (
-    <div
-      className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4"
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    <Modal
+      open
+      onClose={onClose}
+      title={initial ? "Edit keyword" : "Add keyword"}
+      size="lg"
+      closeOnBackdrop
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={saving || !form.keyword.trim()}>
+            {saving ? "Saving…" : initial ? "Save changes" : "Add keyword"}
+          </Button>
+        </>
+      }
     >
-      <div className="bg-white rounded-xl shadow-lg w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-base font-semibold text-brand-black">
-          {initial ? "Edit keyword" : "Add keyword"}
-        </h2>
-
+      <div className="space-y-4">
         <div>
           <label className={labelCls}>Keyword *</label>
           <input className={inputCls} value={form.keyword} onChange={e => set("keyword", e.target.value)} placeholder="e.g. AI for small accounting firms" />
@@ -218,21 +227,8 @@ function KeywordModal({
           <label className={labelCls}>Notes</label>
           <textarea className={`${inputCls} resize-none`} rows={2} value={form.notes} onChange={e => set("notes", e.target.value)} />
         </div>
-
-        <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg text-brand-muted hover:bg-brand-offwhite transition-colors">
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={saving || !form.keyword.trim()}
-            className="px-4 py-2 text-sm rounded-lg bg-brand-orange text-white font-medium hover:bg-orange-700 disabled:opacity-50 transition-colors"
-          >
-            {saving ? "Saving…" : initial ? "Save changes" : "Add keyword"}
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -251,12 +247,14 @@ export default function KeywordsPage() {
   const [diffF, setDiffF]     = useState<DiffFilter>("all");
   const [modal, setModal]     = useState<{ mode: "add" } | { mode: "edit"; row: KeywordTracker } | null>(null);
   const [error, setError]     = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const loadedRef             = useRef(false);
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/keyword-tracker");
-    if (res.ok) setRows(await res.json());
+    const r = await fetchJson<KeywordTracker[]>("/api/keyword-tracker");
+    if (r.ok) { setRows(r.data); setLoadError(null); }
+    else setLoadError(r.error);
     setLoading(false);
     loadedRef.current = true;
   }
@@ -344,21 +342,18 @@ export default function KeywordsPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-brand-black">SEO Keywords</h1>
-          <p className="text-sm text-brand-muted mt-0.5">Keyword tracking — Supabase keyword_tracker table</p>
-        </div>
-        <button
-          onClick={() => setModal({ mode: "add" })}
-          className="flex items-center gap-1.5 px-3 py-2 bg-brand-orange text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Add keyword
-        </button>
-      </div>
+      <PageHeader
+        title="SEO Keywords"
+        description="Keyword tracking — Supabase keyword_tracker table"
+        actions={
+          <Button onClick={() => setModal({ mode: "add" })}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add keyword
+          </Button>
+        }
+      />
 
       {/* Stats strip */}
       {!loading && rows.length > 0 && (
@@ -430,24 +425,24 @@ export default function KeywordsPage() {
       )}
 
       {/* Table */}
-      <div className="card p-0 overflow-hidden">
-        {loading ? (
-          <div className="py-16 text-center text-sm text-brand-muted">Loading…</div>
-        ) : filtered.length === 0 ? (
-          <div className="py-16 text-center">
-            <p className="text-sm text-brand-muted">
-              {rows.length === 0 ? "No keywords tracked yet." : "No keywords match these filters."}
-            </p>
-            {rows.length === 0 && (
-              <button
-                onClick={() => setModal({ mode: "add" })}
-                className="mt-3 text-sm text-brand-orange hover:underline"
-              >
-                Add your first keyword →
-              </button>
-            )}
-          </div>
-        ) : (
+      {loading ? (
+        <LoadingState />
+      ) : loadError && rows.length === 0 ? (
+        <ErrorState message={`Couldn't load keywords: ${loadError}`} onRetry={load} />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          title={rows.length === 0 ? "No keywords tracked yet." : "No keywords match these filters."}
+          action={rows.length === 0 && (
+            <button
+              onClick={() => setModal({ mode: "add" })}
+              className="text-sm text-brand-orange hover:underline"
+            >
+              Add your first keyword →
+            </button>
+          )}
+        />
+      ) : (
+        <div className="card p-0 overflow-hidden">
           <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
             <table className="w-full text-sm">
               <thead>
@@ -531,8 +526,8 @@ export default function KeywordsPage() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Modal */}
       {modal && (

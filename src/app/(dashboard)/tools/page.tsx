@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/ui";
 
 const TOOLS = [
   {
@@ -36,7 +37,7 @@ const TOOLS = [
 export default function AdminPage() {
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
-      <h1 className="text-xl font-semibold text-brand-black mb-6">Admin</h1>
+      <PageHeader title="Admin" />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {TOOLS.map(tool => (

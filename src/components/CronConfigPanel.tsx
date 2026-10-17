@@ -5,6 +5,8 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow } from "date-fns";
 import clsx from "clsx";
 import type { Agent } from "@/types";
+import { Button, ErrorState } from "@/components/ui";
+import { fetchJson } from "@/lib/fetch-json";
 
 interface CronRow {
   agent: string;
@@ -67,12 +69,20 @@ export function CronConfigPanel() {
   const [confirming, setConfirming]   = useState(false);
   const [saving, setSaving]           = useState(false);
   const [statusMsg, setStatusMsg]     = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [loadError, setLoadError]     = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [config, jobs] = await Promise.all([
-      fetch("/api/cron-config").then(r => r.json()).catch(() => []),
-      fetch("/api/cron-config/jobs").then(r => r.json()).catch(() => ({ jobs: [] })),
+    const [configRes, jobsRes] = await Promise.all([
+      fetchJson<CronRow[]>("/api/cron-config"),
+      fetchJson<{ jobs?: JobRunInfo[] }>("/api/cron-config/jobs"),
     ]);
+    setLoadError(
+      !configRes.ok ? `Couldn't load schedules: ${configRes.error}`
+      : !jobsRes.ok ? `Couldn't load next-run times: ${jobsRes.error}`
+      : null,
+    );
+    const config = configRes.ok ? configRes.data : [];
+    const jobs = jobsRes.ok ? jobsRes.data : { jobs: [] };
     setRows(Array.isArray(config) ? config : []);
     const runMap: Record<string, string | null> = {};
     ((jobs?.jobs ?? []) as JobRunInfo[]).forEach(j => {
@@ -152,6 +162,10 @@ export function CronConfigPanel() {
     );
   }
 
+  if (rows.length === 0 && loadError) {
+    return <ErrorState className="m-4" message={loadError} onRetry={load} />;
+  }
+
   if (rows.length === 0) {
     return (
       <div className="px-4 py-6 text-sm text-brand-muted">
@@ -164,6 +178,7 @@ export function CronConfigPanel() {
 
   return (
     <div>
+      {loadError && <ErrorState className="mx-4 mt-3" message={loadError} onRetry={load} />}
       {statusMsg && (
         <div className={clsx(
           "mx-4 mt-3 px-3 py-2 rounded-lg text-sm",
@@ -285,13 +300,13 @@ export function CronConfigPanel() {
 
                   {/* Save / confirm */}
                   {!confirming ? (
-                    <button
+                    <Button
+                      size="sm"
                       onClick={() => setConfirming(true)}
                       disabled={editCron === currentRow?.cron && editEnabled === currentRow?.enabled}
-                      className="px-3 py-1.5 bg-brand-orange text-white text-xs rounded hover:bg-brand-orange/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       Save changes…
-                    </button>
+                    </Button>
                   ) : (
                     <div className="space-y-2">
                       <div className="text-xs text-brand-black bg-amber-50 border border-amber-200 rounded px-3 py-2">
@@ -302,19 +317,12 @@ export function CronConfigPanel() {
                         {!editEnabled && " (will be disabled)"}
                       </div>
                       <div className="flex gap-2">
-                        <button
-                          onClick={applySave}
-                          disabled={saving}
-                          className="px-3 py-1.5 bg-brand-orange text-white text-xs rounded hover:bg-brand-orange/90 disabled:opacity-40 transition-colors"
-                        >
+                        <Button size="sm" onClick={applySave} disabled={saving}>
                           {saving ? "Applying…" : "Confirm"}
-                        </button>
-                        <button
-                          onClick={() => setConfirming(false)}
-                          className="px-3 py-1.5 border border-brand-border text-xs text-brand-muted rounded hover:bg-white transition-colors"
-                        >
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => setConfirming(false)}>
                           Go back
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   )}

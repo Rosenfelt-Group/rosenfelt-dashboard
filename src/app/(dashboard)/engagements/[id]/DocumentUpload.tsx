@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { fetchJson } from "@/lib/fetch-json";
+import { Button } from "@/components/ui";
 import { DOC_ACCEPT, DOC_MAX_BYTES, targetAfterPrep } from "@/lib/rooms/doc-limits";
 
 type Prep = { deliverable_id: string; upload_id: string; filename: string; signed_url: string; content_type: string };
@@ -76,10 +77,9 @@ export function DocumentUpload({ engagementId, documents, onDone }: {
       <input ref={fileInput} type="file" accept={DOC_ACCEPT} onChange={e => setFile(e.target.files?.[0] ?? null)} className="block text-sm" />
       <input value={summary} onChange={e => setSummary(e.target.value)} maxLength={500} placeholder="What changed? (optional)"
         className="w-full border border-brand-border rounded px-2 py-1.5 text-sm" />
-      <button disabled={busy || !file || (!targetId && !title.trim())} onClick={upload}
-        className="px-3 py-1.5 text-sm rounded bg-brand-orange text-white disabled:opacity-50">
+      <Button size="sm" disabled={busy || !file || (!targetId && !title.trim())} onClick={upload}>
         {busy ? "Uploading…" : "Upload"}
-      </button>
+      </Button>
       {err && <p className="text-sm text-red-600">{err}</p>}
     </div>
   );

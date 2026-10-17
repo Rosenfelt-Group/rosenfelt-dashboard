@@ -9,6 +9,7 @@ import {
 } from "@stripe/react-stripe-js";
 import clsx from "clsx";
 import type { ClientService } from "@/types";
+import { Button, Modal } from "@/components/ui";
 
 type Props = {
   service: ClientService;
@@ -99,129 +100,128 @@ export function ActivationModal({ service, onClose, onActivated }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg w-full max-w-md shadow-xl">
-        <div className="px-4 py-3 border-b border-brand-border flex items-center justify-between">
-          <h3 className="font-semibold text-brand-black text-sm">
-            Activate billing — {service.service_template?.name ?? "Service"}
-          </h3>
-          <button onClick={onClose} className="text-brand-muted hover:text-brand-black text-lg leading-none">×</button>
-        </div>
-        <div className="p-4 space-y-3">
-          {/* Test mode toggle: only meaningful before card capture starts.
-              Once we hit step==='card' the Stripe Elements instance is already
-              keyed to the chosen mode, so the checkbox locks. */}
-          {(step === "form" || step === "submitting") && (
-            <label className={clsx(
-              "flex items-center gap-2 text-xs px-2 py-1.5 rounded border",
-              testMode ? "border-amber-300 bg-amber-50 text-amber-900" : "border-brand-border text-brand-muted",
-            )}>
-              <input
-                type="checkbox"
-                checked={testMode}
-                onChange={(e) => { setTestMode(e.target.checked); setErr(null); }}
-              />
-              <span>🧪 Test mode (uses Stripe test keys — no real charges, no DB writeback)</span>
-            </label>
-          )}
-          {step === "card" && testMode && (
-            <div className="text-xs px-2 py-1.5 rounded border border-amber-300 bg-amber-50 text-amber-900">
-              🧪 Test mode — use card <code className="font-mono">4242 4242 4242 4242</code>, any future exp, any CVC.
-            </div>
-          )}
-          {step === "form" || step === "submitting" ? (
-            <>
-              <div>
-                <div className="text-[10px] uppercase text-brand-muted mb-1">Billing start date</div>
-                <input
-                  type="date"
-                  value={billingStartDate}
-                  onChange={(e) => setBillingStartDate(e.target.value)}
-                  className="w-full rounded border border-brand-border px-2 py-1.5 text-sm"
-                />
-              </div>
-              <div>
-                <div className="text-[10px] uppercase text-brand-muted mb-1">
-                  Confirmed rate (USD) {billingType === "tm" && "— hourly"}
-                </div>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={confirmedRate}
-                  onChange={(e) => setConfirmedRate(e.target.value)}
-                  className="w-full rounded border border-brand-border px-2 py-1.5 text-sm"
-                />
-              </div>
-              {billingType === "recurring" && (
-                <p className="text-[11px] text-brand-muted">
-                  Next step collects a payment method via Stripe Elements (the dashboard never sees the card number).
-                </p>
-              )}
-              {billingType === "tm" && (
-                <p className="text-[11px] text-brand-muted">
-                  T&M services skip Stripe activation — hours are billed monthly via the Invoice flow.
-                </p>
-              )}
-              {billingType === "one_time" && (
-                <p className="text-[11px] text-brand-muted">
-                  Opens a Stripe Checkout session in a new tab. After payment the service flips to active via the Stripe webhook.
-                </p>
-              )}
-              {err && <div className="text-xs text-red-700">{err}</div>}
-            </>
-          ) : step === "card" && activatePayload ? (
-            stripePromise ? (
-              <Elements stripe={stripePromise} options={{ clientSecret: activatePayload.client_secret }}>
-                <CardForm
-                  service={service}
-                  activatePayload={activatePayload}
-                  testMode={testMode}
-                  onSuccess={() => { setStep("done"); onActivated(); }}
-                  onErr={(m) => { setErr(m); }}
-                />
-              </Elements>
-            ) : (
-              <div className="text-xs text-red-700">
-                {testMode
-                  ? "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST is not set in this environment. Set it in Vercel before running the test-mode flow."
-                  : "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set in this environment. Set it in Vercel before activating recurring services."}
-              </div>
-            )
-          ) : testMode ? (
-            <div className="space-y-2">
-              <div className="text-sm text-brand-black">✅ Test mode succeeded.</div>
-              <p className="text-xs text-brand-muted leading-relaxed">
-                Stripe accepted the card and created the subscription in <strong>test mode</strong>.
-                Check the Stripe Dashboard (Test mode) → Subscriptions to see it.
-                The CRM row stays in <code className="text-[11px] bg-brand-cream px-1 rounded">pending_activation</code> —
-                untick Test mode and re-run to activate for real.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="text-sm text-brand-black">✅ Service activated.</div>
-              <p className="text-xs text-brand-muted">
-                Subscription created. Row flipped to <code className="text-[11px] bg-brand-cream px-1 rounded">active</code>.
-              </p>
-            </div>
-          )}
-        </div>
-        <div className="px-4 py-3 border-t border-brand-border flex justify-end gap-2">
-          <button onClick={onClose} className="text-xs px-3 py-1 hover:bg-brand-cream rounded">
+    <Modal
+      open
+      onClose={onClose}
+      preventClose={step === "submitting"}
+      title={<>Activate billing — {service.service_template?.name ?? "Service"}</>}
+      footer={
+        <>
+          <Button variant="ghost" size="sm" onClick={onClose}>
             {step === "done" ? "Close" : "Cancel"}
-          </button>
+          </Button>
           {step === "form" && (
-            <button onClick={handleActivate} className="btn-primary text-xs px-3 py-1.5">
+            <Button size="sm" onClick={handleActivate}>
               {billingType === "recurring" ? "Continue to card" : billingType === "one_time" ? "Open Stripe Checkout" : "Activate"}
-            </button>
+            </Button>
           )}
           {step === "submitting" && (
-            <button disabled className="btn-primary text-xs px-3 py-1.5 opacity-60">Working…</button>
+            <Button size="sm" disabled>Working…</Button>
           )}
-        </div>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {/* Test mode toggle: only meaningful before card capture starts.
+            Once we hit step==='card' the Stripe Elements instance is already
+            keyed to the chosen mode, so the checkbox locks. */}
+        {(step === "form" || step === "submitting") && (
+          <label className={clsx(
+            "flex items-center gap-2 text-xs px-2 py-1.5 rounded border",
+            testMode ? "border-amber-300 bg-amber-50 text-amber-900" : "border-brand-border text-brand-muted",
+          )}>
+            <input
+              type="checkbox"
+              checked={testMode}
+              onChange={(e) => { setTestMode(e.target.checked); setErr(null); }}
+            />
+            <span>🧪 Test mode (uses Stripe test keys — no real charges, no DB writeback)</span>
+          </label>
+        )}
+        {step === "card" && testMode && (
+          <div className="text-xs px-2 py-1.5 rounded border border-amber-300 bg-amber-50 text-amber-900">
+            🧪 Test mode — use card <code className="font-mono">4242 4242 4242 4242</code>, any future exp, any CVC.
+          </div>
+        )}
+        {step === "form" || step === "submitting" ? (
+          <>
+            <div>
+              <div className="text-[10px] uppercase text-brand-muted mb-1">Billing start date</div>
+              <input
+                type="date"
+                value={billingStartDate}
+                onChange={(e) => setBillingStartDate(e.target.value)}
+                className="w-full rounded border border-brand-border px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <div className="text-[10px] uppercase text-brand-muted mb-1">
+                Confirmed rate (USD) {billingType === "tm" && "— hourly"}
+              </div>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={confirmedRate}
+                onChange={(e) => setConfirmedRate(e.target.value)}
+                className="w-full rounded border border-brand-border px-2 py-1.5 text-sm"
+              />
+            </div>
+            {billingType === "recurring" && (
+              <p className="text-[11px] text-brand-muted">
+                Next step collects a payment method via Stripe Elements (the dashboard never sees the card number).
+              </p>
+            )}
+            {billingType === "tm" && (
+              <p className="text-[11px] text-brand-muted">
+                T&M services skip Stripe activation — hours are billed monthly via the Invoice flow.
+              </p>
+            )}
+            {billingType === "one_time" && (
+              <p className="text-[11px] text-brand-muted">
+                Opens a Stripe Checkout session in a new tab. After payment the service flips to active via the Stripe webhook.
+              </p>
+            )}
+            {err && <div className="text-xs text-red-700">{err}</div>}
+          </>
+        ) : step === "card" && activatePayload ? (
+          stripePromise ? (
+            <Elements stripe={stripePromise} options={{ clientSecret: activatePayload.client_secret }}>
+              <CardForm
+                service={service}
+                activatePayload={activatePayload}
+                testMode={testMode}
+                onSuccess={() => { setStep("done"); onActivated(); }}
+                onErr={(m) => { setErr(m); }}
+              />
+            </Elements>
+          ) : (
+            <div className="text-xs text-red-700">
+              {testMode
+                ? "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST is not set in this environment. Set it in Vercel before running the test-mode flow."
+                : "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set in this environment. Set it in Vercel before activating recurring services."}
+            </div>
+          )
+        ) : testMode ? (
+          <div className="space-y-2">
+            <div className="text-sm text-brand-black">✅ Test mode succeeded.</div>
+            <p className="text-xs text-brand-muted leading-relaxed">
+              Stripe accepted the card and created the subscription in <strong>test mode</strong>.
+              Check the Stripe Dashboard (Test mode) → Subscriptions to see it.
+              The CRM row stays in <code className="text-[11px] bg-brand-cream px-1 rounded">pending_activation</code> —
+              untick Test mode and re-run to activate for real.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="text-sm text-brand-black">✅ Service activated.</div>
+            <p className="text-xs text-brand-muted">
+              Subscription created. Row flipped to <code className="text-[11px] bg-brand-cream px-1 rounded">active</code>.
+            </p>
+          </div>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -306,13 +306,9 @@ function CardForm({
         }} />
       </div>
       {localErr && <div className="text-xs text-red-700">{localErr}</div>}
-      <button
-        onClick={submit}
-        disabled={!stripe || submitting}
-        className="btn-primary text-xs px-3 py-1.5 w-full disabled:opacity-60"
-      >
+      <Button size="sm" className="w-full" onClick={submit} disabled={!stripe || submitting}>
         {submitting ? "Confirming…" : "Save card & activate"}
-      </button>
+      </Button>
     </div>
   );
 }

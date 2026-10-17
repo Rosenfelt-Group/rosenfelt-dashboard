@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
+import { Button, ErrorState, LoadingState } from "@/components/ui";
 import { formatDistanceToNow, parseISO } from "date-fns";
 
 interface AlignmentFinding {
@@ -92,13 +93,9 @@ export default function AlignmentAuditPanel({ isAdmin }: { isAdmin: boolean }) {
           </p>
         </div>
         {isAdmin && (
-          <button
-            onClick={handleRunNow}
-            disabled={triggering}
-            className="btn-primary text-sm px-4 py-2 disabled:opacity-60"
-          >
+          <Button onClick={handleRunNow} disabled={triggering}>
             {triggering ? "Starting…" : "▶ Run Now"}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -112,9 +109,9 @@ export default function AlignmentAuditPanel({ isAdmin }: { isAdmin: boolean }) {
       )}
 
       {loading ? (
-        <div className="card animate-pulse h-32" />
+        <LoadingState />
       ) : loadError ? (
-        <div className="card text-sm text-red-600">Couldn&apos;t load findings: {loadError}</div>
+        <ErrorState message={`Couldn't load findings: ${loadError}`} onRetry={load} />
       ) : findings.length === 0 ? (
         <div className="card text-sm text-brand-muted">
           No alignment findings on record.{isAdmin ? " Click \"Run Now\" to trigger the first audit." : ""}

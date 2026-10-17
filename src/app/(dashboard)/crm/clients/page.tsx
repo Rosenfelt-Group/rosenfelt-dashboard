@@ -7,6 +7,7 @@ import clsx from "clsx";
 import { AgentBadge } from "@/components/AgentBadge";
 import { Agent } from "@/types";
 import { fetchJson } from "@/lib/fetch-json";
+import { Button, EmptyState, ErrorState, LoadingState, Modal, PageHeader } from "@/components/ui";
 
 type StatusFilter = "active" | "inactive" | "all";
 const STATUS_FILTERS: StatusFilter[] = ["active", "inactive", "all"];
@@ -50,7 +51,7 @@ const BLANK_FORM = {
 
 export default function ClientsPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-brand-muted">Loading…</div>}>
+    <Suspense fallback={<div className="p-4 md:p-8"><LoadingState /></div>}>
       <ClientsPageInner />
     </Suspense>
   );
@@ -70,6 +71,7 @@ function ClientsPageInner() {
   const [form, setForm] = useState(BLANK_FORM);
   const [saving, setSaving] = useState(false);
   const [createErr, setCreateErr] = useState<string | null>(null);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
   const [paymentLink, setPaymentLink] = useState<{ url: string; businessName: string } | null>(null);
   const [generatingLinkFor, setGeneratingLinkFor] = useState<string | null>(null);
 
@@ -93,11 +95,12 @@ function ClientsPageInner() {
   async function openCreate() {
     if (availableBusinesses.length === 0) {
       const [b, c] = await Promise.all([
-        fetch("/api/crm/businesses").then(r => r.json()),
-        fetch("/api/crm/contacts").then(r => r.json()),
+        fetchJson<unknown>("/api/crm/businesses"),
+        fetchJson<unknown>("/api/crm/contacts"),
       ]);
-      setAvailableBusinesses(Array.isArray(b) ? b : []);
-      setAvailableContacts(Array.isArray(c) ? c : []);
+      if (b.ok) setAvailableBusinesses(Array.isArray(b.data) ? b.data : []);
+      if (c.ok) setAvailableContacts(Array.isArray(c.data) ? c.data : []);
+      setOptionsError(!b.ok ? b.error : !c.ok ? c.error : null);
     }
     setForm(BLANK_FORM);
     setShowCreate(true);
@@ -160,17 +163,11 @@ function ClientsPageInner() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl font-semibold text-brand-black">Clients</h1>
-          <p className="text-sm text-brand-muted mt-0.5">
-            {clients.length} {statusFilter === "all" ? "total" : statusFilter}
-          </p>
-        </div>
-        <button onClick={openCreate} className="btn-primary text-xs px-3 py-1.5">
-          + New client
-        </button>
-      </div>
+      <PageHeader
+        title="Clients"
+        description={`${clients.length} ${statusFilter === "all" ? "total" : statusFilter}`}
+        actions={<Button size="sm" onClick={openCreate}>+ New client</Button>}
+      />
 
       <div className="inline-flex items-center gap-1 rounded border border-brand-border bg-white p-0.5 mb-6">
         {STATUS_FILTERS.map((opt) => {
@@ -190,30 +187,28 @@ function ClientsPageInner() {
         })}
       </div>
 
-      {loadError && (
-        <div className="card text-sm text-red-600 mb-4">Couldn&apos;t load clients: {loadError}</div>
-      )}
+      {loadError && <ErrorState message={`Couldn't load clients: ${loadError}`} className="mb-4" />}
       {loading ? (
-        <div className="card animate-pulse h-40" />
+        <LoadingState />
       ) : clients.length === 0 ? (
-        <div className="card text-center py-12">
-          {statusFilter === "active" ? (
-            <>
-              <p className="text-brand-muted text-sm">No active clients.</p>
-              <p className="text-xs text-brand-muted mt-1">
+        statusFilter === "active" ? (
+          <EmptyState
+            title="No active clients."
+            description={
+              <>
                 Brand-new clients land here only after at least one of their services flips to <strong>active</strong>.{" "}
                 <button onClick={() => setStatusFilter("all")} className="text-brand-orange hover:underline">
                   Show all clients
                 </button> to see clients still in setup.
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-brand-muted text-sm">No clients yet.</p>
-              <p className="text-xs text-brand-muted mt-1">Convert a won lead or use the New client button above.</p>
-            </>
-          )}
-        </div>
+              </>
+            }
+          />
+        ) : (
+          <EmptyState
+            title="No clients yet."
+            description="Convert a won lead or use the New client button above."
+          />
+        )
       ) : (
         <div className="space-y-3">
           {clients.map(client => (
@@ -283,108 +278,102 @@ function ClientsPageInner() {
         </div>
       )}
 
-      {paymentLink && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-brand-black">Payment link ready</h2>
-              <button onClick={() => setPaymentLink(null)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
-            </div>
+      <Modal
+        open={!!paymentLink}
+        onClose={() => setPaymentLink(null)}
+        title="Payment link ready"
+        footer={paymentLink && (
+          <>
+            <Button className="flex-1" onClick={() => { navigator.clipboard.writeText(paymentLink.url); }}>
+              Copy link
+            </Button>
+            <a
+              href={paymentLink.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-ghost flex-1 text-sm text-center"
+            >
+              Preview
+            </a>
+          </>
+        )}
+      >
+        {paymentLink && (
+          <>
             <p className="text-sm text-brand-muted mb-3">
               Send this link to <span className="font-medium text-brand-black">{paymentLink.businessName}</span> to set up their monthly subscription.
             </p>
-            <div className="bg-gray-50 border border-brand-border rounded-lg px-3 py-2 text-xs text-brand-black font-mono break-all mb-4">
+            <div className="bg-gray-50 border border-brand-border rounded-lg px-3 py-2 text-xs text-brand-black font-mono break-all">
               {paymentLink.url}
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { navigator.clipboard.writeText(paymentLink.url); }}
-                className="btn-primary flex-1 text-sm"
-              >
-                Copy link
-              </button>
-              <a
-                href={paymentLink.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-ghost flex-1 text-sm text-center"
-              >
-                Preview
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
 
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-semibold text-brand-black">New client</h2>
-              <button onClick={() => setShowCreate(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Business *</label>
-                <select
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={form.businessId}
-                  onChange={e => setForm(p => ({ ...p, businessId: e.target.value, contactId: "" }))}
-                >
-                  <option value="">— select business —</option>
-                  {availableBusinesses.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Contact</label>
-                <select
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={form.contactId}
-                  onChange={e => setForm(p => ({ ...p, contactId: e.target.value }))}
-                  disabled={!form.businessId}
-                >
-                  <option value="">— none —</option>
-                  {businessContacts.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.first_name}{c.last_name ? " " + c.last_name : ""}
-                      {c.email ? ` (${c.email})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Contract start (optional)</label>
-                <input
-                  type="date"
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={form.contractStart}
-                  onChange={e => setForm(p => ({ ...p, contractStart: e.target.value }))}
-                />
-              </div>
-              <p className="text-[11px] text-brand-muted">
-                Services + billing are configured per-client on the detail page. After save you&apos;ll be taken there.
-              </p>
-              {createErr && (
-                <div className="text-xs text-red-700 bg-red-50 border border-red-100 rounded px-3 py-2">
-                  {createErr}
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowCreate(false)} className="btn-ghost flex-1">Cancel</button>
-              <button
-                onClick={createClient}
-                disabled={saving || !form.businessId}
-                className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? "Creating…" : "Create client"}
-              </button>
-            </div>
+      <Modal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        title="New client"
+        footer={
+          <>
+            <Button variant="ghost" className="flex-1" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button className="flex-1" onClick={createClient} disabled={saving || !form.businessId}>
+              {saving ? "Creating…" : "Create client"}
+            </Button>
+          </>
+        }
+      >
+        {optionsError && <ErrorState message={`Couldn't load businesses and contacts: ${optionsError}`} className="mb-3" />}
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-brand-muted mb-1 block">Business *</label>
+            <select
+              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+              value={form.businessId}
+              onChange={e => setForm(p => ({ ...p, businessId: e.target.value, contactId: "" }))}
+            >
+              <option value="">— select business —</option>
+              {availableBusinesses.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
           </div>
+          <div>
+            <label className="text-xs text-brand-muted mb-1 block">Contact</label>
+            <select
+              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+              value={form.contactId}
+              onChange={e => setForm(p => ({ ...p, contactId: e.target.value }))}
+              disabled={!form.businessId}
+            >
+              <option value="">— none —</option>
+              {businessContacts.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.first_name}{c.last_name ? " " + c.last_name : ""}
+                  {c.email ? ` (${c.email})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-brand-muted mb-1 block">Contract start (optional)</label>
+            <input
+              type="date"
+              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+              value={form.contractStart}
+              onChange={e => setForm(p => ({ ...p, contractStart: e.target.value }))}
+            />
+          </div>
+          <p className="text-[11px] text-brand-muted">
+            Services + billing are configured per-client on the detail page. After save you&apos;ll be taken there.
+          </p>
+          {createErr && (
+            <div className="text-xs text-red-700 bg-red-50 border border-red-100 rounded px-3 py-2">
+              {createErr}
+            </div>
+          )}
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

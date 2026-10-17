@@ -2,7 +2,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { DiscoveryNav } from "@/components/crm/discovery/DiscoveryNav";
-import { EMPTY_QUESTION, INPUT, Modal, QuestionDraft, QuestionForm, TYPE_LABEL } from "@/components/crm/discovery/QuestionForm";
+import { EMPTY_QUESTION, INPUT, QuestionDraft, QuestionForm, TYPE_LABEL } from "@/components/crm/discovery/QuestionForm";
+import { fetchJson } from "@/lib/fetch-json";
+import { Button, EmptyState, ErrorState, LoadingState, Modal, PageHeader } from "@/components/ui";
 import { DiscoveryQuestion } from "@/types";
 import { questionSearchText } from "@/lib/discovery/bank";
 
@@ -13,6 +15,7 @@ function toDraft(q: DiscoveryQuestion): QuestionDraft {
 export default function QuestionBankPage() {
   const [rows, setRows] = useState<DiscoveryQuestion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<DiscoveryQuestion | "new" | null>(null);
@@ -20,8 +23,11 @@ export default function QuestionBankPage() {
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
-    fetch(`/api/crm/discovery/questions${showArchived ? "?archived=1" : ""}`).then(r => r.json())
-      .then(d => { setRows(Array.isArray(d) ? d : []); setLoading(false); });
+    fetchJson<unknown>(`/api/crm/discovery/questions${showArchived ? "?archived=1" : ""}`).then(r => {
+      if (r.ok) { setRows(Array.isArray(r.data) ? r.data : []); setLoadError(null); }
+      else setLoadError(r.error);
+      setLoading(false);
+    });
   }, [showArchived]);
   useEffect(load, [load]);
 
@@ -58,13 +64,11 @@ export default function QuestionBankPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-        <div>
-          <h1 className="text-lg font-semibold text-brand-black">Question bank</h1>
-          <p className="text-sm text-brand-muted">Reusable questions for templates and drafts · {rows.filter(r => !r.archived_at).length} active</p>
-        </div>
-        <button onClick={() => { setError(""); setEditing("new"); }} className="btn-primary text-sm">+ New question</button>
-      </div>
+      <PageHeader
+        title="Question bank"
+        description={`Reusable questions for templates and drafts · ${rows.filter(r => !r.archived_at).length} active`}
+        actions={<Button onClick={() => { setError(""); setEditing("new"); }}>+ New question</Button>}
+      />
       <DiscoveryNav />
 
       <div className="flex gap-3 items-center mb-4 flex-wrap">
@@ -74,8 +78,9 @@ export default function QuestionBankPage() {
         </label>
       </div>
 
-      {loading ? <div className="card animate-pulse h-40" /> : grouped.length === 0 ? (
-        <div className="card text-sm text-brand-muted">{rows.length ? "No questions match." : "The bank is empty."}</div>
+      {loadError && <ErrorState message={`Couldn't load the question bank: ${loadError}`} onRetry={load} className="mb-4" />}
+      {loading ? <LoadingState /> : grouped.length === 0 ? (
+        loadError ? null : <EmptyState title={rows.length ? "No questions match." : "The bank is empty."} />
       ) : (
         <div className="space-y-4">
           {grouped.map(([section, qs]) => (
@@ -91,8 +96,8 @@ export default function QuestionBankPage() {
                     </p>
                   </div>
                   <span className="badge badge-neutral text-xs whitespace-nowrap">{TYPE_LABEL[q.type] ?? q.type}</span>
-                  <button onClick={() => { setError(""); setEditing(q); }} className="btn-ghost text-xs px-2 py-1">Edit</button>
-                  <button onClick={() => archive(q)} className="btn-ghost text-xs px-2 py-1">{q.archived_at ? "Restore" : "Archive"}</button>
+                  <Button variant="ghost" size="sm" onClick={() => { setError(""); setEditing(q); }}>Edit</Button>
+                  <Button variant="ghost" size="sm" onClick={() => archive(q)}>{q.archived_at ? "Restore" : "Archive"}</Button>
                 </div>
               ))}
             </div>
@@ -101,7 +106,7 @@ export default function QuestionBankPage() {
       )}
 
       {editing && (
-        <Modal title={editing === "new" ? "New question" : "Edit question"} onClose={() => setEditing(null)}>
+        <Modal open size="lg" title={editing === "new" ? "New question" : "Edit question"} onClose={() => setEditing(null)}>
           {editing !== "new" && (
             <p className="text-xs text-brand-muted mb-4">
               Changes apply to templates and new drafts. Questionnaires already sent keep the wording they were sent with.

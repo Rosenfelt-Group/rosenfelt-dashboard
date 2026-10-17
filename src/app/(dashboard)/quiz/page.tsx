@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import clsx from "clsx";
+import { EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
 
 type Lead = {
   id: string;
@@ -75,18 +76,19 @@ export default function QuizPage() {
 
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8 space-y-8">
-      <div>
-        <h1 className="text-xl font-semibold text-brand-black">Quiz Analytics</h1>
-        <p className="text-sm text-brand-muted mt-0.5">Assessment leads + funnel conversion · rolling 30 days</p>
-      </div>
+      <PageHeader
+        className="!mb-0"
+        title="Quiz Analytics"
+        description="Assessment leads + funnel conversion · rolling 30 days"
+      />
 
       {/* ── Funnel ─────────────────────────────────────────────────────────── */}
       <section>
         <h2 className="text-sm font-semibold text-brand-black mb-3">Funnel</h2>
         {loading ? (
-          <div className="card animate-pulse h-32" />
+          <LoadingState rows={2} />
         ) : funnelErr ? (
-          <div className="card p-4 text-sm text-red-600">{funnelErr}</div>
+          <ErrorState message={funnelErr} />
         ) : funnel && (
           <div className="card divide-y divide-brand-border">
             {funnel.steps.map((step, i) => {
@@ -128,11 +130,11 @@ export default function QuizPage() {
           {leads.length > 0 && <span className="ml-2 text-brand-muted font-normal">{leads.length}</span>}
         </h2>
         {loading ? (
-          <div className="card animate-pulse h-48" />
+          <LoadingState />
         ) : leadsErr ? (
-          <div className="card p-4 text-sm text-red-600">{leadsErr}</div>
+          <ErrorState message={leadsErr} />
         ) : leads.length === 0 ? (
-          <div className="card p-6 text-sm text-brand-muted text-center">No leads yet.</div>
+          <EmptyState title="No leads yet." />
         ) : (
           <div className="card overflow-x-auto [-webkit-overflow-scrolling:touch]">
             <table className="w-full text-sm">

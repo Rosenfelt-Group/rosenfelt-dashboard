@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { fetchJson } from "@/lib/fetch-json";
+import { Button } from "@/components/ui";
 
 // Emails the room invite for a just-issued link from brian@rosably.com. Hidden when the app has no
 // email set up; Copy stays available alongside it as the fallback.
@@ -46,10 +47,9 @@ export function SendInviteEmail({ engagementId, accessId, link, refreshed, sugge
         <datalist id={`invite-to-${accessId}`}>{suggestions.map(s => <option key={s} value={s} />)}</datalist>
         <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="First name (optional)"
           className="border border-brand-border rounded px-2 py-1.5 text-sm w-44 bg-white" />
-        <button disabled={busy || !to.trim()} onClick={send}
-          className="px-3 py-1.5 text-sm rounded bg-brand-orange text-white disabled:opacity-50">
+        <Button size="sm" disabled={busy || !to.trim()} onClick={send}>
           {busy ? "Sending…" : "Send email"}
-        </button>
+        </Button>
       </div>
       {result && <p className={`mt-1 text-xs ${result.ok ? "text-green-700" : "text-red-600"}`}>{result.text}</p>}
     </div>

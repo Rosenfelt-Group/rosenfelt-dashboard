@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AgentBadge } from "@/components/AgentBadge";
 import clsx from "clsx";
 import { usePolling } from "@/lib/use-polling";
+import { Button, ErrorState, LoadingState } from "@/components/ui";
 
 type Agent = "jordan" | "riley" | "avery" | "casey" | "sam";
 
@@ -269,12 +270,9 @@ export function CostPanel() {
           {/* Date picker */}
           <div className="flex items-center gap-2">
             {!isViewingToday && (
-              <button
-                onClick={() => setSelectedDate(getETDateString())}
-                className="text-xs px-3 py-1.5 rounded-lg bg-brand-orange text-white hover:bg-brand-orange/90 font-medium transition-colors"
-              >
+              <Button size="sm" onClick={() => setSelectedDate(getETDateString())}>
                 Today
-              </button>
+              </Button>
             )}
             <input
               type="date"
@@ -316,12 +314,9 @@ export function CostPanel() {
       )}
 
       {loading ? (
-        <div className="space-y-4 mb-8">
-          <div className="card animate-pulse h-48" />
-          <div className="card animate-pulse h-64" />
-        </div>
+        <LoadingState className="mb-8" />
       ) : error ? (
-        <div className="card p-6 text-sm text-red-600 bg-red-50 mb-8">{error}</div>
+        <ErrorState className="mb-8" message={error} onRetry={load} />
       ) : (
         <>
           {/* ── Per-agent summary table ── */}

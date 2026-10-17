@@ -7,6 +7,7 @@ import {
   computeHealth, DOC_HEALTH_LABELS,
 } from "@/lib/doc-types";
 import { formatDistanceToNow, parseISO } from "date-fns";
+import { Button } from "@/components/ui";
 
 export interface ClientOption { id: string; name: string; }
 
@@ -159,13 +160,9 @@ export default function MetadataDrawer({ doc, clients, onClose, onSaved }: Metad
 
             {saveError && <div className="text-xs text-red-600 bg-red-50 rounded p-2">{saveError}</div>}
 
-            <button onClick={handleSave} disabled={saving}
-              className={clsx(
-                "w-full text-sm font-medium py-2 rounded-lg transition-colors",
-                saving ? "bg-brand-offwhite text-brand-muted cursor-not-allowed" : "bg-brand-orange text-white hover:bg-brand-orange-dark"
-              )}>
+            <Button className="w-full" onClick={handleSave} disabled={saving}>
               {saving ? "Saving…" : "Save changes"}
-            </button>
+            </Button>
           </div>
         )}
       </div>

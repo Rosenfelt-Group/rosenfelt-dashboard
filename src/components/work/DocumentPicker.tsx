@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
+import { Modal } from "@/components/ui";
+import { fetchJson } from "@/lib/fetch-json";
 import { docTypeLabel } from "@/lib/doc-types";
 
 type DocEntry = {
@@ -32,22 +34,24 @@ export function DocumentPicker({ workItemId, onClose, onAttached }: Props) {
   const [query, setQuery] = useState("");
   const [attachingId, setAttachingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Modal focuses its first control (the close button) on open; put the
+  // cursor in the search box instead, as before.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => searchRef.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   // Initial fetch
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const res = await fetch("/api/docs/list");
-        const data = await res.json();
-        if (!cancelled) {
-          setDocs(Array.isArray(data) ? data : []);
-        }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load docs");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      const r = await fetchJson<DocEntry[]>("/api/docs/list");
+      if (cancelled) return;
+      if (r.ok) setDocs(Array.isArray(r.data) ? r.data : []);
+      else setError(`Failed to load docs: ${r.error}`);
+      setLoading(false);
     })();
     return () => {
       cancelled = true;
@@ -112,83 +116,69 @@ export function DocumentPicker({ workItemId, onClose, onAttached }: Props) {
   const totalShown = grouped.reduce((sum, [, list]) => sum + list.length, 0);
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-2xl shadow-xl flex flex-col max-h-[80vh]">
-        <div className="px-4 py-3 border-b border-brand-border">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-semibold text-brand-black text-sm">Attach document</h3>
-            <button
-              onClick={onClose}
-              className="text-brand-muted hover:text-brand-black text-lg leading-none"
-              aria-label="Close"
-            >
-              ×
-            </button>
-          </div>
-          <input
-            autoFocus
-            value={rawQuery}
-            onChange={(e) => setRawQuery(e.target.value)}
-            placeholder="Search by name or description…"
-            className="w-full rounded border border-brand-border px-3 py-1.5 text-sm focus:outline-none focus:border-brand-orange"
-          />
-          <p className="text-[11px] text-brand-muted mt-1">
-            {loading ? "Loading…" : `${totalShown} document${totalShown === 1 ? "" : "s"}`}
-            {query && !loading && ` matching "${query}"`}
-          </p>
-        </div>
+    <Modal open onClose={onClose} title="Attach document" size="xl">
+      <input
+        ref={searchRef}
+        value={rawQuery}
+        onChange={(e) => setRawQuery(e.target.value)}
+        placeholder="Search by name or description…"
+        className="w-full rounded border border-brand-border px-3 py-1.5 text-sm focus:outline-none focus:border-brand-orange"
+      />
+      <p className="text-[11px] text-brand-muted mt-1 mb-2">
+        {loading ? "Loading…" : `${totalShown} document${totalShown === 1 ? "" : "s"}`}
+        {query && !loading && ` matching "${query}"`}
+      </p>
 
-        {error && (
-          <div className="px-4 py-2 text-xs text-red-700 bg-red-50 border-b border-red-100">
-            {error}
+      {error && (
+        <div className="px-4 py-2 text-xs text-red-700 bg-red-50 border border-red-100 rounded" role="alert">
+          {error}
+        </div>
+      )}
+
+      <div className="py-2">
+        {!loading && grouped.length === 0 && (
+          <div className="text-xs text-brand-muted px-3 py-6 text-center">
+            {query ? "No documents match." : "No documents in registry."}
           </div>
         )}
-
-        <div className="flex-1 overflow-y-auto px-2 py-2">
-          {!loading && grouped.length === 0 && (
-            <div className="text-xs text-brand-muted px-3 py-6 text-center">
-              {query ? "No documents match." : "No documents in registry."}
+        {grouped.map(([category, list]) => (
+          <div key={category} className="mb-3">
+            <div className="text-[10px] uppercase tracking-wide font-semibold text-brand-muted px-2 py-1">
+              {docTypeLabel(category)}
             </div>
-          )}
-          {grouped.map(([category, list]) => (
-            <div key={category} className="mb-3">
-              <div className="text-[10px] uppercase tracking-wide font-semibold text-brand-muted px-2 py-1">
-                {docTypeLabel(category)}
-              </div>
-              <div className="space-y-0.5">
-                {list.map((d) => (
-                  <button
-                    key={d.id}
-                    onClick={() => attach(d)}
-                    disabled={attachingId !== null}
-                    className={clsx(
-                      "w-full text-left px-3 py-2 rounded hover:bg-brand-offwhite transition",
-                      "flex items-start gap-2",
-                      attachingId === d.id && "opacity-60",
-                    )}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-brand-black truncate">
-                          {d.name}
-                        </span>
-                      </div>
-                      {d.description && (
-                        <div className="text-xs text-brand-muted truncate">
-                          {truncate(d.description, 80)}
-                        </div>
-                      )}
+            <div className="space-y-0.5">
+              {list.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => attach(d)}
+                  disabled={attachingId !== null}
+                  className={clsx(
+                    "w-full text-left px-3 py-2 rounded hover:bg-brand-offwhite transition",
+                    "flex items-start gap-2",
+                    attachingId === d.id && "opacity-60",
+                  )}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-brand-black truncate">
+                        {d.name}
+                      </span>
                     </div>
-                    {attachingId === d.id && (
-                      <span className="text-[10px] text-brand-muted">Attaching…</span>
+                    {d.description && (
+                      <div className="text-xs text-brand-muted truncate">
+                        {truncate(d.description, 80)}
+                      </div>
                     )}
-                  </button>
-                ))}
-              </div>
+                  </div>
+                  {attachingId === d.id && (
+                    <span className="text-[10px] text-brand-muted">Attaching…</span>
+                  )}
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -5,6 +5,8 @@ import type { WorkItemDoc } from "@/types";
 import { docTypeLabel } from "@/lib/doc-types";
 import { VpsBrowserModal } from "./VpsBrowserModal";
 import { DocumentPicker } from "./DocumentPicker";
+import { Button } from "@/components/ui";
+import { fetchJson } from "@/lib/fetch-json";
 
 type Props = { workItemId: string };
 
@@ -17,12 +19,13 @@ export function WorkDocsPanel({ workItemId }: Props) {
   const [docs, setDocs] = useState<WorkItemDoc[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [showBrowser, setShowBrowser] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function loadDocs() {
-    const res = await fetch(`/api/work/${workItemId}/docs`);
-    if (!res.ok) return;
-    const data = await res.json();
-    setDocs(data.docs ?? []);
+    const r = await fetchJson<{ docs?: WorkItemDoc[] }>(`/api/work/${workItemId}/docs`);
+    if (!r.ok) { setLoadError(r.error); return; }
+    setLoadError(null);
+    setDocs(r.data.docs ?? []);
   }
 
   useEffect(() => {
@@ -54,13 +57,13 @@ export function WorkDocsPanel({ workItemId }: Props) {
         <div className="text-xs font-semibold text-brand-muted uppercase tracking-wide">
           Documents
         </div>
-        <button
-          onClick={() => setShowPicker(true)}
-          className="rounded bg-brand-orange text-white text-xs px-2 py-1 hover:opacity-90"
-        >
+        <Button size="sm" onClick={() => setShowPicker(true)}>
           + Attach Document
-        </button>
+        </Button>
       </div>
+      {loadError && (
+        <p className="text-xs text-red-600 mb-2" role="alert">Couldn&apos;t load documents: {loadError}</p>
+      )}
       <div className="space-y-2">
         {docs.map((d) => {
           // Anything served by a dashboard API route, or any .pdf, is

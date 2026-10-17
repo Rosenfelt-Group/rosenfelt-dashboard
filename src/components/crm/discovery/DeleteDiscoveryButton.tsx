@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DiscoveryStatus } from "@/types";
+import { Button } from "@/components/ui";
 
 /** The confirm text, stronger once the prospect may have answered. */
 export function deleteConfirmMessage(status: DiscoveryStatus, hasResponse: boolean): string {
@@ -34,9 +35,9 @@ export function DeleteDiscoveryButton({ inviteId, status, hasResponse, onDeleted
 
   return (
     <>
-      <button onClick={remove} disabled={disabled || busy} className="btn-ghost text-xs px-3 py-1.5 text-red-600">
+      <Button variant="ghost" size="sm" onClick={remove} disabled={disabled || busy} className="!text-red-600">
         {busy ? "Deleting…" : status === "draft" ? "Delete draft" : "Delete"}
-      </button>
+      </Button>
       {error && <span className="text-xs text-red-600">{error}</span>}
     </>
   );
