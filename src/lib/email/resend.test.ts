@@ -80,11 +80,55 @@ beforeEach(() => {
 });
 
 const roomEvent = () => event({ tag: "dashboard-room-invite", source_group: "dashboard", metadata: { engagement_id: ENG, access_id: ACC } });
+const FUTURE = new Date(Date.now() + 30 * 86_400_000).toISOString();
+const openRoom = (over: Record<string, unknown> = {}) => ({
+  engagement_access: { revoked_at: null, expires_at: FUTURE },
+  engagements: { status: "active", lead_id: LEAD },
+  leads: { contact_id: CONTACT },
+  contacts: { id: CONTACT, email: "pat@hope.org", first_name: "Pat" },
+  ...over,
+});
+const openInvite = (over: Record<string, unknown> = {}) => ({
+  discovery_invites: { lead_id: LEAD, status: "sent", expires_at: FUTURE },
+  leads: { contact_id: CONTACT },
+  contacts: { id: CONTACT, email: "pat@hope.org", first_name: "Pat" },
+  ...over,
+});
 const discoveryEvent = () => event({ tag: "dashboard-discovery-invite", source_group: "dashboard", metadata: { discovery_invite_id: INV } });
 
 describe("resendEvent — room invite", () => {
-  it("closed room → 409, nothing sent, nothing resolved", async () => {
+  it("closed room → 409 before refreshing, nothing sent, nothing resolved", async () => {
     vi.mocked(getEvent).mockResolvedValue(roomEvent());
+    s.rows = openRoom({ engagements: { status: "closed", lead_id: LEAD } });
+    const r = await resendEvent(EV, { by: "brian" });
+    expect(r).toEqual({ ok: false, status: 409, error: "This link is revoked or expired, or the room is closed." });
+    expect(refreshAccess).not.toHaveBeenCalled();
+    expect(sendRoomInvite).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(resolveEvents).not.toHaveBeenCalled();
+  });
+
+  it("closed room with unblock → 409 and the address stays blocked", async () => {
+    vi.mocked(getEvent).mockResolvedValue(roomEvent());
+    s.rows = openRoom({ engagements: { status: "closed", lead_id: LEAD } });
+    vi.mocked(listSuppressions).mockResolvedValue([{ email: "pat@hope.org", reason: "HardBounce", origin: "Recipient", createdAt: "" }]);
+    expect(await resendEvent(EV, { unblock: true, by: "brian" })).toMatchObject({ ok: false, status: 409 });
+    expect(unsuppress).not.toHaveBeenCalled();
+    expect(logAction).not.toHaveBeenCalled();
+  });
+
+  it("revoked or expired link → 409 before refreshing", async () => {
+    vi.mocked(getEvent).mockResolvedValue(roomEvent());
+    s.rows = openRoom({ engagement_access: { revoked_at: "2026-10-16T00:00:00Z", expires_at: FUTURE } });
+    expect(await resendEvent(EV, { by: "brian" })).toMatchObject({ ok: false, status: 409 });
+    s.rows = openRoom({ engagement_access: { revoked_at: null, expires_at: "2026-01-01T00:00:00Z" } });
+    expect(await resendEvent(EV, { by: "brian" })).toMatchObject({ ok: false, status: 409 });
+    expect(refreshAccess).not.toHaveBeenCalled();
+  });
+
+  it("refresh refused (race) → its 409, nothing sent, nothing resolved", async () => {
+    vi.mocked(getEvent).mockResolvedValue(roomEvent());
+    s.rows = openRoom();
     vi.mocked(refreshAccess).mockResolvedValue({
       ok: false, status: 409, error: "This link can't be refreshed: it was already revoked or the room is closed.",
     });
@@ -97,7 +141,7 @@ describe("resendEvent — room invite", () => {
 
   it("refreshes the link, sends the new link as a refreshed invite, resolves the event", async () => {
     vi.mocked(getEvent).mockResolvedValue(roomEvent());
-    s.rows = { engagements: { lead_id: LEAD }, leads: { contact_id: CONTACT }, contacts: { id: CONTACT, email: "pat@hope.org", first_name: "Pat" } };
+    s.rows = openRoom();
     const r = await resendEvent(EV, { by: "brian" });
     expect(r).toEqual({ ok: true, messageId: "pm-room" });
     expect(refreshAccess).toHaveBeenCalledWith(ENG, ACC);
@@ -122,7 +166,7 @@ describe("resendEvent — room invite", () => {
 describe("resendEvent — discovery invite", () => {
   it("corrected address: sends there and saves it on the lead's contact", async () => {
     vi.mocked(getEvent).mockResolvedValue(discoveryEvent());
-    s.rows = { discovery_invites: { lead_id: LEAD }, leads: { contact_id: CONTACT }, contacts: { id: CONTACT, email: "pat@hope.org", first_name: "Pat" } };
+    s.rows = openInvite();
     const r = await resendEvent(EV, { to: "pat@hopefood.org", by: "brian" });
     expect(r).toEqual({ ok: true, messageId: "pm-disc", contactUpdated: true });
     expect(emailInvite).toHaveBeenCalledWith(INV, { to: "pat@hopefood.org", firstName: "Pat" });
@@ -135,18 +179,40 @@ describe("resendEvent — discovery invite", () => {
 
   it("corrected address with no contact on the lead → contactUpdated false", async () => {
     vi.mocked(getEvent).mockResolvedValue(discoveryEvent());
-    s.rows = { discovery_invites: { lead_id: LEAD }, leads: { contact_id: null } };
+    s.rows = openInvite({ leads: { contact_id: null } });
     const r = await resendEvent(EV, { to: "pat@hopefood.org", by: "brian" });
     expect(r).toEqual({ ok: true, messageId: "pm-disc", contactUpdated: false });
     expect(s.updates).toEqual([]);
   });
 
-  it("closed/expired questionnaire → its 409, contact untouched, nothing resolved", async () => {
+  it("contact's stored email isn't the bounced address → sends, but leaves the contact alone", async () => {
     vi.mocked(getEvent).mockResolvedValue(discoveryEvent());
-    s.rows = { discovery_invites: { lead_id: LEAD }, leads: { contact_id: CONTACT }, contacts: { id: CONTACT, email: "pat@hope.org", first_name: "Pat" } };
-    vi.mocked(emailInvite).mockResolvedValue({ sent: false, status: 409, error: "Only an open, unexpired questionnaire can be emailed." });
+    s.rows = openInvite({ contacts: { id: CONTACT, email: "pat.work@hope.org", first_name: "Pat" } });
     const r = await resendEvent(EV, { to: "pat@hopefood.org", by: "brian" });
-    expect(r).toEqual({ ok: false, status: 409, error: "Only an open, unexpired questionnaire can be emailed." });
+    expect(r).toEqual({ ok: true, messageId: "pm-disc", contactUpdated: false });
+    expect(emailInvite).toHaveBeenCalled();
+    expect(s.updates).toEqual([]);
+  });
+
+  it("closed/expired questionnaire → 409 before sending or unblocking, contact untouched", async () => {
+    vi.mocked(getEvent).mockResolvedValue(discoveryEvent());
+    vi.mocked(listSuppressions).mockResolvedValue([{ email: "pat@hopefood.org", reason: "HardBounce", origin: "Recipient", createdAt: "" }]);
+    for (const inv of [{ status: "submitted", expires_at: FUTURE }, { status: "sent", expires_at: "2026-01-01T00:00:00Z" }]) {
+      s.rows = openInvite({ discovery_invites: { lead_id: LEAD, ...inv } });
+      const r = await resendEvent(EV, { to: "pat@hopefood.org", unblock: true, by: "brian" });
+      expect(r).toEqual({ ok: false, status: 409, error: "Only an open, unexpired questionnaire can be emailed." });
+    }
+    expect(emailInvite).not.toHaveBeenCalled();
+    expect(unsuppress).not.toHaveBeenCalled();
+    expect(s.updates).toEqual([]);
+    expect(resolveEvents).not.toHaveBeenCalled();
+  });
+
+  it("send refused by emailInvite → its status, contact untouched, nothing resolved", async () => {
+    vi.mocked(getEvent).mockResolvedValue(discoveryEvent());
+    s.rows = openInvite();
+    vi.mocked(emailInvite).mockResolvedValue({ sent: false, status: 502, error: "The email couldn't be sent. Copy the invite instead." });
+    expect(await resendEvent(EV, { to: "pat@hopefood.org", by: "brian" })).toMatchObject({ ok: false, status: 502 });
     expect(s.updates).toEqual([]);
     expect(resolveEvents).not.toHaveBeenCalled();
   });
@@ -165,10 +231,12 @@ describe("resendEvent — n8n customer email", () => {
     expect(s.updates).toEqual([]);
   });
 
-  it("message with an attachment → 422, nothing sent", async () => {
+  it("message with an attachment → 422, nothing sent, address stays blocked", async () => {
     vi.mocked(getMessage).mockResolvedValue({ id: "pm-old", to: "", subject: "x", metadata: {}, hasAttachments: true, events: [] });
-    expect(await resendEvent(EV, { by: "brian" })).toMatchObject({ ok: false, status: 422 });
+    vi.mocked(listSuppressions).mockResolvedValue([{ email: "pat@hope.org", reason: "HardBounce", origin: "Recipient", createdAt: "" }]);
+    expect(await resendEvent(EV, { unblock: true, by: "brian" })).toMatchObject({ ok: false, status: 422 });
     expect(sendEmail).not.toHaveBeenCalled();
+    expect(unsuppress).not.toHaveBeenCalled();
   });
 });
 
