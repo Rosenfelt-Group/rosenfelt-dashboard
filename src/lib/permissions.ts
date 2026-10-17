@@ -19,6 +19,7 @@ export const MANAGE_PERMISSIONS = [
   "manage_users",
   "manage_rbac",
   "manage_documents",
+  "manage_intelligence",
 ] as const;
 
 export const ALL_PERMISSIONS = [...VIEW_PERMISSIONS, ...MANAGE_PERMISSIONS] as const;
@@ -42,6 +43,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   manage_users:     "Manage Users",
   manage_rbac:      "Manage Roles",
   manage_documents: "Manage Documents",
+  manage_intelligence: "Edit Agent Prompts & Memory",
 };
 
 export const PERMISSION_GROUPS = {
@@ -56,4 +58,17 @@ export const DEFAULT_PERMISSIONS: Record<string, string[]> = {
 
 export function can(permissions: string[], permission: string): boolean {
   return permissions.includes(permission);
+}
+
+/**
+ * Session-aware permission check: the "admin" role has every permission,
+ * even ones added after its session JWT was issued; any other role needs the
+ * permission listed explicitly.
+ */
+export function hasPermission(
+  session: { role?: string | null; permissions?: readonly string[] | null },
+  permission: string,
+): boolean {
+  if (session.role === "admin") return true;
+  return session.permissions?.includes(permission) ?? false;
 }

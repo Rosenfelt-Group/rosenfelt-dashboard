@@ -28,12 +28,15 @@ function AgentDetailInner({ agent }: { agent: AgentName }) {
   const router = useRouter();
   const permissions = usePermissions();
   const canChat = permissions?.includes("use_chat") ?? false;
+  const canViewIntel = permissions?.includes("view_intelligence") ?? false;
+  const canManageIntel = permissions?.includes("manage_intelligence") ?? false;
+  const allowed: Partial<Record<AgentDetailTab, boolean>> = { chat: canChat, prompts: canViewIntel };
 
   const requested = parseTab(searchParams.get("tab"), AGENT_DETAIL_TABS);
-  // Until permissions load, a ?tab=chat link shows a loader rather than
-  // bouncing to Status; without use_chat it falls back to Status.
-  const tab: AgentDetailTab = requested === "chat" && permissions !== null && !canChat ? "status" : requested;
-  const tabs = ALL_TABS.filter(t => t.id !== "chat" || canChat);
+  // Until permissions load, a ?tab=chat / ?tab=prompts link shows a loader
+  // rather than bouncing to Status; without the permission it falls back to Status.
+  const tab: AgentDetailTab = permissions !== null && allowed[requested] === false ? "status" : requested;
+  const tabs = ALL_TABS.filter(t => allowed[t.id] !== false);
 
   const [visited, setVisited] = useState<ReadonlySet<AgentDetailTab>>(() => new Set([tab]));
   useEffect(() => {
@@ -65,13 +68,13 @@ function AgentDetailInner({ agent }: { agent: AgentName }) {
 
       {tab === "status" && <AgentStatusPanel agent={agent} />}
       {tab === "history" && <AgentHistory agent={agent} />}
-      {tab === "chat" && permissions === null && <LoadingState />}
+      {(tab === "chat" || tab === "prompts") && permissions === null && <LoadingState />}
       {canChat && visited.has("chat") && (
         <div hidden={tab !== "chat"}><AgentChat agent={agent} /></div>
       )}
-      {visited.has("prompts") && (
+      {canViewIntel && visited.has("prompts") && (
         <div hidden={tab !== "prompts"}>
-          <AgentPromptsAndMemory agent={agent} />
+          <AgentPromptsAndMemory agent={agent} readOnly={!canManageIntel} />
         </div>
       )}
     </div>
