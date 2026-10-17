@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { Sidebar } from "./Sidebar";
+import { Sidebar, SectionSubNav } from "./Sidebar";
 
 // ── System alerts ─────────────────────────────────────────────────────────────
 
@@ -120,6 +120,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           flex sibling (not fixed), so no top offset is needed at >=900px. */}
       <div className="flex-1 min-h-screen min-w-0 pt-14 min-[900px]:pt-0">
         <main className="min-h-screen">
+          <SectionSubNav />
           <SystemBanner />
           {children}
         </main>

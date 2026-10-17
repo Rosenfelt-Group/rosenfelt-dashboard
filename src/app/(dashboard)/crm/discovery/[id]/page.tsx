@@ -4,7 +4,6 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import clsx from "clsx";
 import { format, formatDistanceToNow } from "date-fns";
-import { CRMNav } from "@/components/CRMNav";
 import { CopyButton } from "@/components/crm/CopyButton";
 import { inviteEmail } from "@/lib/discovery/invite-email";
 import { SamMarkdown } from "@/components/SamMarkdown";
@@ -136,7 +135,6 @@ export default function DiscoveryDetailPage() {
     const contact = d.contact ? `${d.contact.first_name}${d.contact.last_name ? " " + d.contact.last_name : ""}` : "—";
     return (
       <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-        <CRMNav />
         <Link href="/crm/discovery" className="text-xs text-brand-muted hover:text-brand-black">← Discovery</Link>
         <div className="flex items-center gap-2 mt-2 mb-4 flex-wrap">
           <h1 className="text-lg font-semibold text-brand-black">{d.business?.name ?? "—"}</h1>
@@ -168,7 +166,6 @@ export default function DiscoveryDetailPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <CRMNav />
       <Link href="/crm/discovery" className="text-xs text-brand-muted hover:text-brand-black">← Discovery</Link>
 
       <div className="card mt-2 mb-4">

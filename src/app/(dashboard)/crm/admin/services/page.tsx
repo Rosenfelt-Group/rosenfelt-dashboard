@@ -1,7 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
-import { CRMNav } from "@/components/CRMNav";
 import type { ServiceTemplate, ServiceBillingType, ServiceBillingInterval } from "@/types";
 
 const BILLING_TYPES: ServiceBillingType[] = ["recurring", "one_time", "tm"];
@@ -96,7 +95,6 @@ export default function ServiceCatalogPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <CRMNav />
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-semibold text-brand-black">Service catalog</h1>

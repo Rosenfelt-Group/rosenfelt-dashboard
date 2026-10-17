@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
-import { CRMNav } from "@/components/CRMNav";
 import { NewDiscoveryModal } from "@/components/crm/NewDiscoveryModal";
 import { CopyButton } from "@/components/crm/CopyButton";
 import { DiscoveryNav } from "@/components/crm/discovery/DiscoveryNav";
@@ -52,7 +51,6 @@ function DiscoveryList() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <CRMNav />
       <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
         <div>
           <h1 className="text-lg font-semibold text-brand-black">Discovery</h1>

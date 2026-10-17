@@ -7,7 +7,6 @@ import { formatDistanceToNow, format } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
 import { AgentBadge } from "@/components/AgentBadge";
-import { CRMNav } from "@/components/CRMNav";
 import { STAGES } from "@/lib/crm/stages";
 import { Agent } from "@/types";
 import { safeHref } from "@/lib/safe-url";
@@ -207,7 +206,6 @@ export default function LeadDetailPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
-      <CRMNav />
 
       {/* Header */}
       <div className="card mb-4">

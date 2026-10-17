@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/fetch-json";
 import { CRMContact, CRMBusiness, CRMContactRole } from "@/types";
-import { CRMNav } from "@/components/CRMNav";
 
 type Form = {
   firstName: string;
@@ -138,7 +137,6 @@ export default function ContactsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
-      <CRMNav />
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-brand-black">Contacts</h1>

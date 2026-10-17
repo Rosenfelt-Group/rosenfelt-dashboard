@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import clsx from "clsx";
-import { CRMNav } from "@/components/CRMNav";
 import { DiscoveryNav } from "@/components/crm/discovery/DiscoveryNav";
 import { INPUT, LABEL } from "@/components/crm/discovery/QuestionForm";
 import { QuestionnaireOutline } from "@/components/crm/discovery/QuestionnaireOutline";
@@ -131,7 +130,6 @@ export default function TemplateEditorPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <CRMNav />
       <DiscoveryNav />
       <Link href="/crm/discovery/templates" className="text-xs text-brand-muted hover:text-brand-black">← Templates</Link>
 
