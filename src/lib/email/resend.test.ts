@@ -148,6 +148,7 @@ describe("resendEvent — room invite", () => {
     expect(vi.mocked(refreshAccess).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(sendRoomInvite).mock.invocationCallOrder[0]);
     expect(sendRoomInvite).toHaveBeenCalledWith(expect.objectContaining({
       engagementId: ENG, accessId: NEW_ACC, to: "pat@hope.org", link: NEW_LINK, firstName: "Pat", refreshed: true, by: "brian",
+      timeZone: "America/New_York",
     }));
     expect(resolveEvents).toHaveBeenCalledWith({ id: EV }, "resent", "brian");
     const logged = vi.mocked(logAction).mock.calls.find(([a]) => a.action === "resend")![0];
@@ -237,6 +238,45 @@ describe("resendEvent — n8n customer email", () => {
     expect(await resendEvent(EV, { unblock: true, by: "brian" })).toMatchObject({ ok: false, status: 422 });
     expect(sendEmail).not.toHaveBeenCalled();
     expect(unsuppress).not.toHaveBeenCalled();
+  });
+});
+
+describe("resendEvent — resolving the incident", () => {
+  it("resolves the event, then the bounced address's other open rows (the companion block) as resent", async () => {
+    await resendEvent(EV, { by: "brian" });
+    expect(vi.mocked(resolveEvents).mock.calls).toEqual([
+      [{ id: EV }, "resent", "brian"],
+      [{ recipient: "pat@hope.org" }, "resent", "brian"],
+    ]);
+  });
+
+  it("after unblocking first, the unblocked address's rows resolve as unblocked", async () => {
+    vi.mocked(listSuppressions).mockResolvedValue([{ email: "pat@hope.org", reason: "HardBounce", origin: "Recipient", createdAt: "" }]);
+    await resendEvent(EV, { unblock: true, by: "brian" });
+    expect(vi.mocked(resolveEvents).mock.calls).toEqual([
+      [{ id: EV }, "resent", "brian"],
+      [{ recipient: "pat@hope.org" }, "unblocked", "brian"],
+      [{ recipient: "pat@hope.org" }, "resent", "brian"],
+    ]);
+  });
+
+  it("corrected address unblocked first: new address → unblocked, bounced address → resent", async () => {
+    vi.mocked(listSuppressions).mockResolvedValue([{ email: "pat@hopefood.org", reason: "HardBounce", origin: "Recipient", createdAt: "" }]);
+    await resendEvent(EV, { to: "pat@hopefood.org", unblock: true, by: "brian" });
+    expect(vi.mocked(resolveEvents).mock.calls).toEqual([
+      [{ id: EV }, "resent", "brian"],
+      [{ recipient: "pat@hopefood.org" }, "unblocked", "brian"],
+      [{ recipient: "pat@hope.org" }, "resent", "brian"],
+    ]);
+  });
+
+  it("a resolve failure is logged, not reported, and the other rows are still resolved", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(resolveEvents).mockRejectedValueOnce(new Error("db down"));
+    expect(await resendEvent(EV, { by: "brian" })).toEqual({ ok: true, messageId: "pm-new" });
+    expect(resolveEvents).toHaveBeenCalledTimes(2);
+    expect(err).toHaveBeenCalled();
+    err.mockRestore();
   });
 });
 

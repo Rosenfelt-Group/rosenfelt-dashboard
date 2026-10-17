@@ -56,6 +56,7 @@ type Prepared = { ok: true; contact: Contact | null; send: () => Promise<Sent> }
 
 const EMAILABLE_DISCOVERY = new Set(["sent", "opened", "in_progress"]); // mirrors discovery/email.ts
 const ROOM_REFUSED = "This link is revoked or expired, or the room is closed.";
+const INVITE_TIME_ZONE = "America/New_York"; // the invite's expiry date is shown in Brian's time zone
 
 // Room invite: the room must be open and the bounced link live. Sending refreshes the link (the old
 // one is revoked) and emails the new one; the raw link only ever lives in memory here.
@@ -78,7 +79,7 @@ async function prepareRoomInvite(ev: EmailEvent, to: string, by: string): Promis
       if (!fresh.ok) return fresh;
       const r = await sendRoomInvite({
         engagementId, accessId: fresh.accessId, to, link: fresh.link,
-        firstName: contact?.first_name ?? undefined, refreshed: true, by,
+        firstName: contact?.first_name ?? undefined, refreshed: true, timeZone: INVITE_TIME_ZONE, by,
       });
       return r.ok ? { ok: true, messageId: r.id } : r;
     },
@@ -180,11 +181,19 @@ export async function resendEvent(eventId: string, opts: { to?: string; unblock?
 
   // The email is out; bookkeeping failures below are logged, never reported as a failed resend.
   const contactUpdated = dashboard && corrected ? await updateContactEmail(prepared.contact, ev.recipient, to) : undefined;
-  try {
-    await resolveEvents({ id: eventId }, "resent", opts.by);
-  } catch (e) {
-    console.error("email resend: resolve failed:", e);
-  }
+  // This row, then the incident's companion rows (e.g. Postmark's "Blocked" SubscriptionChange): rows for an
+  // address unblocked here resolve as "unblocked" (as the suppressions DELETE route does), the bounced
+  // address's remaining open rows as "resent".
+  const resolve = async (filter: { id: string } | { recipient: string }, resolution: "resent" | "unblocked") => {
+    try {
+      await resolveEvents(filter, resolution, opts.by);
+    } catch (e) {
+      console.error("email resend: resolve failed:", e);
+    }
+  };
+  await resolve({ id: eventId }, "resent");
+  if (unblocked) await resolve({ recipient: to }, "unblocked");
+  await resolve({ recipient: ev.recipient }, "resent");
   await logAction({
     action: "resend", recipient: to, eventId, by: opts.by,
     detail: { from_tag: tag, to, new_message_id: sent.messageId, ...(contactUpdated !== undefined ? { contactUpdated } : {}), ...(unblocked ? { unblocked } : {}) },
