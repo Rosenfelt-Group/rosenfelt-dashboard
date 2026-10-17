@@ -64,12 +64,15 @@ async function pm<T>(path: string, init: { method?: "GET" | "POST"; body?: unkno
     // Timeout or network failure: surface as a send_failed so callers treat it as "unreachable".
     throw new EmailError("send_failed", `Postmark unreachable: ${e instanceof Error ? e.message : String(e)}`);
   }
-  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  let parseFailed = false;
+  const body = (await res.json().catch(() => { parseFailed = true; return {}; })) as Record<string, unknown>;
   if (res.status === 401) throw new EmailError("auth_failed", "Postmark rejected the server token", 401);
   if (!res.ok) {
     const detail = body.Message ? `${body.ErrorCode}: ${body.Message}` : String(res.status);
     throw new EmailError("send_failed", `Postmark request failed: ${detail}`, res.status);
   }
+  // A 2xx whose body can't be read (timeout mid-stream, malformed JSON) is a failure, not an empty result.
+  if (parseFailed) throw new EmailError("send_failed", "Postmark returned an unreadable response", res.status);
   return body as T;
 }
 

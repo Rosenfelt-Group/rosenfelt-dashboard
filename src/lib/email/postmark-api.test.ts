@@ -42,6 +42,14 @@ describe("timeout and network failures", () => {
   });
 });
 
+describe("unreadable 2xx body", () => {
+  it("rejects with send_failed when json() fails on a successful response", async () => {
+    const res = new Response("not json", { status: 200 });
+    fetchMock.mockResolvedValueOnce(res);
+    await expect(getOutboundStats("2026-10-10", "2026-10-17")).rejects.toMatchObject({ code: "send_failed" });
+  });
+});
+
 describe("getOutboundStats", () => {
   it("maps stats and sends the token", async () => {
     fetchMock.mockResolvedValueOnce(json({ Sent: 38, Bounced: 1, SpamComplaints: 0 }));
