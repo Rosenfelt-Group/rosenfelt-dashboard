@@ -47,7 +47,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
   let sent: { id: string };
   try {
-    sent = await sendEmail({ to, subject: invite.subject, text: invite.body, fromName: "Brian Rosenfelt" });
+    sent = await sendEmail({ to, subject: invite.subject, text: invite.body, fromName: "Brian Rosenfelt", tag: "dashboard-room-invite", metadata: { engagement_id: id, access_id: accessId } });
   } catch (e) {
     if (e instanceof EmailError && e.code === "not_configured") {
       return NextResponse.json({ error: "Email isn't set up. Copy the invite instead." }, { status: 503 });
