@@ -1,6 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
-import { fetchJson } from "@/lib/fetch-json";
+import { useState } from "react";
 import { CRMLead, CRMStage, CRMSource } from "@/types";
 import { STAGES } from "@/lib/crm/stages";
 import Link from "next/link";
@@ -8,8 +7,7 @@ import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
 import { AgentBadge } from "@/components/AgentBadge";
 import { Agent } from "@/types";
-import { CreateLeadModal } from "@/components/crm/CreateLeadModal";
-import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
+import { Button, EmptyState } from "@/components/ui";
 
 const AGENTS: Agent[] = ["jordan", "riley", "avery", "brian"];
 
@@ -22,27 +20,23 @@ const BLANK_EDIT = {
   lost_reason: "",
 };
 
-export default function LeadsPage() {
-  const [leads, setLeads] = useState<CRMLead[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+type Props = {
+  leads: CRMLead[];
+  onLeadUpdated: (lead: CRMLead) => void;
+};
+
+/** Searchable, stage-filterable list of leads with a side drawer for quick edits. */
+export function LeadsList({ leads, onLeadUpdated }: Props) {
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<CRMStage | "">("");
   const [selected, setSelected] = useState<CRMLead | null>(null);
   const [edit, setEdit] = useState(BLANK_EDIT);
   const [saving, setSaving] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
-
-  useEffect(() => {
-    fetchJson<unknown>("/api/crm/leads").then(r => {
-      if (r.ok) setLeads(Array.isArray(r.data) ? r.data : []);
-      else setLoadError(r.error);
-      setLoading(false);
-    });
-  }, []);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   function openEdit(lead: CRMLead) {
     setSelected(lead);
+    setSaveError(null);
     setEdit({
       stage: lead.stage,
       source: (lead.source ?? "manual") as CRMSource,
@@ -69,10 +63,15 @@ export default function LeadsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    const updated = await res.json();
-    setLeads(prev => prev.map(l => l.id === selected.id ? updated : l));
-    setSelected(updated);
+    const updated = await res.json().catch(() => null);
     setSaving(false);
+    if (!res.ok || !updated) {
+      setSaveError((updated as { error?: string } | null)?.error ?? `Save failed (HTTP ${res.status})`);
+      return;
+    }
+    setSaveError(null);
+    onLeadUpdated(updated);
+    setSelected(updated);
   }
 
   const filtered = leads.filter(l => {
@@ -88,14 +87,8 @@ export default function LeadsPage() {
   const stageMeta = (s: CRMStage) => STAGES.find(x => x.stage === s);
 
   return (
-    <div className="p-4 md:p-8 pb-24 md:pb-8">
-      <PageHeader
-        title="Leads"
-        description={`${filtered.length} of ${leads.length}`}
-        actions={<Button size="sm" onClick={() => setShowCreate(true)}>+ New lead</Button>}
-      />
-
-      <div className="flex gap-2 mb-4 flex-wrap">
+    <div>
+      <div className="flex gap-2 mb-4 flex-wrap items-center">
         <input
           className="border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange w-full max-w-xs"
           placeholder="Search business, contact, email…"
@@ -110,12 +103,10 @@ export default function LeadsPage() {
           <option value="">All stages</option>
           {STAGES.map(s => <option key={s.stage} value={s.stage}>{s.label}</option>)}
         </select>
+        <span className="text-xs text-brand-muted">{filtered.length} of {leads.length}</span>
       </div>
 
-      {loadError && <ErrorState message={`Couldn't load leads: ${loadError}`} className="mb-4" />}
-      {loading ? (
-        <LoadingState />
-      ) : filtered.length === 0 ? (
+      {filtered.length === 0 ? (
         <EmptyState title={search || stageFilter ? "No leads match." : "No leads yet."} />
       ) : (
         <div className="card divide-y divide-brand-border">
@@ -249,6 +240,7 @@ export default function LeadsPage() {
             </div>
           </div>
 
+          {saveError && <p className="px-5 pb-2 text-xs text-red-600">{saveError}</p>}
           <div className="p-5 border-t border-brand-border flex gap-2">
             <Button variant="ghost" className="flex-1" onClick={() => setSelected(null)}>Cancel</Button>
             <Button className="flex-1" onClick={saveEdit} disabled={saving}>
@@ -258,15 +250,6 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {showCreate && (
-        <CreateLeadModal
-          onClose={() => setShowCreate(false)}
-          onCreate={lead => {
-            setLeads(prev => [lead, ...prev]);
-            setShowCreate(false);
-          }}
-        />
-      )}
     </div>
   );
 }

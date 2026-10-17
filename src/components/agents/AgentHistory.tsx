@@ -1,15 +1,19 @@
 "use client";
+// Agent workflow history (+ lazily loaded conversation turns). Used by the
+// /agents "All activity" tab (no agent) and the /agents/[name] History tab.
 import { useCallback, useEffect, useState } from "react";
 import { WorkflowLog, ConversationTurn, Agent } from "@/types";
 import clsx from "clsx";
 import { formatDistanceToNow, parseISO, format } from "date-fns";
-import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
+import { EmptyState, ErrorState } from "@/components/ui";
 import { fetchJson } from "@/lib/fetch-json";
 
 // actions_summary + session_id now live on the canonical WorkflowLog type.
 type WorkflowLogExtended = WorkflowLog;
 
 const AGENTS: Agent[] = ["riley", "jordan", "avery", "casey", "sam"];
+
+export type { WorkflowLogExtended };
 
 const AGENT_COLORS: Record<string, string> = {
   riley:  "bg-purple-50 text-purple-700 border-purple-200",
@@ -126,7 +130,7 @@ function ConversationView({ log }: { log: WorkflowLogExtended }) {
   );
 }
 
-function LogRow({ log }: { log: WorkflowLogExtended }) {
+export function LogRow({ log, showAgent = true }: { log: WorkflowLogExtended; showAgent?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const ago = formatDistanceToNow(parseISO(log.created_at), { addSuffix: true });
   const { tools, response } = parseActionsSummary(log.actions_summary);
@@ -165,7 +169,7 @@ function LogRow({ log }: { log: WorkflowLogExtended }) {
           </div>
 
           {/* Agent chip */}
-          <AgentChip agent={log.agent} />
+          {showAgent && <AgentChip agent={log.agent} />}
 
           {/* Status badge */}
           <span className={clsx("text-xs px-2 py-0.5 rounded font-medium hidden sm:inline-flex", STATUS_STYLES[log.status])}>
@@ -239,8 +243,8 @@ function LogRow({ log }: { log: WorkflowLogExtended }) {
   );
 }
 
-export default function AgentHistoryPage() {
-  const [logs,         setLogs]         = useState<WorkflowLogExtended[]>([]);
+export function AgentHistory({ agent }: { agent?: Agent }) {
+  const [allLogs,      setAllLogs]      = useState<WorkflowLogExtended[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [agentTab,     setAgentTab]     = useState<Agent | "all">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "success" | "error">("all");
@@ -249,18 +253,23 @@ export default function AgentHistoryPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const r = await fetchJson<WorkflowLogExtended[]>("/api/agent-history");
-    if (r.ok) { setLogs(Array.isArray(r.data) ? r.data : []); setLoadError(null); }
+    if (r.ok) { setAllLogs(Array.isArray(r.data) ? r.data : []); setLoadError(null); }
     else setLoadError(r.error);
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
+  // /api/agent-history returns the latest 200 runs across all agents; a fixed
+  // agent narrows that list client-side.
+  const logs = agent ? allLogs.filter(l => l.agent === agent) : allLogs;
+
   const total       = logs.length;
   const errors      = logs.filter(l => l.status === "error").length;
   const successRate = total > 0 ? Math.round(((total - errors) / total) * 100) : 0;
-  const avgDuration = logs.filter(l => l.duration_ms).length > 0
-    ? Math.round(logs.filter(l => l.duration_ms).reduce((a, l) => a + (l.duration_ms ?? 0), 0) / logs.filter(l => l.duration_ms).length)
+  const timed       = logs.filter(l => l.duration_ms);
+  const avgDuration = timed.length > 0
+    ? Math.round(timed.reduce((a, l) => a + (l.duration_ms ?? 0), 0) / timed.length)
     : 0;
 
   const agentStats = AGENTS.map(a => {
@@ -271,12 +280,12 @@ export default function AgentHistoryPage() {
   });
 
   const filtered = logs
-    .filter(l => agentTab     === "all" || l.agent  === agentTab)
+    .filter(l => agent || agentTab === "all" || l.agent === agentTab)
     .filter(l => statusFilter === "all" || l.status === statusFilter);
 
   if (loading) {
     return (
-      <div className="p-4 md:p-8 space-y-4">
+      <div className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1,2,3,4].map(i => <div key={i} className="card animate-pulse h-20" />)}
         </div>
@@ -285,41 +294,31 @@ export default function AgentHistoryPage() {
     );
   }
 
-  const header = <PageHeader title="Agent History" description="Execution logs from all agents" />;
-
   if (loadError) {
-    return (
-      <div className="p-4 md:p-8">
-        {header}
-        <ErrorState message={`Couldn't load agent history: ${loadError}`} onRetry={load} />
-      </div>
-    );
+    return <ErrorState message={`Couldn't load agent history: ${loadError}`} onRetry={load} />;
   }
 
   if (total === 0) {
     return (
-      <div className="p-4 md:p-8">
-        {header}
-        <div className="card flex flex-col items-center justify-center py-16 text-center">
-          <div className="w-12 h-12 rounded-full bg-brand-offwhite flex items-center justify-center mb-4">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 strokeWidth="1.5" strokeLinecap="round" className="text-brand-muted">
-              <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/>
-            </svg>
-          </div>
-          <p className="text-sm font-medium text-brand-black mb-1">No logs yet</p>
-          <p className="text-xs text-brand-muted max-w-xs">
-            Logs will appear here once your agents are wired to write to Supabase.
-          </p>
+      <div className="card flex flex-col items-center justify-center py-16 text-center">
+        <div className="w-12 h-12 rounded-full bg-brand-offwhite flex items-center justify-center mb-4">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               strokeWidth="1.5" strokeLinecap="round" className="text-brand-muted">
+            <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/>
+          </svg>
         </div>
+        <p className="text-sm font-medium text-brand-black mb-1">No logs yet</p>
+        <p className="text-xs text-brand-muted max-w-xs">
+          {agent
+            ? `No recent executions for ${agent}.`
+            : "Logs will appear here once your agents are wired to write to Supabase."}
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-8 space-y-6 pb-24 md:pb-8">
-      {header}
-
+    <div className="space-y-6">
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Total executions" value={total} />
@@ -328,37 +327,41 @@ export default function AgentHistoryPage() {
         <StatCard label="Errors"           value={errors} sub={errors > 0 ? "tap to filter" : "all clear"} />
       </div>
 
-      {/* Per-agent summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {agentStats.map(({ agent, total: t, errors: e, last }) => (
-          <div key={agent} className="card py-3 px-4">
-            <div className="flex items-center justify-between mb-2">
-              <AgentChip agent={agent} />
-              {last && <span className={clsx("w-2 h-2 rounded-full", STATUS_DOT[last.status])} />}
+      {/* Per-agent summary (cross-agent view only) */}
+      {!agent && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {agentStats.map(({ agent: a, total: t, errors: e, last }) => (
+            <div key={a} className="card py-3 px-4">
+              <div className="flex items-center justify-between mb-2">
+                <AgentChip agent={a} />
+                {last && <span className={clsx("w-2 h-2 rounded-full", STATUS_DOT[last.status])} />}
+              </div>
+              <p className="text-2xl font-semibold text-brand-black">{t}</p>
+              <p className="text-xs text-brand-muted">
+                {e > 0 ? <span className="text-red-600">{e} error{e !== 1 ? "s" : ""}</span> : "no errors"}
+                {last && <> · {formatDistanceToNow(parseISO(last.created_at), { addSuffix: true })}</>}
+              </p>
             </div>
-            <p className="text-2xl font-semibold text-brand-black">{t}</p>
-            <p className="text-xs text-brand-muted">
-              {e > 0 ? <span className="text-red-600">{e} error{e !== 1 ? "s" : ""}</span> : "no errors"}
-              {last && <> · {formatDistanceToNow(parseISO(last.created_at), { addSuffix: true })}</>}
-            </p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Log feed */}
       <div>
         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-          <div className="flex gap-1">
-            {(["all", ...AGENTS] as (Agent | "all")[]).map(a => (
-              <button key={a} onClick={() => setAgentTab(a)}
-                className={clsx(
-                  "px-2.5 py-1 rounded-full text-xs transition-colors capitalize",
-                  agentTab === a ? "bg-brand-orange text-white" : "bg-brand-offwhite text-brand-muted hover:bg-brand-border"
-                )}>
-                {a}
-              </button>
-            ))}
-          </div>
+          {!agent && (
+            <div className="flex gap-1 overflow-x-auto no-scrollbar max-w-full">
+              {(["all", ...AGENTS] as (Agent | "all")[]).map(a => (
+                <button key={a} onClick={() => setAgentTab(a)}
+                  className={clsx(
+                    "px-2.5 py-1 rounded-full text-xs transition-colors capitalize flex-shrink-0",
+                    agentTab === a ? "bg-brand-orange text-white" : "bg-brand-offwhite text-brand-muted hover:bg-brand-border"
+                  )}>
+                  {a}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex gap-1">
             {(["all","success","error"] as const).map(s => (
               <button key={s} onClick={() => setStatusFilter(s)}
@@ -376,7 +379,7 @@ export default function AgentHistoryPage() {
           <EmptyState title="No logs match this filter" />
         ) : (
           <div className="card p-0 overflow-hidden">
-            {filtered.map(log => <LogRow key={log.id} log={log} />)}
+            {filtered.map(log => <LogRow key={log.id} log={log} showAgent={!agent} />)}
           </div>
         )}
         <p className="text-xs text-brand-muted mt-2 text-right">

@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 const PROJECT_REF = "ukfpmpxwdlpsjqbxreza";
 const MGMT_BASE   = "https://api.supabase.com/v1";
@@ -23,7 +24,11 @@ async function managementSql(token: string, query: string) {
   return Array.isArray(body) ? body : (body?.result ?? null);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // Feeds the admin SQL runner: admins only.
+  const check = await requireAdmin(req);
+  if (!check.ok) return check.response;
+
   const token = process.env.SUPABASE_ACCESS_TOKEN;
   if (!token) {
     return NextResponse.json({ tables: [] });

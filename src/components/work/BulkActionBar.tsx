@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import type { WorkStatus } from "@/types";
+import { STATUS_LABEL } from "./work-constants";
 
 type Props = {
   selectedIds: string[];
@@ -8,7 +10,7 @@ type Props = {
   onComplete: () => void | Promise<void>;
 };
 
-const STATUSES = [
+const STATUSES: WorkStatus[] = [
   "inbox", "approved", "prompt_ready", "in_progress", "open",
   "done", "deferred", "cancelled", "rejected",
 ];
@@ -59,7 +61,7 @@ export function BulkActionBar({ selectedIds, onClear, onComplete }: Props) {
           className="rounded text-brand-black px-2 py-1"
         >
           <option value="">Status…</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
         <select
           disabled={pending}

@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { PageHeader } from "@/components/ui";
 
 interface ImageEntry {
   name:      string;
@@ -90,7 +89,8 @@ function ImageRow({ img, selected, onSelect }: {
   );
 }
 
-export default function ImagesPage() {
+/** Browse and preview the image library (/api/images/list). */
+export function ImagesPanel() {
   const [images,   setImages]   = useState<ImageEntry[]>([]);
   const [selected, setSelected] = useState<ImageEntry | null>(null);
   const [loading,  setLoading]  = useState(true);
@@ -119,24 +119,20 @@ export default function ImagesPage() {
   const canPreview = selected ? WEB_PREVIEWABLE.has(selected.extension) : false;
 
   return (
-    <div className="p-4 md:p-8 pt-16 md:pt-8 pb-24 md:pb-8">
-      {/* Header */}
-      <PageHeader
-        title="Images"
-        description={
-          loading
-            ? "Loading…"
-            : error
-            ? "Failed to load image library"
-            : `${images.length} image${images.length !== 1 ? "s" : ""} available`
-        }
-      />
+    <div>
+      <p className="text-sm text-brand-muted mb-4">
+        {loading
+          ? "Loading…"
+          : error
+          ? "Failed to load image library"
+          : `${images.length} image${images.length !== 1 ? "s" : ""} available`}
+      </p>
 
-      <div className="flex gap-4" style={{ height: "calc(100dvh - 14rem)" }}>
+      <div className="flex gap-4" style={{ height: "calc(100dvh - 18rem)" }}>
 
         {/* Left panel */}
         {listOpen && (
-          <div className="w-56 flex-shrink-0 card p-0 overflow-y-auto">
+          <div className="w-40 sm:w-56 flex-shrink-0 card p-0 overflow-y-auto">
             {loading ? (
               <div className="p-4 space-y-3">
                 {[1, 2, 3, 4].map(i => (

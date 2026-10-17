@@ -1,27 +1,28 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { fetchJson } from "@/lib/fetch-json";
 import { CRMLead, CRMStage } from "@/types";
-import { differenceInDays } from "date-fns";
-import clsx from "clsx";
-import Link from "next/link";
-import { STAGES } from "@/lib/crm/stages";
 import { CreateLeadModal } from "@/components/crm/CreateLeadModal";
-import { Button, ErrorState, LoadingState, PageHeader } from "@/components/ui";
+import { LeadsBoard } from "@/components/crm/leads/LeadsBoard";
+import { LeadsList } from "@/components/crm/leads/LeadsList";
+import { Button, ErrorState, LoadingState, PageHeader, Tabs } from "@/components/ui";
 
-const SOURCE_LABELS: Record<string, string> = {
-  website_contact: "Contact form",
-  website_assessment: "Assessment",
-  manual: "Manual",
-  referral: "Referral",
-};
+const VIEWS = [
+  { id: "board", label: "Board" },
+  { id: "list",  label: "List"  },
+] as const;
+type View = typeof VIEWS[number]["id"];
 
-export default function CRMPage() {
+function CRMPipeline() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const view: View = searchParams.get("view") === "list" ? "list" : "board";
+
   const [leads, setLeads] = useState<CRMLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [dragId, setDragId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchJson<unknown>("/api/crm/leads").then(r => {
@@ -30,6 +31,14 @@ export default function CRMPage() {
       setLoading(false);
     });
   }, []);
+
+  function setView(id: View) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (id === "board") params.delete("view");
+    else params.set("view", id);
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : "/crm");
+  }
 
   async function moveStage(leadId: string, stage: CRMStage) {
     await fetch(`/api/crm/leads/${leadId}`, {
@@ -40,86 +49,30 @@ export default function CRMPage() {
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, stage } : l));
   }
 
-  const byStage = (s: CRMStage) => leads.filter(l => l.stage === s);
   const activeCount = leads.filter(l => l.stage !== "lost").length;
-
-  if (loading) {
-    return <div className="p-8"><LoadingState /></div>;
-  }
-  if (loadError) {
-    return (
-      <div className="p-4 md:p-8">
-        <ErrorState message={`Couldn't load the pipeline: ${loadError}`} />
-      </div>
-    );
-  }
+  const wonCount = leads.filter(l => l.stage === "won").length;
 
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8">
       <PageHeader
         title="Pipeline"
-        description={`${activeCount} active · ${byStage("won").length} won`}
+        description={loading || loadError ? undefined : `${activeCount} active · ${wonCount} won`}
         actions={<Button size="sm" onClick={() => setShowCreate(true)}>+ New lead</Button>}
       />
+      <Tabs tabs={VIEWS} value={view} onChange={setView} className="mb-4" />
 
-      <div className="flex flex-wrap gap-3">
-        {STAGES.filter(col => !col.isQuizStage || byStage(col.stage).length > 0).map(col => (
-          <div
-            key={col.stage}
-            onDragOver={e => e.preventDefault()}
-            onDrop={() => {
-              if (dragId && leads.find(l => l.id === dragId)?.stage !== col.stage) {
-                moveStage(dragId, col.stage);
-              }
-              setDragId(null);
-            }}
-            className="min-h-[200px] flex-1 basis-[140px]"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <span className={clsx("badge text-xs", col.color)}>{col.label}</span>
-              <span className="text-xs text-brand-muted">{byStage(col.stage).length}</span>
-            </div>
-            <div className="space-y-2">
-              {byStage(col.stage).map(lead => (
-                <div
-                  key={lead.id}
-                  draggable
-                  onDragStart={() => setDragId(lead.id)}
-                  onDragEnd={() => setDragId(null)}
-                  className="cursor-grab active:cursor-grabbing"
-                >
-                  <Link
-                    href={`/crm/leads/${lead.id}`}
-                    className="block card p-3 hover:border-brand-orange transition-colors"
-                  >
-                    <p className="text-xs font-medium text-brand-black truncate">
-                      {lead.business?.name ?? "—"}
-                    </p>
-                    <p className="text-xs text-brand-muted truncate mt-0.5">
-                      {lead.contact
-                        ? `${lead.contact.first_name}${lead.contact.last_name ? " " + lead.contact.last_name : ""}`
-                        : "—"}
-                    </p>
-                    {lead.source && (
-                      <span className="badge badge-neutral text-xs mt-1.5 block w-fit">
-                        {SOURCE_LABELS[lead.source] ?? lead.source}
-                      </span>
-                    )}
-                    <p className="text-xs text-brand-muted mt-1.5">
-                      {differenceInDays(new Date(), new Date(lead.updated_at))}d in stage
-                    </p>
-                  </Link>
-                </div>
-              ))}
-              {byStage(col.stage).length === 0 && (
-                <div className="border-2 border-dashed border-brand-border rounded-lg p-3 min-h-[60px] flex items-center justify-center">
-                  <p className="text-xs text-brand-muted">—</p>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+      {loading ? (
+        <LoadingState />
+      ) : loadError ? (
+        <ErrorState message={`Couldn't load leads: ${loadError}`} />
+      ) : view === "list" ? (
+        <LeadsList
+          leads={leads}
+          onLeadUpdated={updated => setLeads(prev => prev.map(l => l.id === updated.id ? updated : l))}
+        />
+      ) : (
+        <LeadsBoard leads={leads} onMoveStage={moveStage} />
+      )}
 
       {showCreate && (
         <CreateLeadModal
@@ -131,5 +84,13 @@ export default function CRMPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function CRMPage() {
+  return (
+    <Suspense fallback={<div className="p-8"><LoadingState /></div>}>
+      <CRMPipeline />
+    </Suspense>
   );
 }

@@ -11,9 +11,8 @@ import { VpsTab } from "@/components/status/tabs/VpsTab";
 import { N8nTab } from "@/components/status/tabs/N8nTab";
 import { WordpressTab } from "@/components/status/tabs/WordpressTab";
 import { AuditTab } from "@/components/status/tabs/AuditTab";
-import { KickTab } from "@/components/status/tabs/KickTab";
 
-type Tab = "agents" | "github" | "vercel" | "supabase" | "vps" | "n8n" | "wordpress" | "audit" | "website" | "patches" | "kick";
+type Tab = "agents" | "github" | "vercel" | "supabase" | "vps" | "n8n" | "wordpress" | "audit" | "website" | "patches";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "agents",     label: "Agents"     },
@@ -26,7 +25,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "audit",      label: "Audit"      },
   { id: "website",    label: "Website"    },
   { id: "patches",    label: "Patches"    },
-  { id: "kick",       label: "Kick"       },
 ];
 
 export default function StatusPage() {
@@ -79,7 +77,6 @@ export default function StatusPage() {
       {panel("audit",     <AuditTab isAdmin={isAdmin} />)}
       {panel("website",   <WebsitePanel isAdmin={isAdmin} />)}
       {panel("patches",   <PatchStatusPanel isAdmin={isAdmin} />)}
-      {panel("kick",      <KickTab />)}
     </div>
   );
 }

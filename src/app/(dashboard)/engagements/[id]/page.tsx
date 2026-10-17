@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { fetchJson } from "@/lib/fetch-json";
 import { WelcomeEditor } from "./WelcomeEditor";
@@ -25,7 +26,7 @@ const ROOM_TABS: { id: RoomTab; label: string }[] = [
   { id: "access", label: "Access" },
   { id: "activity", label: "Activity" },
 ];
-type Detail = { engagement: { id: string; title: string; relationship: string; status: string }; business: { name: string } | null; deliverables: Deliverable[] };
+type Detail = { engagement: { id: string; title: string; relationship: string; status: string }; business: { id: string; name: string } | null; deliverables: Deliverable[] };
 
 export default function EngagementPage() {
   const { id } = useParams<{ id: string }>();
@@ -239,7 +240,14 @@ export default function EngagementPage() {
       <PageHeader
         className="flex-wrap"
         title={engagement.title}
-        description={<>{business?.name} · {engagement.relationship} · {engagement.status}</>}
+        description={
+          <>
+            {business ? (
+              <Link href={`/crm/businesses/${business.id}`} className="text-brand-orange hover:underline">{business.name}</Link>
+            ) : "—"}
+            {" · "}{engagement.relationship} · {engagement.status}
+          </>
+        }
         actions={
           <>
             {updatedAt && <span className="text-xs text-brand-muted">Updated {updatedAt.toLocaleTimeString()}</span>}

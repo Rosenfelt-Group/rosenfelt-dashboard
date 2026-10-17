@@ -4,6 +4,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { Button, EmptyState } from "@/components/ui";
 import type { WorkItem } from "@/types";
+import { STATUS_LABEL } from "@/components/work/work-constants";
 import { NewClientWorkItemModal } from "./NewClientWorkItemModal";
 
 export function WorkItemsTab({
@@ -58,7 +59,7 @@ export function WorkItemsTab({
                 <div>
                   <div className="text-sm font-medium text-brand-black">{w.title}</div>
                   <div className="text-[11px] text-brand-muted mt-0.5">
-                    {w.work_type} · {w.priority} · {w.status.replace("_", " ")}
+                    {w.work_type} · {w.priority} · {STATUS_LABEL[w.status] ?? w.status}
                     {w.due_date && ` · due ${w.due_date}`}
                   </div>
                 </div>

@@ -1,19 +1,17 @@
 "use client";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader, Tabs } from "@/components/ui";
 import { OverviewPanel }     from "@/components/finance/OverviewPanel";
 import { BookkeepingPanel }  from "@/components/finance/BookkeepingPanel";
 import { BillingPanel }      from "@/components/finance/BillingPanel";
 import { CostPanel }         from "@/components/finance/CostPanel";
-import { SamActionsPanel }   from "@/components/finance/SamActionsPanel";
 
 const TABS = [
   { id: "overview",     label: "Overview"     },
   { id: "bookkeeping",  label: "Bookkeeping"  },
   { id: "stripe",       label: "Stripe"       },
   { id: "cost",         label: "AI Cost"      },
-  { id: "sam-actions",  label: "Sam Actions"  },
 ] as const;
 
 type Tab = typeof TABS[number]["id"];
@@ -24,6 +22,11 @@ function FinanceShell() {
   const router       = useRouter();
   const rawTab       = searchParams.get("tab");
   const activeTab: Tab = VALID_TABS.includes(rawTab as Tab) ? (rawTab as Tab) : "overview";
+
+  // The old "Sam Actions" tab now lives on the Approvals page, filtered to Sam.
+  useEffect(() => {
+    if (rawTab === "sam-actions") router.replace("/approvals?agent=sam");
+  }, [rawTab, router]);
 
   function setTab(id: Tab) {
     const params = new URLSearchParams(searchParams.toString());
@@ -45,7 +48,6 @@ function FinanceShell() {
         {activeTab === "bookkeeping" && <BookkeepingPanel />}
         {activeTab === "stripe"      && <BillingPanel />}
         {activeTab === "cost"        && <CostPanel />}
-        {activeTab === "sam-actions" && <SamActionsPanel />}
       </div>
     </div>
   );

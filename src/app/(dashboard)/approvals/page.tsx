@@ -1,5 +1,6 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PendingApproval } from "@/types";
 import { can } from "@/lib/permissions";
 import { ApprovalCard, LinkedInCarouselDetail } from "@/components/ApprovalCard";
@@ -69,11 +70,25 @@ function HistoryRow({ item }: { item: PendingApproval }) {
 }
 
 export default function ApprovalsPage() {
+  // useSearchParams needs a Suspense boundary in the App Router.
+  return (
+    <Suspense fallback={<div className="p-4 md:p-8"><LoadingState /></div>}>
+      <ApprovalsContent />
+    </Suspense>
+  );
+}
+
+function ApprovalsContent() {
+  const router       = useRouter();
+  const pathname     = usePathname();
+  const searchParams = useSearchParams();
   const [pending,      setPending]      = useState<PendingApproval[]>([]);
   const [history,      setHistory]      = useState<PendingApproval[]>([]);
   const [tab,          setTab]          = useState<"pending" | "history">("pending");
   const [loading,      setLoading]      = useState(true);
-  const [agentFilter,  setAgentFilter]  = useState<string>("all");
+  // The agent filter lives in the URL (?agent=sam, e.g. linked from Finance)
+  // and applies to both tabs.
+  const agentFilter = searchParams.get("agent") || "all";
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [permissions, setPermissions] = useState<string[]>([]);
 
@@ -124,7 +139,20 @@ export default function ApprovalsPage() {
     setPending(prev => prev.filter(a => a.id !== id));
   }
 
-  const agents = Array.from(new Set(history.map(h => h.agent)));
+  function setAgentFilter(agent: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (agent === "all") params.delete("agent"); else params.set("agent", agent);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
+  const agents = Array.from(new Set<string>([
+    ...pending.map(p => p.agent),
+    ...history.map(h => h.agent),
+    ...(agentFilter !== "all" ? [agentFilter] : []),
+  ])).sort();
+
+  const filteredPending = pending.filter(p => agentFilter === "all" || p.agent === agentFilter);
 
   const filteredHistory = history
     .filter(h => agentFilter  === "all" || h.agent  === agentFilter)
@@ -155,15 +183,31 @@ export default function ApprovalsPage() {
         value={tab}
         onChange={setTab}
         tabs={[
-          { id: "pending", label: `Pending (${pending.length})` },
+          { id: "pending", label: `Pending (${filteredPending.length})` },
           { id: "history", label: `History (${history.length})` },
         ]}
       />
 
+      {/* Agent filter — shared by both tabs */}
+      {agents.length > 0 && (
+        <div className="flex gap-1 flex-wrap" role="group" aria-label="Filter by agent">
+          {(["all", ...agents] as string[]).map(a => (
+            <button key={a} onClick={() => setAgentFilter(a)}
+              aria-pressed={agentFilter === a}
+              className={clsx(
+                "px-2.5 py-1 rounded-full text-xs capitalize transition-colors",
+                agentFilter === a ? "bg-brand-orange text-white" : "bg-brand-offwhite text-brand-muted hover:bg-brand-border"
+              )}>
+              {a}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── PENDING ── */}
       {tab === "pending" && (
         <>
-          {pending.length === 0 ? (
+          {filteredPending.length === 0 ? (
             <div className="card flex flex-col items-center justify-center py-16 text-center">
               <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center mb-4">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="1.5" strokeLinecap="round">
@@ -171,11 +215,13 @@ export default function ApprovalsPage() {
                 </svg>
               </div>
               <p className="text-sm font-medium text-brand-black mb-1">All caught up</p>
-              <p className="text-xs text-brand-muted">No approvals waiting</p>
+              <p className="text-xs text-brand-muted">
+                {agentFilter === "all" ? "No approvals waiting" : `No approvals waiting from ${agentFilter}`}
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
-              {pending.map(a => (
+              {filteredPending.map(a => (
                 <ApprovalCard key={a.id} approval={a} onAction={handleApproval} isAdmin={can(permissions, "manage_approvals")} />
               ))}
             </div>
@@ -187,17 +233,6 @@ export default function ApprovalsPage() {
       {tab === "history" && (
         <div className="space-y-4">
           <div className="flex gap-2 flex-wrap">
-            <div className="flex gap-1 flex-wrap">
-              {(["all", ...agents] as string[]).map(a => (
-                <button key={a} onClick={() => setAgentFilter(a)}
-                  className={clsx(
-                    "px-2.5 py-1 rounded-full text-xs capitalize transition-colors",
-                    agentFilter === a ? "bg-brand-orange text-white" : "bg-brand-offwhite text-brand-muted hover:bg-brand-border"
-                  )}>
-                  {a}
-                </button>
-              ))}
-            </div>
             <div className="flex gap-1 flex-wrap">
               {(["all", "approved", "revision_requested", "rejected", "expired"] as const).map(s => (
                 <button key={s} onClick={() => setStatusFilter(s)}

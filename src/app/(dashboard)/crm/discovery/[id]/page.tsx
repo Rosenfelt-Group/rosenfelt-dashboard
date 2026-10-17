@@ -153,7 +153,14 @@ export default function DiscoveryDetailPage() {
               <span className="text-xs">{contact}{d.contact?.email ? ` · ${d.contact.email}` : ""}</span>
             </span>
           }
-          actions={<Link href={`/crm/leads/${d.lead_id}`} className="btn-ghost text-xs px-2 py-1">Open lead</Link>}
+          actions={
+            <>
+              {(d.business_id ?? d.business?.id) && (
+                <Link href={`/crm/businesses/${d.business_id ?? d.business?.id}`} className="btn-ghost text-xs px-2 py-1">Business</Link>
+              )}
+              <Link href={`/crm/leads/${d.lead_id}`} className="btn-ghost text-xs px-2 py-1">Open lead</Link>
+            </>
+          }
         />
         <DraftEditor key={d.id} invite={d} onChanged={next => {
           if (!next) router.push("/crm/discovery");
@@ -198,6 +205,9 @@ export default function DiscoveryDetailPage() {
             <>
               <span className={clsx("badge", st.color)}>{st.label}</span>
               {expired && <span className="badge badge-error">Link expired</span>}
+              {(d.business_id ?? d.business?.id) && (
+                <Link href={`/crm/businesses/${d.business_id ?? d.business?.id}`} className="btn-ghost text-xs px-2 py-1">Business</Link>
+              )}
               <Link href={`/crm/leads/${d.lead_id}`} className="btn-ghost text-xs px-2 py-1">Open lead</Link>
             </>
           }

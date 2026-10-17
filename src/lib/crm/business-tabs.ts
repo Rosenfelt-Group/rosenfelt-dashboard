@@ -4,6 +4,7 @@ export const BUSINESS_TABS = [
   { id: "rooms",     label: "Rooms" },
   { id: "discovery", label: "Discovery" },
   { id: "leads",     label: "Leads" },
+  { id: "clients",   label: "Clients" },
 ] as const;
 
 export type BusinessTab = (typeof BUSINESS_TABS)[number]["id"];

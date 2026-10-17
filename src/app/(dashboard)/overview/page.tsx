@@ -1,15 +1,17 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { AgentBadge } from "@/components/AgentBadge";
-import { AgentStatusCard, deriveAgentStatus } from "@/components/AgentStatusCard";
+import { AgentStatusCard, deriveAgentStatus, type AgentHealth } from "@/components/AgentStatusCard";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { StatCard } from "@/components/StatCard";
 import { CollapsibleCard } from "@/components/CollapsibleCard";
+import { CronConfigPanel } from "@/components/CronConfigPanel";
 import { DashboardStats, WorkflowLog, PendingApproval, AgentStatus, Agent } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
 import { usePolling } from "@/lib/use-polling";
+import { fetchJson } from "@/lib/fetch-json";
 import { ErrorState, PageHeader } from "@/components/ui";
 
 interface RawNote {
@@ -40,6 +42,9 @@ export default function OverviewPage() {
   const [loading,     setLoading]     = useState(true);
   const [alerts,      setAlerts]      = useState<AlertNote[]>([]);
   const [loadError,   setLoadError]   = useState(false);
+  // Per-agent server reachability. Loaded separately because the probe can
+  // take several seconds and shouldn't hold up the rest of the page.
+  const [agentHealth, setAgentHealth] = useState<Record<string, AgentHealth> | null>(null);
   const dismissedIdsRef = useRef<Set<string>>(new Set());
   const loadedOnceRef   = useRef(false);
 
@@ -84,10 +89,27 @@ export default function OverviewPage() {
     }
   }, []);
 
+  const loadHealth = useCallback(async () => {
+    const res = await fetchJson<{ agent: string; status: string }[]>("/api/agent-status/health");
+    if (!res.ok || !Array.isArray(res.data)) {
+      // Probe itself failed: we can't say whether agents are up.
+      setAgentHealth(prev => prev ?? {});
+      return;
+    }
+    setAgentHealth(Object.fromEntries(
+      res.data.map(h => [h.agent, h.status === "up" || h.status === "down" ? h.status : "unknown"])
+    ));
+  }, []);
+
   // Everything on this page comes from server routes; refresh it all on a
   // short interval while the tab is visible.
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); loadHealth(); }, [load, loadHealth]);
   usePolling(load, 30_000);
+  usePolling(loadHealth, 60_000);
+
+  const agentsDown = agentHealth
+    ? agentStatus.filter(a => agentHealth[a.agent] === "down").length
+    : 0;
 
   async function handleApproval(id: string, status: "approved" | "rejected" | "revision_requested", revisionNotes?: string) {
     await fetch("/api/approvals", {
@@ -200,14 +222,28 @@ export default function OverviewPage() {
 
       {/* Agent status at a glance */}
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-2.5">
-          <h2 className="text-sm font-semibold text-brand-black">Agents</h2>
-          {costToday !== null && (
-            <span className="text-xs text-brand-muted">API cost today: ${costToday.toFixed(4)}</span>
-          )}
+        <div className="flex items-center justify-between gap-x-3 gap-y-1 flex-wrap mb-2.5">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-brand-black">Agents</h2>
+            {agentsDown > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 text-xs font-medium">
+                {agentsDown} down
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 text-xs text-brand-muted">
+            {costToday !== null && <span>API cost today: ${costToday.toFixed(4)}</span>}
+            <Link href="/status" className="text-brand-orange hover:underline">Diagnostics →</Link>
+          </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-          {agentStatus.map(a => <AgentStatusCard key={a.agent} status={a} />)}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-3">
+          {agentStatus.map(a => (
+            <AgentStatusCard
+              key={a.agent}
+              status={a}
+              health={agentHealth ? agentHealth[a.agent] ?? "unknown" : undefined}
+            />
+          ))}
         </div>
       </div>
 
@@ -246,7 +282,7 @@ export default function OverviewPage() {
           title="Recent activity"
           defaultOpen={true}
           action={
-            <Link href="/agents/history" className="text-xs text-brand-orange hover:underline">View all →</Link>
+            <Link href="/agents?tab=activity" className="text-xs text-brand-orange hover:underline">View all →</Link>
           }
         >
           {activity.length === 0 ? (
@@ -277,6 +313,13 @@ export default function OverviewPage() {
               ))}
             </div>
           )}
+        </CollapsibleCard>
+      </div>
+
+      {/* Scheduled jobs — live from agent_cron_config, editable from here */}
+      <div className="mt-6">
+        <CollapsibleCard title="Scheduled jobs" defaultOpen={false}>
+          <CronConfigPanel />
         </CollapsibleCard>
       </div>
     </div>

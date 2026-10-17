@@ -1,11 +1,16 @@
 "use client";
+// Dashboard chat with one agent. History is stored by the agent in Supabase
+// (session `${agent}_dashboard_brian`) and read back via GET /api/chat.
 import { useState, useEffect, useRef } from "react";
 import { AgentBadge } from "@/components/AgentBadge";
 import { SamMarkdown } from "@/components/SamMarkdown";
-import { Agent } from "@/types";
+import type { AgentName } from "@/lib/agents";
+import { getAgentInfo } from "@/lib/agents";
+
+type Agent = AgentName;
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
-import { ErrorState, PageHeader } from "@/components/ui";
+import { ErrorState } from "@/components/ui";
 import { fetchJson } from "@/lib/fetch-json";
 
 type Message = {
@@ -13,14 +18,6 @@ type Message = {
   content: string;
   created_at?: string;
 };
-
-const AGENTS: { id: Agent; label: string; available: boolean; note?: string }[] = [
-  { id: "jordan", label: "Jordan", available: true },
-  { id: "riley",  label: "Riley",  available: true },
-  { id: "avery",  label: "Avery",  available: true },
-  { id: "casey",  label: "Casey",  available: true },
-  { id: "sam",    label: "Sam",    available: true },
-];
 
 const AGENT_PROMPTS: Partial<Record<Agent, string>> = {
   jordan: "Ask about workflows, containers, VPS status, or tasks.",
@@ -43,14 +40,14 @@ function MessageBubble({ msg, agent }: { msg: Message; agent: Agent }) {
     .replace(/<code>(.*?)<\/code>/g, "`$1`");
 
   return (
-    <div className={clsx("flex gap-3 max-w-3xl", isUser ? "ml-auto flex-row-reverse" : "")}>
+    <div className={clsx("flex gap-2 sm:gap-3 max-w-3xl", isUser ? "ml-auto flex-row-reverse" : "")}>
       {!isUser && (
         <div className="flex-shrink-0 mt-1">
           <AgentBadge agent={agent} />
         </div>
       )}
       <div className={clsx(
-        "rounded-2xl px-4 py-3 text-sm leading-relaxed max-w-xl",
+        "rounded-2xl px-4 py-3 text-sm leading-relaxed max-w-xl min-w-0 break-words",
         !isSamMarkdown && "whitespace-pre-wrap",
         isUser
           ? "bg-brand-orange text-white rounded-tr-sm"
@@ -79,8 +76,7 @@ function TypingIndicator({ agent }: { agent: Agent }) {
   );
 }
 
-export default function ChatPage() {
-  const [agent, setAgent] = useState<Agent>("jordan");
+export function AgentChat({ agent }: { agent: Agent }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -104,7 +100,7 @@ export default function ChatPage() {
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages, loading]);
 
   async function sendMessage() {
@@ -165,45 +161,12 @@ export default function ChatPage() {
     }
   }
 
-  const selectedAgent = AGENTS.find(a => a.id === agent)!;
+  const label = getAgentInfo(agent).label;
 
   return (
-    <div className="flex flex-col h-screen ml-0">
-      {/* Header */}
-      <div className="px-6 py-4 bg-white border-b border-brand-border flex-shrink-0">
-        <PageHeader
-          className="!mb-0 items-center"
-          title="Agent Chat"
-          description="Dashboard interface — history saved to Supabase"
-          actions={
-            // Agent selector
-            <div className="flex gap-2">
-              {AGENTS.map(a => (
-                <button
-                  key={a.id}
-                  onClick={() => a.available && setAgent(a.id)}
-                  title={a.note}
-                  className={clsx(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors",
-                    a.available
-                      ? agent === a.id
-                        ? "bg-brand-orange text-white"
-                        : "bg-brand-offwhite text-brand-black hover:bg-brand-border"
-                      : "bg-brand-offwhite text-brand-muted cursor-not-allowed opacity-50"
-                  )}
-                >
-                  <AgentBadge agent={a.id} size="sm" />
-                  {a.label}
-                  {!a.available && <span className="text-xs">({a.note})</span>}
-                </button>
-              ))}
-            </div>
-          }
-        />
-      </div>
-
+    <div className="card p-0 overflow-hidden flex flex-col h-[calc(100dvh-15rem)] min-h-[420px]">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-brand-offwhite">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 bg-brand-offwhite">
         {loadingHistory ? (
           <div className="text-center text-sm text-brand-muted py-8">Loading history...</div>
         ) : historyError && messages.length === 0 ? (
@@ -232,19 +195,17 @@ export default function ChatPage() {
       </div>
 
       {/* Input */}
-      <div className="px-6 py-4 bg-white border-t border-brand-border flex-shrink-0">
+      <div className="px-3 sm:px-6 py-3 sm:py-4 bg-white border-t border-brand-border flex-shrink-0">
         <div className="flex gap-3 items-end max-w-3xl">
           <textarea
             ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={selectedAgent.available
-              ? `Message ${selectedAgent.label}... (Enter to send, Shift+Enter for newline)`
-              : `${selectedAgent.label} is not yet available`}
-            disabled={!selectedAgent.available || loading}
+            placeholder={`Message ${label}... (Enter to send, Shift+Enter for newline)`}
+            disabled={loading}
             rows={1}
-            className="flex-1 resize-none border border-brand-border rounded-xl px-4 py-3 text-sm
+            className="flex-1 min-w-0 resize-none border border-brand-border rounded-xl px-4 py-3 text-sm
                        focus:outline-none focus:border-brand-orange transition-colors
                        disabled:opacity-50 disabled:cursor-not-allowed
                        bg-brand-offwhite"
@@ -257,7 +218,8 @@ export default function ChatPage() {
           />
           <button
             onClick={sendMessage}
-            disabled={!input.trim() || loading || !selectedAgent.available}
+            disabled={!input.trim() || loading}
+            aria-label="Send"
             className="flex-shrink-0 w-10 h-10 rounded-xl bg-brand-orange text-white
                        flex items-center justify-center hover:bg-brand-orange-dark
                        transition-colors disabled:opacity-40 disabled:cursor-not-allowed"

@@ -2,7 +2,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
-import { CRMBusiness, CRMContact, CRMContactRole, CRMBusinessResearch, CRMLead, DiscoveryInvite } from "@/types";
+import { CRMBusiness, CRMContact, CRMContactRole, CRMBusinessResearch, CRMClient, CRMLead, DiscoveryInvite } from "@/types";
 import { EngagementsPanel } from "@/components/crm/EngagementsPanel";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
@@ -46,6 +46,7 @@ function BusinessDetail() {
   const [contacts, setContacts] = useState<CRMContact[]>([]);
   const [research, setResearch] = useState<CRMBusinessResearch[]>([]);
   const [leads, setLeads] = useState<CRMLead[]>([]);
+  const [clients, setClients] = useState<CRMClient[]>([]);
   const [invites, setInvites] = useState<(DiscoveryInvite & { link: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -65,14 +66,17 @@ function BusinessDetail() {
       fetchJson<unknown>(`/api/crm/businesses/${id}/research`),
       fetchJson<unknown>("/api/crm/leads"),
       fetchJson<unknown>(`/api/crm/discovery?business_id=${id}`),
-    ]).then(([b, allContacts, r, allLeads, inv]) => {
+      // No server-side business filter on /api/crm/clients; filter here like contacts and leads.
+      fetchJson<unknown>("/api/crm/clients"),
+    ]).then(([b, allContacts, r, allLeads, inv, allClients]) => {
       if (b.ok) setBusiness(b.data?.id ? b.data : null);
       else if (b.status !== 404) setLoadError(b.error);
       if (allContacts.ok) setContacts(Array.isArray(allContacts.data) ? allContacts.data.filter((c: CRMContact) => c.business_id === id) : []);
       if (r.ok) setResearch(Array.isArray(r.data) ? r.data : []);
       if (allLeads.ok) setLeads(Array.isArray(allLeads.data) ? allLeads.data.filter((l: CRMLead) => l.business_id === id) : []);
       if (inv.ok) setInvites(Array.isArray(inv.data) ? inv.data : []);
-      const failed = [allContacts, r, allLeads, inv].find(x => !x.ok);
+      if (allClients.ok) setClients(Array.isArray(allClients.data) ? allClients.data.filter((c: CRMClient) => c.business_id === id) : []);
+      const failed = [allContacts, r, allLeads, inv, allClients].find(x => !x.ok);
       if (failed && !failed.ok) setPartialError(failed.error);
       setLoading(false);
     });
@@ -352,6 +356,26 @@ function BusinessDetail() {
               </Link>
             );
           })}
+        </div>
+      ))}
+
+      {tab === "clients" && (clients.length === 0 ? (
+        <EmptyState title="No client records for this business." />
+      ) : (
+        <div className="card p-0 overflow-hidden">
+          {clients.map(c => (
+            <Link key={c.id} href={`/crm/clients/${c.id}`} className="flex items-center gap-3 px-4 py-3 border-b border-brand-border last:border-b-0 hover:bg-brand-offwhite">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-brand-black truncate">
+                  {c.contact ? `${c.contact.first_name}${c.contact.last_name ? ` ${c.contact.last_name}` : ""}` : business.name}
+                </p>
+                <p className="text-xs text-brand-muted">
+                  {c.contract_start ? `Since ${c.contract_start}` : `Added ${formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}`}
+                </p>
+              </div>
+              <span className={clsx("badge text-xs capitalize", c.billing_status === "active" ? "badge-success" : "badge-neutral")}>{c.billing_status}</span>
+            </Link>
+          ))}
         </div>
       ))}
     </div>

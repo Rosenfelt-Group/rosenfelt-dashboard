@@ -140,6 +140,14 @@ export default function ClientDetailPage() {
             title={businessName}
             description={
               <>
+                {client.business_id && (
+                  <>
+                    <Link href={`/crm/businesses/${client.business_id}`} className="text-brand-orange hover:underline">
+                      Business →
+                    </Link>
+                    {" · "}
+                  </>
+                )}
                 {client.billing_status}
                 {client.contact?.email ? ` · ${client.contact.email}` : ""}
                 {!client.stripe_customer_id && " · no Stripe customer yet"}
