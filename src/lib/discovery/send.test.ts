@@ -82,6 +82,9 @@ describe("finalizeSend", () => {
   it("refuses an empty or invalid questionnaire", async () => {
     s.invite = { ...s.invite!, questionnaire_snapshot: { ...snapshot, sections: [] } };
     expect(await finalizeSend(ID)).toMatchObject({ ok: false, status: 422 });
+    // A draft started from the blank template, still without questions.
+    s.invite = { ...s.invite!, questionnaire_snapshot: { ...snapshot, sections: [{ id: "questions", title: "Questions", fields: [] }] } };
+    expect(await finalizeSend(ID)).toMatchObject({ ok: false, status: 422, error: "Add at least one question before sending." });
     s.invite = { ...s.invite!, questionnaire_snapshot: null };
     expect(await finalizeSend(ID)).toMatchObject({ ok: false, status: 422 });
     expect(s.updates).toEqual([]);
