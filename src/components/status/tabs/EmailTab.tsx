@@ -26,6 +26,8 @@ const fmtDate = (ts: string) =>
   new Date(ts).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 const th = "text-left text-xs font-semibold text-brand-muted uppercase tracking-wide px-4 py-2 whitespace-nowrap";
 const td = "px-4 py-2.5 text-sm text-brand-black align-top";
+// Actions stay pinned to the right edge while the table scrolls sideways, so admin buttons are never off-screen.
+const stickyRight = "sticky right-0 z-10 bg-white shadow-[inset_1px_0_0_#E3D9CB]";
 
 export function EmailTab() {
   const [data, setData] = useState<EmailHealthResponse | null>(null);
@@ -199,7 +201,7 @@ export function EmailTab() {
               <thead><tr className="border-b border-brand-border">
                 <th className={th}>When</th><th className={th}>To</th><th className={th}>Subject</th>
                 <th className={th}>Sender</th><th className={th}>Reason</th>
-                {canManage && <th className={th}>Actions</th>}
+                {canManage && <th className={clsx(th, stickyRight)}>Actions</th>}
               </tr></thead>
               <tbody className="divide-y divide-brand-border">
                 {problems.map(p => (
@@ -213,7 +215,7 @@ export function EmailTab() {
                       {p.resolved_at && <span className="badge-neutral ml-2">{p.resolution ?? "resolved"}</span>}
                     </td>
                     {canManage && (
-                      <td className={clsx(td, "whitespace-nowrap")}>
+                      <td className={clsx(td, stickyRight, "whitespace-nowrap")}>
                         {!p.resolved_at && (
                           <div className="flex gap-1.5">
                             {resendEnabled && p.record_type !== "SpamComplaint" && canResend(p.tag) && (
