@@ -13,6 +13,8 @@ const code = createRequire(import.meta.url)("./postmark-events.code.js") as {
 };
 
 const LINK = "https://dashboard.rosably.com/status?tab=email";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const withoutContent = ({ Content, ...rest }: Record<string, unknown>) => rest;
 const META = { PropA: "some value", PropB: "some value" };
 
 // Postmark's documented sample payloads (postmarkapp.com/developer/webhooks/*), with our tags where a test needs one.
@@ -66,8 +68,14 @@ describe("normalize: hard bounce", () => {
       event_key: "bounce:692560173", record_type: "Bounce", message_id: "883953f4-6105-42a2-a16a-77a8eac79483",
       recipient: "margareth@nasa.com", subject: "Saying Hello!", tag: "n8n-avery-deliver-audit", source_group: "n8n",
       bounce_type: "HardBounce", description: hardBounce.Description, inactive: true, can_activate: true,
-      metadata: META, occurred_at: "2026-11-05T16:33:54.9070259Z", payload: hardBounce,
+      metadata: META, occurred_at: "2026-11-05T16:33:54.9070259Z", payload: withoutContent(hardBounce),
     });
+  });
+  it("never stores the message dump (Content) and leaves the webhook body untouched", () => {
+    expect(row?.payload).not.toHaveProperty("Content");
+    expect(code.normalize(spam).row?.payload).not.toHaveProperty("Content");
+    expect(code.normalize(spam).row?.payload).toMatchObject({ ID: 692560174, Details: "Test spam complaint details" });
+    expect(hardBounce.Content).toBe("<Full dump of bounce>");
   });
   it("pings with the exact text", () => {
     expect(ping).toBe(
@@ -159,7 +167,7 @@ describe("ping decision", () => {
     expect(code.pingDecision(n, inserted, "[]").send).toBe(true);
     expect(code.pingDecision(n, inserted, JSON.stringify([{ id: "b" }])).send).toBe(false);
   });
-  it("fails loudly on an unreadable insert response, so the event is retried rather than silently not pinged", () => {
+  it("fails loudly on an unreadable insert response: the ping is lost, but the error handler alerts", () => {
     expect(() => code.pingDecision(code.normalize(hardBounce), undefined, "[]")).toThrow(/insert response/);
     expect(() => code.pingDecision(code.normalize(hardBounce), { _readableState: {} }, "[]")).toThrow(/insert response/);
   });

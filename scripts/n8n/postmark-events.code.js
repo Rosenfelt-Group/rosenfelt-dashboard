@@ -75,6 +75,13 @@ function buildPing(b, row) {
   return null;
 }
 
+// The webhook body as stored, minus Content (a bounce's full message dump / a complaint's abuse report).
+function storedPayload(b) {
+  var copy = {};
+  for (var k in b) if (Object.prototype.hasOwnProperty.call(b, k) && k !== "Content") copy[k] = b[k];
+  return copy;
+}
+
 // One Postmark webhook body -> the email_events row to insert and the Telegram ping text (null = no ping).
 // Record types we don't store (Open, Click, ...) give { row: null, ping: null }.
 function normalize(body) {
@@ -98,7 +105,7 @@ function normalize(body) {
     can_activate: isProblem ? bool(b.CanActivate) : null,
     metadata: b.Metadata && typeof b.Metadata === "object" ? b.Metadata : {},
     occurred_at: occurredAt || new Date().toISOString(),
-    payload: body,
+    payload: storedPayload(b),
   };
   return { row: row, ping: buildPing(b, row) };
 }
@@ -124,8 +131,9 @@ function parseRows(responseText) {
 }
 
 // Rows returned by the email_events insert (Prefer return=representation): the new row, or [] for a duplicate.
-// Anything that isn't an array throws, so the workflow answers 500 and Postmark retries instead of a ping being
-// skipped silently.
+// Anything that isn't an array throws, so the execution fails and the error workflow alerts Brian. The ping for
+// this event is lost (the row is already stored, so a Postmark retry is a duplicate and stays quiet); the failure
+// is never silent.
 function insertedRows(body) {
   var rows = typeof body === "string" ? JSON.parse(body) : body;
   if (!Array.isArray(rows)) throw new Error("email_events insert response is not an array: " + typeof rows);
