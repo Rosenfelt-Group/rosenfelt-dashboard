@@ -1,4 +1,5 @@
 import React from "react";
+import { activeSubPageHref, pathMatches } from "@/lib/nav-match";
 
 // ── Nav data ───────────────────────────────────────────────────────────────────
 //
@@ -7,9 +8,9 @@ import React from "react";
 //   - "workspace" is anchored to the bottom, styled de-emphasized (lower-frequency
 //     tools/finance/admin-ish pages). See Sidebar.tsx.
 //
-// NOTE: `/sales` (the old tabbed CRM/Content/Quiz/Research hub) is intentionally
-// not linked from nav anymore — CRM/Content/Reports below give direct access to
-// the same data without the extra hop. The page itself hasn't been deleted.
+// SUB_PAGES is keyed by NavItem.id and is the only section sub-nav: the sidebar
+// shows it under the active item on desktop, and SectionSubNav shows it as a
+// strip at the top of the page below 900px.
 
 export interface NavItem {
   id: string;
@@ -23,26 +24,24 @@ export interface NavItem {
 export const NAV_GROUPS: { operations: NavItem[]; growth: NavItem[]; workspace: NavItem[] } = {
   operations: [
     { id: "overview", label: "Overview",       href: "/overview",       icon: "grid",     active: ["/overview"] },
-    { id: "control",  label: "Control Center", href: "/control-center", icon: "activity", active: ["/control-center", "/status", "/work"] },
+    { id: "control",  label: "Control Center", href: "/control-center", icon: "activity", active: ["/control-center"] },
+    { id: "work",     label: "Work",           href: "/work",           icon: "kanban",   active: ["/work"] },
     { id: "approvals",label: "Approvals",      href: "/approvals",      icon: "check",    active: ["/approvals"] },
-    { id: "agents",   label: "Agent Central",  href: "/agent-central",  icon: "brain",    active: ["/agent-central", "/agents", "/chat"] },
+    { id: "agents",   label: "Agents",         href: "/agent-central",  icon: "brain",    active: ["/agent-central", "/agents", "/chat"] },
   ],
   growth: [
-    { id: "crm",      label: "CRM",     href: "/crm",     icon: "users",      active: ["/crm"] },
-    { id: "content",  label: "Content", href: "/content",   icon: "edit",       active: ["/content"] },
-    { id: "reports",  label: "Reports", href: "/analytics", icon: "barChart",   active: ["/analytics"] },
+    { id: "crm",      label: "CRM",     href: "/crm",       icon: "users",    active: ["/crm", "/engagements"] },
+    { id: "content",  label: "Content", href: "/content",   icon: "edit",     active: ["/content"] },
+    { id: "reports",  label: "Reports", href: "/analytics", icon: "barChart", active: ["/analytics", "/quiz"] },
   ],
   workspace: [
-    { id: "documents", label: "Documents", href: "/documents",     icon: "folder",     active: ["/documents", "/images"] },
-    { id: "finance",   label: "Finance",   href: "/finance",       icon: "dollar",     active: ["/finance", "/cost", "/billing"] },
-    { id: "marketing", label: "Marketing", href: "/marketing",     icon: "trendingUp", active: ["/marketing"] },
-    { id: "quiz",      label: "Quiz",      href: "/quiz",          icon: "package",    active: ["/quiz"] },
-    { id: "tools",     label: "Tools",     href: "/tools",         icon: "wrench",     active: ["/tools", "/users", "/rbac", "/backup", "/sql", "/engineering"] },
+    { id: "documents", label: "Documents", href: "/documents", icon: "folder",     active: ["/documents", "/images"] },
+    { id: "finance",   label: "Finance",   href: "/finance",   icon: "dollar",     active: ["/finance"] },
+    { id: "marketing", label: "Marketing", href: "/marketing", icon: "trendingUp", active: ["/marketing"] },
+    { id: "admin",     label: "Admin",     href: "/tools",     icon: "wrench",     active: ["/tools", "/users", "/rbac", "/sql", "/engineering"] },
+    { id: "status",    label: "Status",    href: "/status",    icon: "shield",     active: ["/status"] },
   ],
 };
-
-// TODO: once the Workspace group exceeds ~5 items, make it collapsible
-// (single <details>/disclosure toggle, default open) rather than flat.
 
 export const ALL_NAV_ITEMS: NavItem[] = [
   ...NAV_GROUPS.operations,
@@ -54,60 +53,59 @@ export interface SubPage {
   label: string;
   href: string;
   icon: string;
+  /** Extra path prefixes that highlight this sub-page (e.g. Rooms for /engagements). */
+  match?: string[];
 }
 
 export const SUB_PAGES: Record<string, SubPage[]> = {
-  control: [
-    { label: "Status",     href: "/status", icon: "activity" },
-    { label: "Work Board", href: "/work",   icon: "kanban"   },
-  ],
   agents: [
     { label: "Agent Central", href: "/agent-central",       icon: "brain"   },
     { label: "History",       href: "/agents/history",      icon: "history" },
-    { label: "Intelligence",  href: "/agents/intelligence", icon: "shield"  },
+    { label: "Prompts",       href: "/agents/intelligence", icon: "shield"  },
     { label: "Chat",          href: "/chat",                icon: "chat"    },
   ],
-  leads: [
-    { label: "Pipeline",   href: "/crm",           icon: "kanban" },
-    { label: "Leads",      href: "/crm/leads",     icon: "users"  },
-    { label: "Contacts",   href: "/crm/contacts",  icon: "users"  },
-    { label: "Businesses", href: "/crm/businesses",icon: "folder" },
-    { label: "Clients",    href: "/crm/clients",   icon: "users"  },
+  crm: [
+    { label: "Pipeline",   href: "/crm",                 icon: "kanban" },
+    { label: "Leads",      href: "/crm/leads",           icon: "users"  },
+    { label: "Contacts",   href: "/crm/contacts",        icon: "users"  },
+    { label: "Businesses", href: "/crm/businesses",      icon: "folder" },
+    { label: "Clients",    href: "/crm/clients",         icon: "users"  },
+    { label: "Discovery",  href: "/crm/discovery",       icon: "edit"   },
+    { label: "Rooms",      href: "/crm/rooms",           icon: "folder", match: ["/engagements"] },
+    { label: "Services",   href: "/crm/admin/services",  icon: "package" },
   ],
   content: [
-    { label: "Content",  href: "/content",          icon: "edit" },
+    { label: "Ideas",    href: "/content",          icon: "edit"     },
     { label: "Keywords", href: "/content/keywords", icon: "barChart" },
+    { label: "Research", href: "/content/research", icon: "folder"   },
+  ],
+  reports: [
+    { label: "Analytics", href: "/analytics", icon: "barChart" },
+    { label: "Quiz",      href: "/quiz",      icon: "package"  },
   ],
   documents: [
     { label: "Documents", href: "/documents", icon: "folder" },
     { label: "Images",    href: "/images",    icon: "image"  },
   ],
-  finance: [
-    { label: "Finance", href: "/finance", icon: "dollar"     },
-    { label: "Cost",    href: "/cost",    icon: "creditCard" },
-    { label: "Billing", href: "/billing", icon: "barChart"   },
-  ],
-  tools: [
-    { label: "Tools",  href: "/tools",       icon: "wrench"   },
-    { label: "Users",  href: "/users",       icon: "users"    },
-    { label: "RBAC",   href: "/rbac",        icon: "lock"     },
-    { label: "Backup", href: "/backup",      icon: "archive"  },
-    { label: "SQL",    href: "/sql",         icon: "database" },
-    { label: "SSH",    href: "/engineering", icon: "terminal" },
+  admin: [
+    { label: "Overview", href: "/tools",       icon: "wrench"   },
+    { label: "Users",    href: "/users",       icon: "users"    },
+    { label: "RBAC",     href: "/rbac",        icon: "lock"     },
+    { label: "SQL",      href: "/sql",         icon: "database" },
+    { label: "SSH",      href: "/engineering", icon: "terminal" },
   ],
 };
 
 export function isActiveSection(item: NavItem, pathname: string): boolean {
-  return item.active.some(r =>
-    r === "/overview" || r === "/approvals"
-      ? pathname === r
-      : pathname === r || pathname.startsWith(r + "/")
-  );
+  return item.active.some(r => pathMatches(r, pathname));
 }
 
-export function isActiveSubPage(href: string, pathname: string): boolean {
-  return pathname === href || pathname.startsWith(href + "/");
+/** The nav item whose section contains `pathname`, if any. */
+export function activeNavItem(pathname: string): NavItem | undefined {
+  return ALL_NAV_ITEMS.find(item => isActiveSection(item, pathname));
 }
+
+export { activeSubPageHref };
 
 // ── Icon component ────────────────────────────────────────────────────────────
 

@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/fetch-json";
 import { CRMLead, CRMStage, CRMSource } from "@/types";
-import { CRMNav } from "@/components/CRMNav";
 import { STAGES } from "@/lib/crm/stages";
 import Link from "next/link";
 import clsx from "clsx";
@@ -89,7 +88,6 @@ export default function LeadsPage() {
 
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8">
-      <CRMNav />
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-semibold text-brand-black">Leads</h1>
         <div className="flex items-center gap-3">

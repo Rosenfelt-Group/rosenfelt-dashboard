@@ -1,7 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { CRMNav } from "@/components/CRMNav";
 import { DiscoveryNav } from "@/components/crm/discovery/DiscoveryNav";
 import { EMPTY_QUESTION, INPUT, Modal, QuestionDraft, QuestionForm, TYPE_LABEL } from "@/components/crm/discovery/QuestionForm";
 import { DiscoveryQuestion } from "@/types";
@@ -59,7 +58,6 @@ export default function QuestionBankPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <CRMNav />
       <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
         <div>
           <h1 className="text-lg font-semibold text-brand-black">Question bank</h1>

@@ -3,7 +3,6 @@ import { Suspense, useEffect, useState } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { CRMBusiness, CRMContact, CRMContactRole, CRMBusinessResearch, CRMLead, DiscoveryInvite } from "@/types";
-import { CRMNav } from "@/components/CRMNav";
 import { EngagementsPanel } from "@/components/crm/EngagementsPanel";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
@@ -136,7 +135,6 @@ function BusinessDetail() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
-      <CRMNav />
 
       <div className="card mb-4">
         <h1 className="text-lg font-semibold text-brand-black">{business.name}</h1>

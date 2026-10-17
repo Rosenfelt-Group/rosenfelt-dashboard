@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import clsx from "clsx";
-import { CRMNav } from "@/components/CRMNav";
 import { ActivationModal } from "@/components/crm/ActivationModal";
 import type {
   CRMClient,
@@ -123,7 +122,6 @@ export default function ClientDetailPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <CRMNav />
       <Link href="/crm/clients" className="text-xs text-brand-muted hover:underline">← Back to clients</Link>
 
       {loading ? (

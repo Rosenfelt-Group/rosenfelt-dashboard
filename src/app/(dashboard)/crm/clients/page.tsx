@@ -6,7 +6,6 @@ import { CRMClient, CRMBusiness, CRMContact } from "@/types";
 import clsx from "clsx";
 import { AgentBadge } from "@/components/AgentBadge";
 import { Agent } from "@/types";
-import { CRMNav } from "@/components/CRMNav";
 import { fetchJson } from "@/lib/fetch-json";
 
 type StatusFilter = "active" | "inactive" | "all";
@@ -161,7 +160,6 @@ function ClientsPageInner() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
-      <CRMNav />
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-semibold text-brand-black">Clients</h1>

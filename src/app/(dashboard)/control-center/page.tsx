@@ -176,7 +176,6 @@ export default function ControlCenterPage() {
               { label: "Agent History",     href: "/agents/history",           desc: "Workflow execution log" },
               { label: "Agent Prompts",     href: "/agents/intelligence",      desc: "Live prompt editor" },
               { label: "Engineering",       href: "/engineering",              desc: "SSH terminal (Jordan)" },
-              { label: "Backup",            href: "/backup",                   desc: "VPS backup tools" },
             ].map(link => (
               <Link key={link.href} href={link.href}
                 className="flex flex-col gap-1 p-3 rounded-lg border border-brand-border hover:border-brand-orange/40 hover:bg-brand-offwhite/50 transition-all">

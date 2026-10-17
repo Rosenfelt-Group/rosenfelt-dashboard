@@ -2,12 +2,6 @@ import Link from "next/link";
 
 const TOOLS = [
   {
-    label: "Backup",
-    href: "/backup",
-    icon: "M21 8 21 21 3 21 3 8M1 3h22v5H1zM10 12h4",
-    desc: "VPS backup and restore",
-  },
-  {
     label: "Users",
     href: "/users",
     icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
@@ -39,10 +33,10 @@ const TOOLS = [
   },
 ];
 
-export default function ToolsPage() {
+export default function AdminPage() {
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
-      <h1 className="text-xl font-semibold text-brand-black mb-6">Tools</h1>
+      <h1 className="text-xl font-semibold text-brand-black mb-6">Admin</h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {TOOLS.map(tool => (

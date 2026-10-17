@@ -5,7 +5,6 @@ import { CRMLead, CRMStage } from "@/types";
 import { differenceInDays } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
-import { CRMNav } from "@/components/CRMNav";
 import { STAGES } from "@/lib/crm/stages";
 import { CreateLeadModal } from "@/components/crm/CreateLeadModal";
 
@@ -49,7 +48,6 @@ export default function CRMPage() {
   if (loadError) {
     return (
       <div className="p-4 md:p-8">
-        <CRMNav />
         <div className="card text-sm text-red-600">Couldn&apos;t load the pipeline: {loadError}</div>
       </div>
     );
@@ -57,7 +55,6 @@ export default function CRMPage() {
 
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8">
-      <CRMNav />
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-brand-black">Pipeline</h1>

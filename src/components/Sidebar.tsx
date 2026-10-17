@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import clsx from "clsx";
@@ -12,7 +12,8 @@ import {
   ALL_NAV_ITEMS,
   SUB_PAGES,
   isActiveSection,
-  isActiveSubPage,
+  activeNavItem,
+  activeSubPageHref,
 } from "./nav-config";
 
 /** Pending-approvals count for the Approvals nav badge. Polls the same
@@ -88,7 +89,7 @@ function DesktopGroup({
             {active && subPages && (
               <div className="mt-0.5 mb-1 ml-4 pl-3 border-l border-brand-border flex flex-col gap-0.5">
                 {subPages.map(page => {
-                  const subActive = isActiveSubPage(page.href, pathname);
+                  const subActive = page.href === activeSubPageHref(subPages, pathname);
                   return (
                     <Link
                       key={page.href}
@@ -162,6 +163,14 @@ function NavStrip({ pathname, approvalsCount, onLogout }: {
   approvalsCount: number;
   onLogout: () => void;
 }) {
+  // Keep the active section visible in the scrolling strip.
+  const stripRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    stripRef.current
+      ?.querySelector<HTMLElement>('[aria-current="page"]')
+      ?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [pathname]);
+
   return (
     <header
       className="min-[900px]:hidden fixed top-0 inset-x-0 z-20 h-14 bg-white border-b border-brand-border flex items-center"
@@ -170,13 +179,14 @@ function NavStrip({ pathname, approvalsCount, onLogout }: {
       <div className="flex items-center gap-2 pl-4 pr-2 shrink-0">
         <RosablyIcon size={24} />
       </div>
-      <nav className="flex-1 min-w-0 h-full flex items-center gap-1 overflow-x-auto no-scrollbar px-1 [-webkit-overflow-scrolling:touch]">
+      <nav ref={stripRef} className="flex-1 min-w-0 h-full flex items-center gap-1 overflow-x-auto no-scrollbar px-1 [-webkit-overflow-scrolling:touch]">
         {ALL_NAV_ITEMS.map(item => {
           const active = isActiveSection(item, pathname);
           return (
             <Link
               key={item.id}
               href={item.href}
+              aria-current={active ? "page" : undefined}
               className={clsx(
                 "flex items-center gap-1.5 px-3 h-10 rounded-lg text-[13px] whitespace-nowrap shrink-0 transition-colors touch-manipulation",
                 active
@@ -202,6 +212,40 @@ function NavStrip({ pathname, approvalsCount, onLogout }: {
         </button>
       </div>
     </header>
+  );
+}
+
+// ── Tablet/mobile: section sub-nav ─────────────────────────────────────────────
+
+/** Sub-pages of the active section as a scrolling strip at the top of the page.
+ * Below 900px only; the desktop sidebar lists them under the active item. */
+export function SectionSubNav() {
+  const pathname = usePathname();
+  const item = activeNavItem(pathname);
+  const pages = item ? SUB_PAGES[item.id] : undefined;
+  if (!pages) return null;
+  const current = activeSubPageHref(pages, pathname);
+  return (
+    <nav
+      aria-label={`${item!.label} pages`}
+      className="min-[900px]:hidden flex gap-1 overflow-x-auto no-scrollbar px-4 py-2 bg-white border-b border-brand-border [-webkit-overflow-scrolling:touch]"
+    >
+      {pages.map(page => (
+        <Link
+          key={page.href}
+          href={page.href}
+          aria-current={page.href === current ? "page" : undefined}
+          className={clsx(
+            "px-3 h-8 flex items-center rounded-md text-[13px] whitespace-nowrap shrink-0 transition-colors",
+            page.href === current
+              ? "bg-orange-50 text-brand-orange font-medium"
+              : "text-brand-muted hover:text-brand-black"
+          )}
+        >
+          {page.label}
+        </Link>
+      ))}
+    </nav>
   );
 }
 
