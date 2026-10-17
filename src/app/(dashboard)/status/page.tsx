@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { usePolling } from "@/lib/use-polling";
 import { AgentBadge } from "@/components/AgentBadge";
 import RegressionPanel from "@/components/status/RegressionPanel";
 import AlignmentAuditPanel from "@/components/status/AlignmentAuditPanel";
@@ -340,7 +340,7 @@ function RepoSettingsModal({
   );
 }
 
-function GitHubTab({ live: _live }: { live: boolean }) {
+function GitHubTab() {
   const [runs, setRuns]     = useState<RunLog[]>([]);
   const [repos, setRepos]   = useState<RepoInfo[]>([]);
   const [reposError, setReposError] = useState<string | null>(null);
@@ -377,16 +377,9 @@ function GitHubTab({ live: _live }: { live: boolean }) {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    load();
-    const channel = supabase.channel("status-github")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "github_run_log" },
-        p => setRuns(prev => [p.new as RunLog, ...prev].slice(0, 200)))
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "github_run_log" },
-        p => { const u = p.new as RunLog; setRuns(prev => prev.map(r => r.id === u.id ? u : r)); })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [load]);
+  // CI runs land from the GitHub webhook; refresh while visible.
+  useEffect(() => { load(); }, [load]);
+  usePolling(load, 30_000);
 
   // Merge repos + runs into one ordered list
   const { cards, allNames } = useMemo(() => {
@@ -1503,15 +1496,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 export default function StatusPage() {
   const [tab, setTab] = useState<Tab>("agents");
-  const [live, setLive] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-
-  // Single Realtime connection shared across the page lifetime
-  useEffect(() => {
-    const ch = supabase.channel("status-page-liveness")
-      .subscribe(s => setLive(s === "SUBSCRIBED"));
-    return () => { supabase.removeChannel(ch); };
-  }, []);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -1529,8 +1514,8 @@ export default function StatusPage() {
           <p className="text-sm text-brand-muted mt-0.5">Service health and deployment history</p>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className={clsx("w-2 h-2 rounded-full", live ? "bg-green-500" : "bg-gray-300")} />
-          <span className="text-xs text-brand-muted">{live ? "Live" : "Connecting…"}</span>
+          <div className="w-2 h-2 rounded-full bg-green-500" />
+          <span className="text-xs text-brand-muted">Auto-refreshing</span>
         </div>
       </div>
 
@@ -1552,9 +1537,9 @@ export default function StatusPage() {
         ))}
       </div>
 
-      {/* Tab content — all mounted, hidden when inactive to keep Realtime alive */}
+      {/* Tab content — all mounted, hidden when inactive */}
       <div className={tab === "agents"     ? "block" : "hidden"}><AgentsTab /></div>
-      <div className={tab === "github"     ? "block" : "hidden"}><GitHubTab live={live} /></div>
+      <div className={tab === "github"     ? "block" : "hidden"}><GitHubTab /></div>
       <div className={tab === "vercel"     ? "block" : "hidden"}><VercelTab /></div>
       <div className={tab === "supabase"   ? "block" : "hidden"}><SupabaseTab /></div>
       <div className={tab === "vps"        ? "block" : "hidden"}><VpsTab /></div>

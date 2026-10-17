@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
-import { fetchJson } from "@/lib/rooms/fetch-json";
+import { fetchJson } from "@/lib/fetch-json";
 import { WelcomeEditor } from "./WelcomeEditor";
 import { DocumentUpload } from "./DocumentUpload";
 import { canPreviewDoc } from "@/lib/rooms/doc-limits";

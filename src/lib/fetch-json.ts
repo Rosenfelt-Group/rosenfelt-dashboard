@@ -1,4 +1,4 @@
-export type FetchJsonResult<T> = { ok: true; data: T } | { ok: false; error: string };
+export type FetchJsonResult<T> = { ok: true; data: T } | { ok: false; error: string; status?: number };
 
 /** fetch + JSON parse that never throws; failures come back as { ok: false, error }. */
 export async function fetchJson<T = unknown>(url: string, init?: RequestInit): Promise<FetchJsonResult<T>> {
@@ -18,7 +18,7 @@ export async function fetchJson<T = unknown>(url: string, init?: RequestInit): P
   }
   if (!res.ok) {
     const e = (body as { error?: unknown } | null)?.error;
-    return { ok: false, error: typeof e === "string" ? e : `Request failed (HTTP ${res.status})` };
+    return { ok: false, error: typeof e === "string" ? e : `Request failed (HTTP ${res.status})`, status: res.status };
   }
   return { ok: true, data: body as T };
 }

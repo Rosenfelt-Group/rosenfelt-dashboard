@@ -1,8 +1,8 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AgentBadge } from "@/components/AgentBadge";
 import clsx from "clsx";
-import { supabase } from "@/lib/supabase";
+import { usePolling } from "@/lib/use-polling";
 
 type Agent = "jordan" | "riley" | "avery" | "casey" | "sam";
 
@@ -194,15 +194,12 @@ export function CostPanel() {
   const todayET = getETDateString();
 
   const [selectedDate, setSelectedDate] = useState<string>(todayET);
-  const selectedDateRef = useRef<string>(todayET);
   const [agents,  setAgents]  = useState<AgentSummary[]>([]);
   const [daily,   setDaily]   = useState<DailyRow[]>([]);
   const [configs, setConfigs] = useState<Record<string, AgentConfig>>({});
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
-  const seenIds = useRef<Set<string>>(new Set());
 
-  useEffect(() => { selectedDateRef.current = selectedDate; }, [selectedDate]);
 
   const isViewingToday = selectedDate === getETDateString();
 
@@ -214,7 +211,6 @@ export function CostPanel() {
       ]);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      seenIds.current.clear();
       setAgents(data.agents ?? []);
       setDaily(data.daily ?? []);
       const cfgs = await cfgRes.json();
@@ -229,81 +225,9 @@ export function CostPanel() {
     }
   }, [selectedDate]);
 
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 600_000);
-
-    const channel = supabase
-      .channel("token-usage-inserts")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "token_usage" },
-        (payload) => {
-          const row = payload.new as {
-            id: string; agent: string; prompt_tokens: number; completion_tokens: number;
-            total_tokens: number; cost_usd: string; created_at: string;
-          };
-          if (seenIds.current.has(row.id)) return;
-          seenIds.current.add(row.id);
-
-          const rowDate  = getETDateString(new Date(row.created_at));
-          const cost     = Number(row.cost_usd ?? 0);
-          const viewing  = selectedDateRef.current;
-          const isToday  = rowDate === getETDateString();
-
-          // Always update the 30-day breakdown table
-          setDaily(prev => {
-            if (prev.some(r => r.date === rowDate && r.agent === row.agent)) {
-              return prev.map(r =>
-                r.date === rowDate && r.agent === row.agent
-                  ? {
-                      ...r,
-                      calls:             r.calls + 1,
-                      prompt_tokens:     r.prompt_tokens     + (row.prompt_tokens     ?? 0),
-                      completion_tokens: r.completion_tokens + (row.completion_tokens ?? 0),
-                      total_tokens:      r.total_tokens      + (row.total_tokens      ?? 0),
-                      cost_usd:          r.cost_usd          + cost,
-                    }
-                  : r
-              );
-            }
-            const entry: DailyRow = {
-              date: rowDate, agent: row.agent as Agent, calls: 1,
-              prompt_tokens: row.prompt_tokens ?? 0,
-              completion_tokens: row.completion_tokens ?? 0,
-              total_tokens: row.total_tokens ?? 0,
-              cost_usd: cost,
-            };
-            return [entry, ...prev].sort((a, b) =>
-              b.date.localeCompare(a.date) || a.agent.localeCompare(b.agent)
-            );
-          });
-
-          // Only update summary cards when viewing today
-          if (viewing !== getETDateString()) return;
-
-          setAgents(prev => prev.map(a => {
-            if (a.agent !== row.agent) return a;
-            return {
-              ...a,
-              weekCost:    a.weekCost    + cost,
-              weekTokens:  a.weekTokens  + (row.total_tokens ?? 0),
-              ...(isToday ? {
-                todayCost:   a.todayCost   + cost,
-                todayTokens: a.todayTokens + (row.total_tokens ?? 0),
-                callsToday:  a.callsToday  + 1,
-              } : {}),
-            };
-          }));
-        }
-      )
-      .subscribe();
-
-    return () => {
-      clearInterval(interval);
-      supabase.removeChannel(channel);
-    };
-  }, [load]);
+  // Agent calls land in token_usage continuously; refresh while visible.
+  useEffect(() => { load(); }, [load]);
+  usePolling(load, 60_000);
 
   async function updateBudget(agent: Agent, value: number) {
     await fetch("/api/usage/budget", {

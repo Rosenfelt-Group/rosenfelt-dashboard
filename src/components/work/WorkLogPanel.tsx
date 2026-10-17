@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePolling } from "@/lib/use-polling";
 import type { WorkItemLog, WorkItemLogEntryType, WorkStatus } from "@/types";
 
 const ENTRY_TYPES: WorkItemLogEntryType[] = [
@@ -39,43 +39,29 @@ export function WorkLogPanel({ workItemId, currentUser, workItemStatus }: Props)
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Initial load + Realtime subscription
-  useEffect(() => {
-    let mounted = true;
-
-    async function load() {
+  const load = useCallback(async () => {
+    try {
       const res = await fetch(`/api/work/${workItemId}/logs`);
       if (!res.ok) return;
       const data = await res.json();
-      if (mounted) setLogs(data.logs ?? []);
+      const next: WorkItemLog[] = data.logs ?? [];
+      // Skip the state update when nothing changed, so polling doesn't re-render.
+      setLogs((prev) =>
+        prev.length === next.length && prev.every((l, i) => l.id === next[i].id && l.message === next[i].message)
+          ? prev
+          : next,
+      );
+    } catch {
+      // Background refresh; the next poll retries.
     }
-    load();
-
-    const channel = supabase
-      .channel(`work-item-logs-${workItemId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "work_item_logs",
-          filter: `work_item_id=eq.${workItemId}`,
-        },
-        (payload) => {
-          const row = payload.new as WorkItemLog;
-          setLogs((prev) => {
-            if (prev.some((l) => l.id === row.id)) return prev;
-            return [...prev, row];
-          });
-        },
-      )
-      .subscribe();
-
-    return () => {
-      mounted = false;
-      supabase.removeChannel(channel);
-    };
   }, [workItemId]);
+
+  // Initial load, then poll for entries posted by agents or other tabs.
+  useEffect(() => {
+    setLogs([]);
+    load();
+  }, [load]);
+  usePolling(load, 5_000);
 
   // Auto-scroll to bottom on new entries
   useEffect(() => {
@@ -84,8 +70,8 @@ export function WorkLogPanel({ workItemId, currentUser, workItemStatus }: Props)
     }
   }, [logs.length]);
 
-  // The Realtime subscription only fires on INSERT, so edits (PATCH) won't
-  // arrive that way — patch the local row in place from the PATCH response.
+  // Patch the local row in place from the PATCH response so an edit shows
+  // immediately rather than on the next poll.
   function applyEdit(updated: WorkItemLog) {
     setLogs((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
   }
@@ -120,6 +106,7 @@ export function WorkLogPanel({ workItemId, currentUser, workItemStatus }: Props)
       if (res.ok) {
         setMessage("");
         setEntryType("progress");
+        load();
       } else {
         console.error("Failed to post log:", await res.text());
       }

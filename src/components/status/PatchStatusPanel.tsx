@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
-import { supabase } from "@/lib/supabase";
+import { usePolling } from "@/lib/use-polling";
 
 // Casey Phase 1 security patch DETECTION — read-only view of the patch_runs table.
 // DETECTION ONLY: this panel surfaces what needs patching; it triggers nothing.
@@ -174,7 +174,6 @@ export default function PatchStatusPanel({ isAdmin }: { isAdmin: boolean }) {
   const [scanning, setScanning] = useState(false);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -191,34 +190,9 @@ export default function PatchStatusPanel({ isAdmin }: { isAdmin: boolean }) {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-    const channel = supabase
-      .channel("patch-status-panel")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "patch_runs" },
-        () => {
-          // A scan inserts several rows in quick succession — coalesce refetches.
-          if (debounce.current) clearTimeout(debounce.current);
-          debounce.current = setTimeout(() => load(), 800);
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "pending_approvals" },
-        () => {
-          // Remediation approvals filed/approved/rejected → refresh badges.
-          if (debounce.current) clearTimeout(debounce.current);
-          debounce.current = setTimeout(() => load(), 800);
-        },
-      )
-      .subscribe();
-    return () => {
-      if (debounce.current) clearTimeout(debounce.current);
-      supabase.removeChannel(channel);
-    };
-  }, [load]);
+  // Scans and remediation approvals land from agents; refresh while visible.
+  useEffect(() => { load(); }, [load]);
+  usePolling(load, 30_000);
 
   const handleRescan = async () => {
     setScanning(true);

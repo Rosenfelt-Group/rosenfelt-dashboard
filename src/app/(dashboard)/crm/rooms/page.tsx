@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { CRMNav } from "@/components/CRMNav";
-import { fetchJson } from "@/lib/rooms/fetch-json";
+import { fetchJson } from "@/lib/fetch-json";
 
 type Room = {
   id: string;

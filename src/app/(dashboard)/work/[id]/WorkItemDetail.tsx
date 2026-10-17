@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { supabase } from "@/lib/supabase";
+import { usePolling } from "@/lib/use-polling";
 import { AgentBadge } from "@/components/AgentBadge";
 import { WorkLogPanel } from "@/components/work/WorkLogPanel";
 import { WorkDocsPanel } from "@/components/work/WorkDocsPanel";
@@ -12,6 +12,7 @@ import type {
   AgentName,
   TaskPriority,
   WorkItem,
+  WorkItemLog,
   WorkItemSource,
   WorkStatus,
   WorkType,
@@ -137,36 +138,45 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
     }
   }
 
-  // Realtime: pick up updates to this work item (status flips, prompt writes
-  // from Jordan, etc.) without requiring a manual refresh.
-  useEffect(() => {
-    const channel = supabase
-      .channel(`work-item-${item.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "work_items",
-          filter: `id=eq.${item.id}`,
-        },
-        (payload) => {
-          const next = payload.new as Partial<WorkItem>;
-          setItem((prev) => ({ ...prev, ...next }));
-          // Keep the Phase input in sync when the value changes elsewhere.
-          if ("sprint_number" in next) {
-            setPhase(next.sprint_number?.toString() ?? "");
-          }
-          if ("phase_step" in next) {
-            setPhaseStep(next.phase_step ?? "");
-          }
-        },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+  // Poll for updates to this work item (status flips, prompt writes from
+  // Jordan, etc.). Only fields that changed on the server since the last poll
+  // are applied, so unsaved edits in the form are not overwritten.
+  const serverItemRef = useRef<WorkItem>(initial);
+  usePolling(async () => {
+    try {
+      const res = await fetch(`/api/work/${item.id}`);
+      if (!res.ok) return;
+      const next = (await res.json()) as WorkItem;
+      const prevServer = serverItemRef.current as unknown as Record<string, unknown>;
+      serverItemRef.current = next;
+      const changed: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(next)) {
+        if (JSON.stringify(value) !== JSON.stringify(prevServer[key])) changed[key] = value;
+      }
+      if (Object.keys(changed).length === 0) return;
+      setItem((prev) => ({ ...prev, ...(changed as Partial<WorkItem>) }));
+      // Keep the Phase input in sync when the value changes elsewhere.
+      if ("sprint_number" in changed) setPhase(next.sprint_number?.toString() ?? "");
+      if ("phase_step" in changed) setPhaseStep(next.phase_step ?? "");
+    } catch {
+      // Background refresh; the next poll retries.
+    }
+  }, 10_000);
+
+  const fetchLogs = useCallback(async (): Promise<WorkItemLog[] | null> => {
+    try {
+      const res = await fetch(`/api/work/${item.id}/logs`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return Array.isArray(data.logs) ? data.logs : null;
+    } catch {
+      return null;
+    }
   }, [item.id]);
+
+  // Log counts when each pending state started; entries past these are new.
+  const statusLogBaseline = useRef<number | null>(null);
+  const promptLogBaseline = useRef<number | null>(null);
 
   // Re-enable status-check button after 30s OR on any new log entry.
   useEffect(() => {
@@ -180,27 +190,17 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
     return () => clearTimeout(id);
   }, [statusCheckPending, statusCheckSince]);
 
-  // Listen for new log entries — re-enables the status button as soon as
-  // the agent posts a progress update.
+  // Record the log count when a status check starts, so the poll below can
+  // re-enable the button as soon as the agent posts a progress update.
   useEffect(() => {
-    if (!statusCheckPending) return;
-    const channel = supabase
-      .channel(`work-item-status-listen-${item.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "work_item_logs",
-          filter: `work_item_id=eq.${item.id}`,
-        },
-        () => setStatusCheckPending(false),
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [statusCheckPending, item.id]);
+    if (!statusCheckPending) {
+      statusLogBaseline.current = null;
+      return;
+    }
+    fetchLogs().then((logs) => {
+      if (logs && statusLogBaseline.current === null) statusLogBaseline.current = logs.length;
+    });
+  }, [statusCheckPending, fetchLogs]);
 
   // On mount: restore the write-prompt spinner if Jordan is mid-run. We detect
   // this by checking whether the newest log entry is the "✍️ Writing" start-log
@@ -209,63 +209,58 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
   useEffect(() => {
     if (initial.status !== "approved") return;
     const TEN_MIN = 10 * 60 * 1000;
-    supabase
-      .from("work_item_logs")
-      .select("message, entry_type, created_at")
-      .eq("work_item_id", initial.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .then(({ data }) => {
-        if (!data?.length) return;
-        const latest = data[0];
-        const isWritingEntry =
-          latest.entry_type === "progress" &&
-          (latest.message as string | null)?.startsWith("✍️");
-        const elapsed = Date.now() - new Date(latest.created_at).getTime();
-        if (!isWritingEntry || elapsed >= TEN_MIN) return;
-        setPromptAtRequest(initial.prompt ?? "");
-        setWritePromptPending(true);
-        if (writePromptTimeoutRef.current) clearTimeout(writePromptTimeoutRef.current);
-        writePromptTimeoutRef.current = setTimeout(() => {
-          writePromptTimeoutRef.current = null;
-          setWritePromptPending(false);
-        }, TEN_MIN - elapsed);
-      });
+    fetchLogs().then((logs) => {
+      if (!logs?.length) return;
+      const latest = logs[logs.length - 1];
+      const isWritingEntry =
+        latest.entry_type === "progress" &&
+        (latest.message as string | null)?.startsWith("✍️");
+      const elapsed = Date.now() - new Date(latest.created_at).getTime();
+      if (!isWritingEntry || elapsed >= TEN_MIN) return;
+      promptLogBaseline.current = logs.length;
+      setPromptAtRequest(initial.prompt ?? "");
+      setWritePromptPending(true);
+      if (writePromptTimeoutRef.current) clearTimeout(writePromptTimeoutRef.current);
+      writePromptTimeoutRef.current = setTimeout(() => {
+        writePromptTimeoutRef.current = null;
+        setWritePromptPending(false);
+      }, TEN_MIN - elapsed);
+    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- mount only, initial is stable
 
-  // While write-prompt is pending, listen for Jordan's terminal log entries
-  // (error / question / completion) to clear the spinner immediately rather
-  // than waiting for the 5-minute safety-net timeout.
+  // While write-prompt is pending, watch for Jordan's terminal log entries
+  // (error / question / completion) to clear the spinner rather than waiting
+  // for the safety-net timeout.
   useEffect(() => {
-    if (!writePromptPending) return;
-    const channel = supabase
-      .channel(`write-prompt-log-${item.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "work_item_logs",
-          filter: `work_item_id=eq.${item.id}`,
-        },
-        (payload) => {
-          const entry = payload.new as { entry_type?: string };
-          if (
-            entry.entry_type === "error" ||
-            entry.entry_type === "question" ||
-            entry.entry_type === "completion"
-          ) {
-            if (writePromptTimeoutRef.current) {
-              clearTimeout(writePromptTimeoutRef.current);
-              writePromptTimeoutRef.current = null;
-            }
-            setWritePromptPending(false);
-          }
-        },
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [writePromptPending, item.id]);
+    if (!writePromptPending) {
+      promptLogBaseline.current = null;
+      return;
+    }
+    if (promptLogBaseline.current !== null) return;
+    fetchLogs().then((logs) => {
+      if (logs && promptLogBaseline.current === null) promptLogBaseline.current = logs.length;
+    });
+  }, [writePromptPending, fetchLogs]);
+
+  usePolling(async () => {
+    const logs = await fetchLogs();
+    if (!logs) return;
+    if (statusCheckPending && statusLogBaseline.current !== null && logs.length > statusLogBaseline.current) {
+      setStatusCheckPending(false);
+    }
+    if (writePromptPending && promptLogBaseline.current !== null) {
+      const finished = logs
+        .slice(promptLogBaseline.current)
+        .some((l) => l.entry_type === "error" || l.entry_type === "question" || l.entry_type === "completion");
+      if (finished) {
+        if (writePromptTimeoutRef.current) {
+          clearTimeout(writePromptTimeoutRef.current);
+          writePromptTimeoutRef.current = null;
+        }
+        setWritePromptPending(false);
+      }
+    }
+  }, 5_000, statusCheckPending || writePromptPending);
 
   const patch = useCallback(
     async (updates: Partial<WorkItem> & { dispatch?: boolean }): Promise<boolean> => {

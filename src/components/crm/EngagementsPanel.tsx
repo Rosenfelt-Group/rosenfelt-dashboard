@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
-import { fetchJson } from "@/lib/rooms/fetch-json";
+import { fetchJson } from "@/lib/fetch-json";
 
 type Eng = { id: string; title: string; relationship: string; status: string; created_at: string };
 

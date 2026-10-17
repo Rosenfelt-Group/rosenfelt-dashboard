@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { fetchJson } from "@/lib/rooms/fetch-json";
+import { fetchJson } from "@/lib/fetch-json";
 
 // Emails the room invite for a just-issued link from brian@rosably.com. Hidden when the app has no
 // email set up; Copy stays available alongside it as the fallback.

@@ -9,7 +9,7 @@ import { DashboardStats, WorkflowLog, PendingApproval, AgentStatus, Agent } from
 import { formatDistanceToNow } from "date-fns";
 import clsx from "clsx";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { usePolling } from "@/lib/use-polling";
 
 interface RawNote {
   id: string;
@@ -41,6 +41,15 @@ export default function OverviewPage() {
   const dismissedIdsRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
+    try {
+      await loadAll();
+    } catch (e) {
+      // Keep whatever is already on screen; the next poll retries.
+      console.error("Overview load failed:", e);
+      setLoading(false);
+    }
+
+    async function loadAll() {
     const [s, a, ap, ag, usage, notifRes] = await Promise.all([
       fetch("/api/stats").then(r => r.json()),
       fetch("/api/activity").then(r => r.json()),
@@ -65,101 +74,13 @@ export default function OverviewPage() {
         .map(({ id, agent, message, urgency }) => ({ id, agent, message, urgency }))
         .slice(0, 3)
     );
+    }
   }, []);
 
-  useEffect(() => {
-    load();
-    // Stats are multi-table aggregates — keep polling for those.
-    // Approvals and activity are handled by Realtime below.
-    const interval = setInterval(load, 120_000);
-
-    const channel = supabase
-      .channel("overview-changes")
-      // New approval from an agent → add to list and bump count
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "pending_approvals" },
-        (payload) => {
-          const row = payload.new as PendingApproval;
-          if (row.status !== "pending") return;
-          setApprovals(prev => [row, ...prev]);
-          setStats(prev => prev
-            ? { ...prev, pending_approvals: prev.pending_approvals + 1 }
-            : prev
-          );
-        }
-      )
-      // Approval resolved (approved/rejected/expired) → remove from list and decrement count
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "pending_approvals" },
-        (payload) => {
-          const row = payload.new as PendingApproval;
-          if (row.status === "pending") return;
-          setApprovals(prev => {
-            const wasPresent = prev.some(a => a.id === row.id);
-            if (!wasPresent) return prev;
-            setStats(s => s
-              ? { ...s, pending_approvals: Math.max(0, s.pending_approvals - 1) }
-              : s
-            );
-            return prev.filter(a => a.id !== row.id);
-          });
-        }
-      )
-      // New token usage row → add cost to today's running total
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "token_usage" },
-        (payload) => {
-          const row = payload.new as { cost_usd: string; created_at: string };
-          const todayDate = new Date().toISOString().slice(0, 10);
-          if (row.created_at.slice(0, 10) === todayDate) {
-            setCostToday(prev => (prev ?? 0) + Number(row.cost_usd ?? 0));
-          }
-        }
-      )
-      // New workflow execution → prepend to activity feed and update agent stats + counters
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "workflow_logs" },
-        (payload) => {
-          const row = payload.new as WorkflowLog;
-          const todayStart = new Date();
-          todayStart.setHours(0, 0, 0, 0);
-          const isToday = new Date(row.created_at) >= todayStart;
-
-          setActivity(prev => [row, ...prev].slice(0, 20));
-
-          if (isToday) {
-            setStats(prev => prev ? {
-              ...prev,
-              executions_today: prev.executions_today + 1,
-              errors_today: prev.errors_today + (row.status === "error" ? 1 : 0),
-            } : prev);
-          }
-
-          setAgentStatus(prev => prev.map(a => {
-            if (a.agent !== row.agent) return a;
-            const isRecent = new Date(row.created_at) >= new Date(Date.now() - 24 * 60 * 60 * 1000);
-            if (!isRecent) return a;
-            return {
-              ...a,
-              executions_24h: a.executions_24h + 1,
-              errors_24h:     a.errors_24h + (row.status === "error" ? 1 : 0),
-              last_execution: row.created_at,
-              last_status:    row.status,
-            };
-          }));
-        }
-      )
-      .subscribe();
-
-    return () => {
-      clearInterval(interval);
-      supabase.removeChannel(channel);
-    };
-  }, [load]);
+  // Everything on this page comes from server routes; refresh it all on a
+  // short interval while the tab is visible.
+  useEffect(() => { load(); }, [load]);
+  usePolling(load, 30_000);
 
   async function handleApproval(id: string, status: "approved" | "rejected" | "revision_requested", revisionNotes?: string) {
     await fetch("/api/approvals", {

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { fetchJson } from "@/lib/fetch-json";
 import { CRMLead, CRMStage } from "@/types";
 import { differenceInDays } from "date-fns";
 import clsx from "clsx";
@@ -18,13 +19,16 @@ const SOURCE_LABELS: Record<string, string> = {
 export default function CRMPage() {
   const [leads, setLeads] = useState<CRMLead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/crm/leads")
-      .then(r => r.json())
-      .then(d => { setLeads(Array.isArray(d) ? d : []); setLoading(false); });
+    fetchJson<unknown>("/api/crm/leads").then(r => {
+      if (r.ok) setLeads(Array.isArray(r.data) ? r.data : []);
+      else setLoadError(r.error);
+      setLoading(false);
+    });
   }, []);
 
   async function moveStage(leadId: string, stage: CRMStage) {
@@ -41,6 +45,14 @@ export default function CRMPage() {
 
   if (loading) {
     return <div className="p-8"><div className="card animate-pulse h-64" /></div>;
+  }
+  if (loadError) {
+    return (
+      <div className="p-4 md:p-8">
+        <CRMNav />
+        <div className="card text-sm text-red-600">Couldn&apos;t load the pipeline: {loadError}</div>
+      </div>
+    );
   }
 
   return (

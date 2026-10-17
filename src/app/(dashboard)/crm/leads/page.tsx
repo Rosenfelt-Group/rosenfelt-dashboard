@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { fetchJson } from "@/lib/fetch-json";
 import { CRMLead, CRMStage, CRMSource } from "@/types";
 import { CRMNav } from "@/components/CRMNav";
 import { STAGES } from "@/lib/crm/stages";
@@ -24,6 +25,7 @@ const BLANK_EDIT = {
 export default function LeadsPage() {
   const [leads, setLeads] = useState<CRMLead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<CRMStage | "">("");
   const [selected, setSelected] = useState<CRMLead | null>(null);
@@ -32,9 +34,11 @@ export default function LeadsPage() {
   const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
-    fetch("/api/crm/leads")
-      .then(r => r.json())
-      .then(d => { setLeads(Array.isArray(d) ? d : []); setLoading(false); });
+    fetchJson<unknown>("/api/crm/leads").then(r => {
+      if (r.ok) setLeads(Array.isArray(r.data) ? r.data : []);
+      else setLoadError(r.error);
+      setLoading(false);
+    });
   }, []);
 
   function openEdit(lead: CRMLead) {
@@ -113,6 +117,9 @@ export default function LeadsPage() {
         </select>
       </div>
 
+      {loadError && (
+        <div className="card text-sm text-red-600 mb-4">Couldn&apos;t load leads: {loadError}</div>
+      )}
       {loading ? (
         <div className="card animate-pulse h-40" />
       ) : filtered.length === 0 ? (

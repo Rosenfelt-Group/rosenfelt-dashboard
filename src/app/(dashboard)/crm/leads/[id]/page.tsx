@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { fetchJson } from "@/lib/fetch-json";
 import { useParams, useRouter } from "next/navigation";
 import { CRMLead, CRMActivity, CRMAssessmentResult, CRMStage, CRMServiceTier } from "@/types";
 import { formatDistanceToNow, format } from "date-fns";
@@ -47,6 +48,7 @@ export default function LeadDetailPage() {
   const [assessment, setAssessment] = useState<CRMAssessmentResult | null>(null);
   const [discovery, setDiscovery] = useState<DiscoveryInvite[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Edit form state
   const [showEdit, setShowEdit] = useState(false);
@@ -96,15 +98,17 @@ export default function LeadDetailPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/crm/leads/${id}`).then(r => r.json()),
-      fetch(`/api/crm/leads/${id}/activities`).then(r => r.json()),
-      fetch(`/api/crm/assessment/${id}`).then(r => r.json()),
-      fetch(`/api/crm/discovery?lead_id=${id}`).then(r => r.json()).catch(() => []),
+      fetchJson<CRMLead>(`/api/crm/leads/${id}`),
+      fetchJson<unknown>(`/api/crm/leads/${id}/activities`),
+      fetchJson<CRMAssessmentResult>(`/api/crm/assessment/${id}`),
+      fetchJson<unknown>(`/api/crm/discovery?lead_id=${id}`),
     ]).then(([l, a, s, disc]) => {
-      setDiscovery(Array.isArray(disc) ? disc : []);
-      setLead(l?.id ? l : null);
-      setActivities(Array.isArray(a) ? a : []);
-      setAssessment(s?.id ? s : null);
+      // A missing lead is a 404 ("Lead not found" below); anything else is a load error.
+      if (!l.ok && l.status !== 404) setLoadError(l.error);
+      setLead(l.ok && l.data?.id ? l.data : null);
+      setActivities(a.ok && Array.isArray(a.data) ? a.data : []);
+      setAssessment(s.ok && s.data?.id ? s.data : null);
+      setDiscovery(disc.ok && Array.isArray(disc.data) ? disc.data : []);
       setLoading(false);
     });
   }, [id]);
@@ -176,6 +180,14 @@ export default function LeadDetailPage() {
 
   if (loading) {
     return <div className="p-8"><div className="card animate-pulse h-64" /></div>;
+  }
+  if (loadError) {
+    return (
+      <div className="p-8">
+        <div className="card text-sm text-red-600">Couldn&apos;t load this lead: {loadError}</div>
+        <Link href="/crm" className="text-brand-orange text-sm mt-2 block">← Back to pipeline</Link>
+      </div>
+    );
   }
   if (!lead) {
     return (

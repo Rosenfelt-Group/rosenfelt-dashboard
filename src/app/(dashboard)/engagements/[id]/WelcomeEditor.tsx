@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { fetchJson } from "@/lib/rooms/fetch-json";
+import { fetchJson } from "@/lib/fetch-json";
 
 const MAX = 1000;
 

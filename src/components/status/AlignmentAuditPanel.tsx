@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
-import { supabase } from "@/lib/supabase";
 import { formatDistanceToNow, parseISO } from "date-fns";
 
 interface AlignmentFinding {
@@ -30,29 +29,25 @@ const STATUS_BADGE: Record<string, string> = {
   cancelled: "badge-neutral",
 };
 
-const ALIGNMENT_PATTERNS = [
-  "%tool count drift%",
-  "%phantom table in docs%",
-  "%undocumented table: public%",
-  "%phantom endpoint in docs%",
-];
-
 export default function AlignmentAuditPanel({ isAdmin }: { isAdmin: boolean }) {
   const [findings, setFindings] = useState<AlignmentFinding[]>([]);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
   const [triggerMsg, setTriggerMsg] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const orFilter = ALIGNMENT_PATTERNS.map(p => `title.ilike.${p}`).join(",");
-    const { data } = await supabase
-      .from("work_items")
-      .select("id, ref, title, description, priority, status, created_at")
-      .or(orFilter)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    setFindings(data ?? []);
-    setLoading(false);
+    try {
+      const res = await fetch("/api/work/alignment-findings");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setFindings(Array.isArray(data) ? data : []);
+      setLoadError(null);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed to load findings");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -118,6 +113,8 @@ export default function AlignmentAuditPanel({ isAdmin }: { isAdmin: boolean }) {
 
       {loading ? (
         <div className="card animate-pulse h-32" />
+      ) : loadError ? (
+        <div className="card text-sm text-red-600">Couldn&apos;t load findings: {loadError}</div>
       ) : findings.length === 0 ? (
         <div className="card text-sm text-brand-muted">
           No alignment findings on record.{isAdmin ? " Click \"Run Now\" to trigger the first audit." : ""}
