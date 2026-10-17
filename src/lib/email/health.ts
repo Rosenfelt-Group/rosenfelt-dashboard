@@ -48,7 +48,7 @@ export function computeHealth(i: HealthInput): Health {
     amber.push(`${plural(i.unresolvedHardBounces, "email address", "email addresses")} can't be reached and needs attention`);
   }
   if (ratesCount && bounceRate! >= BOUNCE_WARN && bounceRate! <= BOUNCE_RED) {
-    amber.push(`${pct(bounceRate!)} of emails bounced this week (over 2%)`);
+    amber.push(`${pct(bounceRate!)} of emails bounced this week (2% or more)`);
   }
   if (hasSends && i.eventsInWindow === 0) {
     amber.push("Email alerts may be broken: no events from Postmark this week");

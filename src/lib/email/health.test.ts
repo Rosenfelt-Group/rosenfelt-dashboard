@@ -33,7 +33,15 @@ describe("computeHealth", () => {
   });
 
   it("is amber when bounce rate is between 2% and 5% with 50+ sends", () => {
-    expect(run({ sent: 60, delivered: 58, bouncedTotal: 2 }).level).toBe("amber");
+    const h = run({ sent: 60, delivered: 58, bouncedTotal: 2 });
+    expect(h.level).toBe("amber");
+    expect(h.reasons).toEqual(["3.3% of emails bounced this week (2% or more)"]);
+  });
+
+  it("is amber at exactly 2%, and says '2% or more' (not 'over 2%')", () => {
+    const h = run({ sent: 100, delivered: 98, bouncedTotal: 2 });
+    expect(h.level).toBe("amber");
+    expect(h.reasons).toEqual(["2.0% of emails bounced this week (2% or more)"]);
   });
 
   it("is red for an unresolved spam complaint", () => {
