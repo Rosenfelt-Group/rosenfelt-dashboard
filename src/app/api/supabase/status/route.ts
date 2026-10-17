@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { normalizeSupabaseStatus } from "@/lib/supabase-status";
 
 export const maxDuration = 10;
 
@@ -12,5 +13,5 @@ export async function GET() {
     return NextResponse.json({ error: "Status page unavailable" }, { status: 502 });
   }
 
-  return NextResponse.json(await res.json());
+  return NextResponse.json(normalizeSupabaseStatus(await res.json().catch(() => null)));
 }
