@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { DiscoveryQuestionnaireDef } from "@/types";
-import { sendEmail, isEmailConfigured, EmailError } from "@/lib/email/gmail";
+import { sendEmail, isEmailConfigured, EmailError } from "@/lib/email";
 import { discoveryLink } from "./index";
 import { estimateMinutes } from "./snapshot";
 import { inviteEmail, inviteSubject } from "./invite-email";

@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { SendInviteEmailSchema } from "@/lib/rooms/schemas";
 import { hashToken, isPlausibleToken, roomLink } from "@/lib/rooms/token";
 import { roomInviteEmail } from "@/lib/rooms/invite-email";
-import { sendEmail, isValidEmail, EmailError } from "@/lib/email/gmail";
+import { sendEmail, isValidEmail, EmailError } from "@/lib/email";
 import { sessionUsername } from "@/lib/rooms/session-user";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
