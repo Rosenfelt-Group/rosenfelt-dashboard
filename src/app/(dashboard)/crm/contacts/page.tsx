@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/fetch-json";
+import { Button, EmptyState, ErrorState, LoadingState, Modal, PageHeader } from "@/components/ui";
 import { CRMContact, CRMBusiness, CRMContactRole } from "@/types";
 
 type Form = {
@@ -137,15 +138,11 @@ export default function ContactsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-semibold text-brand-black">Contacts</h1>
-          <p className="text-sm text-brand-muted mt-0.5">{contacts.length} total</p>
-        </div>
-        <button onClick={openCreate} className="btn-primary text-xs px-3 py-1.5">
-          + New contact
-        </button>
-      </div>
+      <PageHeader
+        title="Contacts"
+        description={`${contacts.length} total`}
+        actions={<Button size="sm" onClick={openCreate}>+ New contact</Button>}
+      />
 
       <div className="mb-4">
         <input
@@ -156,15 +153,11 @@ export default function ContactsPage() {
         />
       </div>
 
-      {loadError && (
-        <div className="card text-sm text-red-600 mb-4">Couldn&apos;t load contacts: {loadError}</div>
-      )}
+      {loadError && <ErrorState message={`Couldn't load contacts: ${loadError}`} className="mb-4" />}
       {loading ? (
-        <div className="card animate-pulse h-40" />
+        <LoadingState />
       ) : filtered.length === 0 ? (
-        <div className="card text-center py-12">
-          <p className="text-brand-muted text-sm">{search ? "No contacts match." : "No contacts yet."}</p>
-        </div>
+        <EmptyState title={search ? "No contacts match." : "No contacts yet."} />
       ) : (
         <div className="card divide-y divide-brand-border">
           {filtered.map(contact => (
@@ -205,133 +198,125 @@ export default function ContactsPage() {
         </div>
       )}
 
-      {showModal && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-semibold text-brand-black">
-                {editingId ? "Edit contact" : "New contact"}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="text-brand-muted hover:text-brand-black text-lg">✕</button>
+      <Modal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title={editingId ? "Edit contact" : "New contact"}
+        footer={
+          <>
+            <Button variant="ghost" className="flex-1" onClick={() => setShowModal(false)}>Cancel</Button>
+            <Button className="flex-1" onClick={saveContact} disabled={saving || !form.firstName.trim()}>
+              {saving ? "Saving…" : editingId ? "Save changes" : "Create contact"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-brand-muted mb-1 block">First name *</label>
+              <input
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                value={form.firstName}
+                onChange={e => setForm(p => ({ ...p, firstName: e.target.value }))}
+                placeholder="Jane"
+              />
             </div>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-brand-muted mb-1 block">First name *</label>
-                  <input
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                    value={form.firstName}
-                    onChange={e => setForm(p => ({ ...p, firstName: e.target.value }))}
-                    placeholder="Jane"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-brand-muted mb-1 block">Last name</label>
-                  <input
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                    value={form.lastName}
-                    onChange={e => setForm(p => ({ ...p, lastName: e.target.value }))}
-                    placeholder="Smith"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Title</label>
-                <input
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={form.title}
-                  onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
-                  placeholder="CEO"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-brand-muted mb-1 block">Email</label>
-                  <input
-                    type="email"
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                    value={form.email}
-                    onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                    placeholder="jane@acme.com"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-brand-muted mb-1 block">Phone</label>
-                  <input
-                    type="tel"
-                    className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                    value={form.phone}
-                    onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
-                    placeholder="+1 555 000 0000"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Business</label>
-                <select
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={form.businessId}
-                  onChange={e => setForm(p => ({ ...p, businessId: e.target.value }))}
-                >
-                  <option value="">— none —</option>
-                  {businesses.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Role</label>
-                <select
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={form.role}
-                  onChange={e => setForm(p => ({ ...p, role: e.target.value as CRMContactRole | "" }))}
-                >
-                  <option value="">— no role —</option>
-                  {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">LinkedIn URL</label>
-                <input
-                  type="url"
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={form.linkedinUrl}
-                  onChange={e => setForm(p => ({ ...p, linkedinUrl: e.target.value }))}
-                  placeholder="https://linkedin.com/in/..."
-                />
-              </div>
-              <label className="flex items-center gap-2 text-xs text-brand-black">
-                <input
-                  type="checkbox"
-                  checked={form.isPrimary}
-                  onChange={e => setForm(p => ({ ...p, isPrimary: e.target.checked }))}
-                />
-                Primary contact for this business
-              </label>
-              <div>
-                <label className="text-xs text-brand-muted mb-1 block">Notes</label>
-                <textarea
-                  rows={2}
-                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                  value={form.notes}
-                  onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
-                />
-              </div>
-              {err && <div className="text-xs text-red-700">{err}</div>}
-            </div>
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowModal(false)} className="btn-ghost flex-1">Cancel</button>
-              <button
-                onClick={saveContact}
-                disabled={saving || !form.firstName.trim()}
-                className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? "Saving…" : editingId ? "Save changes" : "Create contact"}
-              </button>
+            <div>
+              <label className="text-xs text-brand-muted mb-1 block">Last name</label>
+              <input
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                value={form.lastName}
+                onChange={e => setForm(p => ({ ...p, lastName: e.target.value }))}
+                placeholder="Smith"
+              />
             </div>
           </div>
+          <div>
+            <label className="text-xs text-brand-muted mb-1 block">Title</label>
+            <input
+              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+              value={form.title}
+              onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+              placeholder="CEO"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-brand-muted mb-1 block">Email</label>
+              <input
+                type="email"
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                value={form.email}
+                onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                placeholder="jane@acme.com"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-brand-muted mb-1 block">Phone</label>
+              <input
+                type="tel"
+                className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+                value={form.phone}
+                onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
+                placeholder="+1 555 000 0000"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-brand-muted mb-1 block">Business</label>
+            <select
+              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+              value={form.businessId}
+              onChange={e => setForm(p => ({ ...p, businessId: e.target.value }))}
+            >
+              <option value="">— none —</option>
+              {businesses.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-brand-muted mb-1 block">Role</label>
+            <select
+              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+              value={form.role}
+              onChange={e => setForm(p => ({ ...p, role: e.target.value as CRMContactRole | "" }))}
+            >
+              <option value="">— no role —</option>
+              {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-brand-muted mb-1 block">LinkedIn URL</label>
+            <input
+              type="url"
+              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+              value={form.linkedinUrl}
+              onChange={e => setForm(p => ({ ...p, linkedinUrl: e.target.value }))}
+              placeholder="https://linkedin.com/in/..."
+            />
+          </div>
+          <label className="flex items-center gap-2 text-xs text-brand-black">
+            <input
+              type="checkbox"
+              checked={form.isPrimary}
+              onChange={e => setForm(p => ({ ...p, isPrimary: e.target.checked }))}
+            />
+            Primary contact for this business
+          </label>
+          <div>
+            <label className="text-xs text-brand-muted mb-1 block">Notes</label>
+            <textarea
+              rows={2}
+              className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
+              value={form.notes}
+              onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+            />
+          </div>
+          {err && <div className="text-xs text-red-700">{err}</div>}
         </div>
-      )}
+      </Modal>
     </div>
   );
 }
