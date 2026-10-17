@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
-import type { EmailEvent } from "@/lib/email/events";
+import type { EmailProblem } from "@/lib/email/events";
 import { StatCard } from "@/components/StatCard";
 import { Button, ErrorState, LoadingState, Modal } from "@/components/ui";
 import { usePolling } from "@/lib/use-polling";
@@ -61,7 +61,7 @@ export function EmailTab() {
   }
 
   // resend modal
-  const [resendFor, setResendFor] = useState<EmailEvent | null>(null);
+  const [resendFor, setResendFor] = useState<EmailProblem | null>(null);
   const [resendTo, setResendTo] = useState("");
   const [unblockFirst, setUnblockFirst] = useState(false);
   const [offerUnblock, setOfferUnblock] = useState(false);
@@ -71,7 +71,7 @@ export function EmailTab() {
   const suppressionFor = (addr: string) => blocked?.find(b => b.email.toLowerCase() === addr.trim().toLowerCase());
   const canUnblockAddr = (addr: string) => suppressionFor(addr)?.canUnblock === true;
 
-  function openResend(e: EmailEvent) {
+  function openResend(e: EmailProblem) {
     setResendFor(e); setResendTo(e.recipient); setResendError(null);
     setOfferUnblock(false); setUnblockFirst(false);
   }
@@ -143,7 +143,7 @@ export function EmailTab() {
   if (!data && !error) return <LoadingState />;
   if (!data) return <ErrorState message={error} onRetry={load} />;
 
-  const { health, stats, bySource, problems, canManage } = data;
+  const { health, stats, bySource, problems, canManage, canResend: resendEnabled } = data;
   const lvl = HEALTH_LEVELS[health.level];
   const rate = health.bounceRate;
   const bounceWarn = rate !== null && stats !== null && stats.sent >= MIN_SENDS_FOR_RATES && rate >= BOUNCE_WARN;
@@ -186,6 +186,9 @@ export function EmailTab() {
             Show resolved
           </label>
         </div>
+        {canManage && !resendEnabled && problems.some(p => !p.resolved_at && p.record_type !== "SpamComplaint" && canResend(p.tag)) && (
+          <p className="px-4 py-2 border-b border-brand-border text-xs text-brand-muted">Resend is off until Postmark is approved.</p>
+        )}
         {problems.length === 0 ? (
           <p className="px-4 py-6 text-sm text-brand-muted text-center">
             {showResolved ? "No problems in the last 7 days." : "Nothing needs attention."}
@@ -213,7 +216,7 @@ export function EmailTab() {
                       <td className={clsx(td, "whitespace-nowrap")}>
                         {!p.resolved_at && (
                           <div className="flex gap-1.5">
-                            {p.record_type !== "SpamComplaint" && canResend(p.tag) && (
+                            {resendEnabled && p.record_type !== "SpamComplaint" && canResend(p.tag) && (
                               <Button size="sm" variant="secondary" onClick={() => openResend(p)}>Resend</Button>
                             )}
                             {p.record_type !== "SpamComplaint" && p.tag === RERUN_FROM_N8N_TAG && (

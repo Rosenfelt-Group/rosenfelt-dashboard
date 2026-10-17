@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import type { EmailEvent } from "@/lib/email/events";
+import type { EmailProblem } from "@/lib/email/events";
 import { usePolling } from "@/lib/use-polling";
 import { fetchJson } from "@/lib/fetch-json";
 import { lastProblemText } from "@/components/status/tabs/helpers";
@@ -17,9 +17,11 @@ export type EmailHealthResponse = {
   window: { from: string; to: string };
   stats: { sent: number; bounced: number; spamComplaints: number } | null;
   bySource: { source: string; sent: number; bounced: number; spam: number }[];
-  problems: EmailEvent[];
-  lastProblem: EmailEvent | null;
+  problems: EmailProblem[];
+  lastProblem: EmailProblem | null;
   canManage: boolean;
+  /** canManage and the server sends through Postmark; otherwise the resend route would refuse (503). */
+  canResend: boolean;
 };
 
 export const HEALTH_LEVELS = {

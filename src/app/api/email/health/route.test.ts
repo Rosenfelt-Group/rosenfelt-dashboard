@@ -17,10 +17,12 @@ vi.mock("@/lib/email/postmark-api", () => ({
   getOutboundStats: vi.fn(),
 }));
 vi.mock("@/lib/email/events", () => ({ listProblems: vi.fn(), windowCounts: vi.fn() }));
+vi.mock("@/lib/email", () => ({ emailProvider: vi.fn() }));
 
 import { GET } from "./route";
 import { getOutboundStats } from "@/lib/email/postmark-api";
 import { listProblems, windowCounts } from "@/lib/email/events";
+import { emailProvider } from "@/lib/email";
 
 const req = () => new NextRequest("http://x/api/email/health");
 const event = { id: "e1", record_type: "Bounce", recipient: "a@b.co" };
@@ -33,6 +35,7 @@ beforeEach(() => {
     : { sent: 34, bounced: 2, spamComplaints: 0 });
   vi.mocked(windowCounts).mockReset().mockResolvedValue({ delivered: 30, unresolvedHardBounces: 0, unresolvedSpam: 0, events: 40 });
   vi.mocked(listProblems).mockReset().mockResolvedValue([event] as never);
+  vi.mocked(emailProvider).mockReset().mockReturnValue("postmark");
 });
 
 describe("GET /api/email/health", () => {
@@ -52,6 +55,7 @@ describe("GET /api/email/health", () => {
       { source: "dashboard", sent: 20, bounced: 2, spam: 0 },
       { source: "n8n", sent: 10, bounced: 1, spam: 0 },
       { source: "wordpress", sent: 4, bounced: 0, spam: 0 },
+      { source: "other", sent: 0, bounced: 0, spam: 0 },
     ]);
     expect(b.lastProblem).toEqual(event);
     expect(b.window.from < b.window.to).toBe(true);
@@ -71,6 +75,29 @@ describe("GET /api/email/health", () => {
   it("canManage is true with manage_email", async () => {
     s.perms = ["view_overview", "manage_email"];
     expect((await (await GET(req())).json()).canManage).toBe(true);
+  });
+
+  it("canResend needs manage_email and Postmark as the provider", async () => {
+    expect((await (await GET(req())).json()).canResend).toBe(false); // viewer
+    s.perms = ["view_overview", "manage_email"];
+    expect((await (await GET(req())).json()).canResend).toBe(true);
+    vi.mocked(emailProvider).mockReturnValue("gmail");
+    expect((await (await GET(req())).json()).canResend).toBe(false);
+    vi.mocked(emailProvider).mockReturnValue(null);
+    expect((await (await GET(req())).json()).canResend).toBe(false);
+  });
+
+  it("adds an Other row for untagged mail (total minus tagged), never negative", async () => {
+    vi.mocked(getOutboundStats).mockImplementation(async (_f, _t, tag) =>
+      tag === "wordpress" ? { sent: 4, bounced: 0, spamComplaints: 0 }
+      : tag ? { sent: 10, bounced: 1, spamComplaints: 0 }
+      : { sent: 40, bounced: 4, spamComplaints: 1 });
+    let b = await (await GET(req())).json();
+    expect(b.bySource.at(-1)).toEqual({ source: "other", sent: 6, bounced: 1, spam: 1 });
+    vi.mocked(getOutboundStats).mockImplementation(async (_f, _t, tag) =>
+      tag ? { sent: 10, bounced: 1, spamComplaints: 0 } : { sent: 5, bounced: 0, spamComplaints: 0 });
+    b = await (await GET(req())).json();
+    expect(b.bySource.at(-1)).toEqual({ source: "other", sent: 0, bounced: 0, spam: 0 });
   });
 
   it("level comes from the rules (unresolved hard bounce is amber)", async () => {

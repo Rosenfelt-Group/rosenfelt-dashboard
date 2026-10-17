@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/requirePermission";
 import { EmailError } from "@/lib/email/gmail";
+import { emailProvider } from "@/lib/email";
 import { getOutboundStats, KNOWN_TAGS } from "@/lib/email/postmark-api";
 import { listProblems, windowCounts } from "@/lib/email/events";
 import { computeHealth } from "@/lib/email/health";
@@ -17,6 +18,8 @@ export async function GET(req: NextRequest) {
   const auth = await requirePermission(req, "view_overview");
   if (!auth.ok) return auth.response;
   const canManage = (await requirePermission(req, "manage_email")).ok;
+  // Resend sends through Postmark only (the resend route answers 503 otherwise), so the UI hides it until then.
+  const canResend = canManage && emailProvider() === "postmark";
 
   const includeResolved = req.nextUrl.searchParams.get("includeResolved") === "1";
   const now = new Date();
@@ -40,7 +43,12 @@ export async function GET(req: NextRequest) {
       g.sent += s.sent; g.bounced += s.bounced; g.spam += s.spamComplaints;
       groups.set(source, g);
     }
-    bySource = [...groups.values()];
+    // Untagged mail (e.g. avery/weekly-audit sent over SMTP) and unknown tags: whatever the tagged rows don't cover.
+    const tagged = [...groups.values()];
+    const rest = (k: "sent" | "bounced" | "spam", all: number) => Math.max(0, all - tagged.reduce((n, g) => n + g[k], 0));
+    bySource = [...tagged, {
+      source: "other", sent: rest("sent", total.sent), bounced: rest("bounced", total.bounced), spam: rest("spam", total.spamComplaints),
+    }];
   } catch (e) {
     postmarkError = e instanceof EmailError && e.code === "auth_failed" ? "auth" : "unreachable";
     stats = null;
@@ -59,7 +67,8 @@ export async function GET(req: NextRequest) {
       postmarkError,
     });
     return NextResponse.json({
-      health, window, stats, bySource, problems, lastProblem: problems.find((p) => !p.resolved_at) ?? null, canManage,
+      health, window, stats, bySource, problems, lastProblem: problems.find((p) => !p.resolved_at) ?? null,
+      canManage, canResend,
     });
   } catch (e) {
     console.error("email health: events store failed:", e);

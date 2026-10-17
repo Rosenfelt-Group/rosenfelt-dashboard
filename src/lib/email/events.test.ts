@@ -42,6 +42,12 @@ describe("listProblems", () => {
     await listProblems({ since: "x", includeResolved: true });
     expect(has("or", "inactive.is.true,record_type.eq.SpamComplaint")).toBe(true);
   });
+  it("selects only the columns the UI needs (never the raw payload)", async () => {
+    await listProblems({ since: "x" });
+    const select = s.calls.find((c) => c[0] === "select")!;
+    expect(select[1]).toBe("id, record_type, recipient, subject, tag, source_group, bounce_type, description, inactive, occurred_at, resolved_at, resolution");
+    expect(String(select[1])).not.toMatch(/payload|\*/);
+  });
   it("includes resolved when asked", async () => {
     await listProblems({ since: "x", includeResolved: true });
     expect(has("is", "resolved_at", null)).toBe(false);
