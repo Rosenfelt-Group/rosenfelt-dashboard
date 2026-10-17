@@ -5,9 +5,9 @@ import { EmailError } from "@/lib/email/gmail";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// GET ?recipient= — recent Postmark messages sent to one address.
+// GET ?recipient= — recent Postmark messages sent to one address. Admin-only (manage_email).
 export async function GET(req: NextRequest) {
-  const auth = await requirePermission(req, "view_overview");
+  const auth = await requirePermission(req, "manage_email");
   if (!auth.ok) return auth.response;
 
   const recipient = (req.nextUrl.searchParams.get("recipient") ?? "").trim();

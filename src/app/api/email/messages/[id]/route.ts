@@ -3,9 +3,9 @@ import { requirePermission } from "@/lib/requirePermission";
 import { getMessage } from "@/lib/email/postmark-api";
 import { EmailError } from "@/lib/email/gmail";
 
-// GET — one Postmark message's details. Bodies are deliberately stripped: they never go to the browser.
+// GET — one Postmark message's details (admin-only, manage_email). Bodies are deliberately stripped: they never go to the browser.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission(req, "view_overview");
+  const auth = await requirePermission(req, "manage_email");
   if (!auth.ok) return auth.response;
 
   const { id } = await params;

@@ -312,8 +312,8 @@ export function EmailTab() {
         )}
       </div>
 
-      {/* Look up */}
-      <div className="card p-0 overflow-hidden">
+      {/* Look up (admin-only: the message routes need manage_email) */}
+      {canManage && <div className="card p-0 overflow-hidden">
         <div className="px-4 py-3 border-b border-brand-border">
           <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide">Look up a message</p>
         </div>
@@ -358,7 +358,7 @@ export function EmailTab() {
             })}
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Resend modal */}
       <Modal
