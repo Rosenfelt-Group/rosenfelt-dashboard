@@ -5,6 +5,7 @@ import { getEvent, resolveEvents, logAction, type EmailEvent } from "./events";
 import { refreshAccess } from "@/lib/rooms/refresh-access";
 import { sendRoomInvite } from "@/lib/rooms/send-invite";
 import { emailInvite } from "@/lib/discovery/email";
+import { DASHBOARD_RESEND_TAGS, RESENDABLE_TAGS, RERUN_FROM_N8N_TAG } from "./resendable";
 
 // Server-only. Resend a bounced email, per source (see the Email health design, "Resend").
 // A room invite's secret link is never resent from storage: the link is refreshed and a new one sent.
@@ -140,9 +141,9 @@ export async function resendEvent(eventId: string, opts: { to?: string; unblock?
 
   // Which path rebuilds this email; refuse anything without one before touching Postmark.
   const tag = ev.tag ?? "";
-  if (tag === "n8n-avery-deliver-audit") return fail(422, "Re-run the delivery from n8n (avery-deliver-audit).");
-  const dashboard = tag === "dashboard-room-invite" || tag === "dashboard-discovery-invite";
-  if (!dashboard && tag !== "n8n-stripe-buyer" && tag !== "n8n-typeform-intake") return fail(422, NOT_RESENDABLE);
+  if (tag === RERUN_FROM_N8N_TAG) return fail(422, "Re-run the delivery from n8n (avery-deliver-audit).");
+  const dashboard = (DASHBOARD_RESEND_TAGS as readonly string[]).includes(tag);
+  if (!(RESENDABLE_TAGS as readonly string[]).includes(tag)) return fail(422, NOT_RESENDABLE);
   if (tag === "dashboard-room-invite" && !(ev.metadata?.engagement_id && ev.metadata?.access_id)) return fail(422, NOT_RESENDABLE);
   if (tag === "dashboard-discovery-invite" && !ev.metadata?.discovery_invite_id) return fail(422, NOT_RESENDABLE);
 

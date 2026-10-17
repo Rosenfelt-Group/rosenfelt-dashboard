@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeHtmlEntities, formatUptime, problemLabel, runMeta, sourceLabel, vercelStateMeta } from "./helpers";
+import { canResend, decodeHtmlEntities, formatUptime, problemLabel, runMeta, sourceLabel, vercelStateMeta } from "./helpers";
 import type { EmailEvent } from "@/lib/email/events";
 
 describe("formatUptime", () => {
@@ -41,5 +41,16 @@ describe("problemLabel", () => {
     expect(problemLabel(ev({ record_type: "Bounce", description: "Mailbox does not exist" }))).toBe("Hard bounce: Mailbox does not exist");
     expect(problemLabel(ev({ record_type: "SpamComplaint" }))).toBe("Spam complaint");
     expect(problemLabel(ev({ record_type: "SubscriptionChange" }))).toBe("Blocked");
+  });
+});
+
+describe("canResend", () => {
+  it("is true only for the tags the resend route supports", () => {
+    for (const t of ["dashboard-room-invite", "dashboard-discovery-invite", "n8n-stripe-buyer", "n8n-typeform-intake"]) {
+      expect(canResend(t)).toBe(true);
+    }
+    for (const t of ["n8n-avery-deliver-audit", "n8n-weekly-audit", "wordpress", "bogus", null]) {
+      expect(canResend(t)).toBe(false);
+    }
   });
 });

@@ -7,7 +7,9 @@ import { Button, ErrorState, LoadingState, Modal } from "@/components/ui";
 import { usePolling } from "@/lib/use-polling";
 import { fetchJson } from "@/lib/fetch-json";
 import { HEALTH_LEVELS, type EmailHealthResponse } from "@/components/EmailHealthCard";
-import { ago, problemLabel, sourceLabel } from "./helpers";
+import { BOUNCE_WARN, MIN_SENDS_FOR_RATES } from "@/lib/email/health";
+import { RERUN_FROM_N8N_TAG } from "@/lib/email/resendable";
+import { ago, canResend, problemLabel, sourceLabel } from "./helpers";
 
 type Suppression = { email: string; reason: string; origin: string; createdAt: string; canUnblock: boolean };
 type MessageSummary = { id: string; to: string; subject: string; tag?: string; status: string; receivedAt: string };
@@ -144,7 +146,7 @@ export function EmailTab() {
   const { health, stats, bySource, problems, canManage } = data;
   const lvl = HEALTH_LEVELS[health.level];
   const rate = health.bounceRate;
-  const bounceWarn = rate !== null && stats !== null && stats.sent >= 50 && rate >= 0.02;
+  const bounceWarn = rate !== null && stats !== null && stats.sent >= MIN_SENDS_FOR_RATES && rate >= BOUNCE_WARN;
 
   return (
     <div className="space-y-4">
@@ -171,7 +173,7 @@ export function EmailTab() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Sent" value={stats ? stats.sent : "—"} sub="last 7 days" />
         <StatCard label="Delivered" value={health.deliveredPct !== null ? `${(health.deliveredPct * 100).toFixed(1)}%` : "—"} sub="last 7 days" />
-        <StatCard label="Bounce rate" value={rate !== null ? `${(rate * 100).toFixed(1)}%` : "—"} sub="warn at 2%" warn={bounceWarn} />
+        <StatCard label="Bounce rate" value={rate !== null ? `${(rate * 100).toFixed(1)}%` : "—"} sub={`warn at ${BOUNCE_WARN * 100}%`} warn={bounceWarn} />
         <StatCard label="Spam complaints" value={stats ? stats.spamComplaints : "—"} alert={(stats?.spamComplaints ?? 0) > 0} sub="last 7 days" />
       </div>
 
@@ -211,8 +213,11 @@ export function EmailTab() {
                       <td className={clsx(td, "whitespace-nowrap")}>
                         {!p.resolved_at && (
                           <div className="flex gap-1.5">
-                            {p.record_type !== "SpamComplaint" && (
+                            {p.record_type !== "SpamComplaint" && canResend(p.tag) && (
                               <Button size="sm" variant="secondary" onClick={() => openResend(p)}>Resend</Button>
+                            )}
+                            {p.record_type !== "SpamComplaint" && p.tag === RERUN_FROM_N8N_TAG && (
+                              <span className="text-xs text-brand-muted self-center max-w-[180px] whitespace-normal">Re-run the delivery from n8n (avery-deliver-audit).</span>
                             )}
                             <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => dismiss(p.id)}>Dismiss</Button>
                           </div>

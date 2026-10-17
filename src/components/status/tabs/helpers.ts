@@ -1,5 +1,6 @@
 // Pure formatting/parsing helpers shared by the status page tabs.
 import { formatDistanceToNow, parseISO } from "date-fns";
+import { RESENDABLE_TAGS } from "@/lib/email/resendable";
 import type { EmailEvent } from "@/lib/email/events";
 
 export function ago(ts: string | number | null) {
@@ -80,4 +81,9 @@ export function problemLabel(e: EmailEvent): string {
   if (e.record_type === "Bounce") return e.description ? `Hard bounce: ${e.description}` : "Hard bounce";
   if (e.record_type === "SpamComplaint") return "Spam complaint";
   return "Blocked";
+}
+
+// True only for tags the resend route can rebuild (list shared with lib/email/resend.ts).
+export function canResend(tag: string | null): boolean {
+  return tag !== null && (RESENDABLE_TAGS as readonly string[]).includes(tag);
 }
