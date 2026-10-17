@@ -25,3 +25,14 @@ describe("manage_intelligence", () => {
     expect(PERMISSION_LABELS.manage_intelligence).toBe("Edit Agent Prompts & Memory");
   });
 });
+
+describe("manage_email", () => {
+  it("is a manage permission with a label", () => {
+    expect(MANAGE_PERMISSIONS).toContain("manage_email");
+    expect(PERMISSION_LABELS.manage_email).toBe("Manage Email");
+  });
+  it("is held by admin but not by a viewer", () => {
+    expect(hasPermission({ role: "admin", permissions: [] }, "manage_email")).toBe(true);
+    expect(hasPermission({ role: "viewer", permissions: ["view_overview"] }, "manage_email")).toBe(false);
+  });
+});

@@ -34,6 +34,14 @@ describe("auth and errors", () => {
   });
 });
 
+describe("timeout and network failures", () => {
+  it("sends an abort signal and maps a failed or timed-out fetch to send_failed", async () => {
+    fetchMock.mockRejectedValueOnce(new DOMException("The operation timed out", "TimeoutError"));
+    await expect(getOutboundStats("2026-10-10", "2026-10-17")).rejects.toMatchObject({ code: "send_failed" });
+    expect((call().init as RequestInit).signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
 describe("getOutboundStats", () => {
   it("maps stats and sends the token", async () => {
     fetchMock.mockResolvedValueOnce(json({ Sent: 38, Bounced: 1, SpamComplaints: 0 }));

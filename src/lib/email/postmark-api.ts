@@ -5,6 +5,18 @@ import { postmarkServerToken } from "./postmark";
 // for the Email health view. Uses the same POSTMARK_SERVER_TOKEN as sending.
 const BASE = "https://api.postmarkapp.com";
 const STREAM = "outbound";
+const REQUEST_TIMEOUT_MS = 10_000;
+
+// Tags our senders use; per-source stats are queried tag by tag.
+export const KNOWN_TAGS = [
+  "dashboard-discovery-invite",
+  "dashboard-room-invite",
+  "n8n-avery-deliver-audit",
+  "n8n-stripe-buyer",
+  "n8n-typeform-intake",
+  "n8n-weekly-audit",
+  "wordpress",
+] as const;
 
 export type Suppression = {
   email: string;
@@ -36,15 +48,22 @@ export type MessageDetail = {
 
 async function pm<T>(path: string, init: { method?: "GET" | "POST"; body?: unknown } = {}): Promise<T> {
   const token = postmarkServerToken();
-  const res = await fetch(`${BASE}${path}`, {
-    method: init.method ?? "GET",
-    headers: {
-      accept: "application/json",
-      ...(init.body !== undefined ? { "content-type": "application/json" } : {}),
-      "x-postmark-server-token": token,
-    },
-    ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method: init.method ?? "GET",
+      headers: {
+        accept: "application/json",
+        ...(init.body !== undefined ? { "content-type": "application/json" } : {}),
+        "x-postmark-server-token": token,
+      },
+      ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (e) {
+    // Timeout or network failure: surface as a send_failed so callers treat it as "unreachable".
+    throw new EmailError("send_failed", `Postmark unreachable: ${e instanceof Error ? e.message : String(e)}`);
+  }
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (res.status === 401) throw new EmailError("auth_failed", "Postmark rejected the server token", 401);
   if (!res.ok) {
