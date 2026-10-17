@@ -9,7 +9,7 @@ const code = createRequire(import.meta.url)("./postmark-events.code.js") as {
   sourceLabel(tag: string | null): string;
   secretMatches(given: unknown, expected: unknown): boolean;
   recentPingQuery(row: Row, nowMs: number): string | null;
-  pingDecision(n: Normalized, insertResponse: string, recentResponse: string): { send: boolean; text: string | null };
+  pingDecision(n: Normalized, insertBody: unknown, recentResponse: string): { send: boolean; text: string | null };
 };
 
 const LINK = "https://dashboard.rosably.com/status?tab=email";
@@ -145,17 +145,23 @@ describe("secretMatches", () => {
 });
 
 describe("ping decision", () => {
-  const inserted = JSON.stringify([{ id: "1" }]);
+  // Insert body (return=representation): the new row, or [] when the event_key already existed.
+  const inserted = [{ id: "1" }];
   it("pings only newly inserted rows", () => {
     const n = code.normalize(hardBounce);
     expect(code.pingDecision(n, inserted, "[]")).toEqual({ send: true, text: n.ping });
-    expect(code.pingDecision(n, "[]", "[]")).toEqual({ send: false, text: null });
+    expect(code.pingDecision(n, JSON.stringify(inserted), "[]")).toEqual({ send: true, text: n.ping });
+    expect(code.pingDecision(n, [], "[]")).toEqual({ send: false, text: null });
     expect(code.pingDecision(code.normalize(delivery), inserted, "[]")).toEqual({ send: false, text: null });
   });
   it("skips a block ping when a bounce/complaint ping went out for that recipient recently", () => {
     const n = code.normalize(subChange);
     expect(code.pingDecision(n, inserted, "[]").send).toBe(true);
     expect(code.pingDecision(n, inserted, JSON.stringify([{ id: "b" }])).send).toBe(false);
+  });
+  it("fails loudly on an unreadable insert response, so the event is retried rather than silently not pinged", () => {
+    expect(() => code.pingDecision(code.normalize(hardBounce), undefined, "[]")).toThrow(/insert response/);
+    expect(() => code.pingDecision(code.normalize(hardBounce), { _readableState: {} }, "[]")).toThrow(/insert response/);
   });
   it("does not let recent pings suppress a bounce or complaint", () => {
     expect(code.pingDecision(code.normalize(spam), inserted, JSON.stringify([{ id: "b" }])).send).toBe(true);

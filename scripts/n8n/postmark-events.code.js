@@ -123,11 +123,20 @@ function parseRows(responseText) {
   return Array.isArray(parsed) ? parsed : [];
 }
 
-// insertResponse: body of the email_events insert (return=representation; [] means duplicate -> no ping).
+// Rows returned by the email_events insert (Prefer return=representation): the new row, or [] for a duplicate.
+// Anything that isn't an array throws, so the workflow answers 500 and Postmark retries instead of a ping being
+// skipped silently.
+function insertedRows(body) {
+  var rows = typeof body === "string" ? JSON.parse(body) : body;
+  if (!Array.isArray(rows)) throw new Error("email_events insert response is not an array: " + typeof rows);
+  return rows;
+}
+
+// insertBody: body of the email_events insert ([] = duplicate -> no ping).
 // recentResponse: body of the recentPingQuery lookup ("[]" when none was needed).
-function pingDecision(normalized, insertResponse, recentResponse) {
+function pingDecision(normalized, insertBody, recentResponse) {
   var none = { send: false, text: null };
-  if (!normalized.ping || parseRows(insertResponse).length === 0) return none;
+  if (insertedRows(insertBody).length === 0 || !normalized.ping) return none;
   if (normalized.row.record_type === "SubscriptionChange" && parseRows(recentResponse).length > 0) return none;
   return { send: true, text: normalized.ping };
 }
@@ -148,7 +157,7 @@ function normalizeNode(item, nowMs) {
 }
 
 function decidePingNode(normalizedItem, insertItem, recentItem) {
-  return [{ json: pingDecision(normalizedItem.json, insertItem.json.data, recentItem.json.data) }];
+  return [{ json: pingDecision(normalizedItem.json, insertItem.json.body, recentItem.json.data) }];
 }
 
 if (typeof module !== "undefined" && module.exports) {
