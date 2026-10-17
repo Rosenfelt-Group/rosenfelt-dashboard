@@ -37,6 +37,12 @@ export async function listProblems(opts: { since: string; includeResolved?: bool
   return (data ?? []) as EmailEvent[];
 }
 
+export async function getEvent(id: string): Promise<EmailEvent | null> {
+  const { data, error } = await db().from("email_events").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(`email_events get failed: ${error.message}`);
+  return (data as EmailEvent | null) ?? null;
+}
+
 export async function windowCounts(since: string): Promise<{
   delivered: number; unresolvedHardBounces: number; unresolvedSpam: number; events: number;
 }> {

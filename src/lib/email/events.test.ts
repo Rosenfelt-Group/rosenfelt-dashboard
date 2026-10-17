@@ -11,7 +11,7 @@ vi.mock("@/lib/supabase-admin", () => ({
       from: (table: string) => {
         s.calls.push(["from", table]);
         const b: Record<string, unknown> = {};
-        for (const m of ["select", "neq", "gte", "is", "eq", "ilike", "filter", "order", "limit", "update", "insert"]) {
+        for (const m of ["select", "neq", "gte", "is", "eq", "ilike", "filter", "order", "limit", "update", "insert", "maybeSingle"]) {
           b[m] = (...a: unknown[]) => { s.calls.push([m, ...a]); return b; };
         }
         b.then = (res: (v: unknown) => unknown) => Promise.resolve(s.result).then(res);
@@ -21,7 +21,7 @@ vi.mock("@/lib/supabase-admin", () => ({
   },
 }));
 
-import { listProblems, resolveEvents, logAction, windowCounts } from "./events";
+import { listProblems, resolveEvents, logAction, windowCounts, getEvent } from "./events";
 
 const has = (...c: unknown[]) => s.calls.some((x) => JSON.stringify(x) === JSON.stringify(c));
 
@@ -84,5 +84,15 @@ describe("logAction", () => {
     await expect(logAction({ action: "dismiss", by: "b" })).resolves.toBeUndefined();
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+describe("getEvent", () => {
+  it("loads one event by id, or null", async () => {
+    s.result = { data: { id: "e1" } as unknown as unknown[], count: 0, error: null };
+    expect(await getEvent("e1")).toEqual({ id: "e1" });
+    expect(has("eq", "id", "e1")).toBe(true);
+    s.result = { data: null as unknown as unknown[], count: 0, error: null };
+    expect(await getEvent("e2")).toBeNull();
   });
 });

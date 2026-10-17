@@ -61,6 +61,8 @@ describe("POST email room invite", () => {
     expect(msg.text).toContain("Hi Pat,");
     expect(msg.text).toContain(LINK);
     expect(msg.text).toContain("Hope Food Pantry");
+    expect(msg.tag).toBe("dashboard-room-invite");
+    expect(msg.metadata).toEqual({ engagement_id: ENG, access_id: ACC });
     const [table, row] = s.insert.mock.calls[0];
     expect(table).toBe("lead_activities");
     expect(row).toMatchObject({ lead_id: LEAD, activity_type: "system", metadata: { gmail_message_id: "gm-1" } });
