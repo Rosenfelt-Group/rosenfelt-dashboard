@@ -1,5 +1,7 @@
 // Pure formatting/parsing helpers shared by the status page tabs.
 import { formatDistanceToNow, parseISO } from "date-fns";
+import { RESENDABLE_TAGS } from "@/lib/email/resendable";
+import type { EmailEvent } from "@/lib/email/events";
 
 export function ago(ts: string | number | null) {
   if (!ts) return null;
@@ -63,4 +65,37 @@ export function decodeHtmlEntities(s: string): string {
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
     .replace(/&([a-z]+);/gi, (m, name) => HTML_NAMED_ENTITIES[name.toLowerCase()] ?? m);
+}
+
+// Plain-English name for a Postmark tag ("n8n-stripe-buyer" -> "n8n · stripe-buyer").
+export function sourceLabel(tag: string | null): string {
+  if (!tag) return "Other";
+  if (tag === "dashboard-room-invite") return "Dashboard · room invite";
+  if (tag === "dashboard-discovery-invite") return "Dashboard · discovery invite";
+  if (tag.startsWith("n8n-")) return `n8n · ${tag.slice(4)}`;
+  if (tag === "wordpress") return "WordPress";
+  return "Other";
+}
+
+// A Bounce is hard when Postmark deactivated the address (inactive); a SubscriptionChange is a block when
+// SuppressSending was true (stored as inactive), otherwise a reactivation.
+export function problemLabel(e: Pick<EmailEvent, "record_type" | "inactive" | "description">): string {
+  if (e.record_type === "Bounce") {
+    const kind = e.inactive === true ? "Hard bounce" : "Soft bounce";
+    return e.description ? `${kind}: ${e.description}` : kind;
+  }
+  if (e.record_type === "SpamComplaint") return "Spam complaint";
+  return e.inactive === true ? "Blocked" : "Unblocked";
+}
+
+/** "Last problem" wording: day + short type, e.g. "Oct 16, hard bounce to a@b.co" or "Oct 16, blocked: a@b.co". */
+export function lastProblemText(e: Pick<EmailEvent, "record_type" | "inactive" | "description" | "recipient" | "occurred_at">): string {
+  const day = new Date(e.occurred_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const type = problemLabel(e).split(":")[0].toLowerCase();
+  return e.record_type === "SubscriptionChange" ? `${day}, ${type}: ${e.recipient}` : `${day}, ${type} to ${e.recipient}`;
+}
+
+// True only for tags the resend route can rebuild (list shared with lib/email/resend.ts).
+export function canResend(tag: string | null): boolean {
+  return tag !== null && (RESENDABLE_TAGS as readonly string[]).includes(tag);
 }

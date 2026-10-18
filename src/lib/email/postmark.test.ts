@@ -42,6 +42,15 @@ describe("buildPayload", () => {
     });
   });
 
+  it("passes Tag and Metadata through", () => {
+    const base = { to: "a@b.co", subject: "s", text: "t" };
+    const p = buildPayload({ ...base, tag: "t", metadata: { a: "1" } }, "brian@rosably.com");
+    expect(p).toMatchObject({ Tag: "t", Metadata: { a: "1" } });
+    const q = buildPayload(base, "brian@rosably.com");
+    expect(q).not.toHaveProperty("Tag");
+    expect(q).not.toHaveProperty("Metadata");
+  });
+
   it("rejects bad input", () => {
     const base = { to: "a@b.co", subject: "s", text: "t" };
     expect(() => buildPayload({ ...base, to: "a@b.co, c@d.co" }, "x@y.co")).toThrow(EmailError);

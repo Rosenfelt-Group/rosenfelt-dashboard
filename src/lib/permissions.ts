@@ -20,6 +20,7 @@ export const MANAGE_PERMISSIONS = [
   "manage_rbac",
   "manage_documents",
   "manage_intelligence",
+  "manage_email",
 ] as const;
 
 export const ALL_PERMISSIONS = [...VIEW_PERMISSIONS, ...MANAGE_PERMISSIONS] as const;
@@ -44,6 +45,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   manage_rbac:      "Manage Roles",
   manage_documents: "Manage Documents",
   manage_intelligence: "Edit Agent Prompts & Memory",
+  manage_email:     "Manage Email",
 };
 
 export const PERMISSION_GROUPS = {

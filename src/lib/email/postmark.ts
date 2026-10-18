@@ -22,6 +22,13 @@ function loadConfig(): Config {
   return { token, sender };
 }
 
+// Server token for Postmark's account-free server API (stats, suppressions, messages).
+export function postmarkServerToken(): string {
+  const token = process.env.POSTMARK_SERVER_TOKEN?.trim();
+  if (!token) throw new EmailError("not_configured", "Email is not configured");
+  return token;
+}
+
 export function isPostmarkConfigured(): boolean {
   try {
     loadConfig();
@@ -53,6 +60,8 @@ export function buildPayload(input: SendEmailInput, sender: string) {
     Subject: input.subject,
     TextBody: input.text,
     ...(input.html !== undefined ? { HtmlBody: input.html } : {}),
+    ...(input.tag ? { Tag: input.tag } : {}),
+    ...(input.metadata ? { Metadata: input.metadata } : {}),
     MessageStream: MESSAGE_STREAM,
     TrackOpens: false,
     TrackLinks: "None",

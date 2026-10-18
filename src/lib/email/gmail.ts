@@ -28,6 +28,9 @@ export type SendEmailInput = {
   html?: string;
   replyTo?: string;
   fromName?: string;
+  // Postmark-only: tag and metadata make a send attributable in bounce/spam alerts. Gmail ignores them.
+  tag?: string;
+  metadata?: Record<string, string>;
 };
 
 type ServiceAccountKey = { client_email: string; private_key: string };

@@ -42,7 +42,7 @@ export async function emailInvite(inviteId: string, req: EmailRequest): Promise<
 
   let outcome: EmailOutcome;
   try {
-    const { id } = await sendEmail({ to: req.to, subject, text, fromName: "Brian Rosenfelt", replyTo: "brian@rosably.com" });
+    const { id } = await sendEmail({ to: req.to, subject, text, fromName: "Brian Rosenfelt", replyTo: "brian@rosably.com", tag: "dashboard-discovery-invite", metadata: { discovery_invite_id: inviteId } });
     outcome = { sent: true, id };
   } catch (e) {
     outcome = e instanceof EmailError && e.code === "invalid_input"
