@@ -78,9 +78,16 @@ describe("PATCH /api/approvals - pickle rows", () => {
     expect(s.updates[0].payload).toMatchObject({ status: "approved", reviewed_by: "brian" });
   });
 
-  it("allows an admin-role user", async () => {
+  it("403s a non-brian admin", async () => {
     s.session = { username: "someone", role: "admin", permissions: [] };
-    expect((await patch()).status).toBe(200);
+    expect((await patch()).status).toBe(403);
+    expect(s.updates).toHaveLength(0);
+  });
+
+  it("403s brian with a non-admin role", async () => {
+    s.session = { username: "brian", role: "viewer", permissions: [] };
+    expect((await patch()).status).toBe(403);
+    expect(s.updates).toHaveLength(0);
   });
 
   it("409s when the row is no longer pending (fetched)", async () => {
@@ -92,6 +99,7 @@ describe("PATCH /api/approvals - pickle rows", () => {
   it("409s when the guarded update touches zero rows", async () => {
     s.updated = [];
     expect((await patch()).status).toBe(409);
+    expect(s.updates).toHaveLength(1);
   });
 
   it("applies the same gate to rejecting a pickle row", async () => {

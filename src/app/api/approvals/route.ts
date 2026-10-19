@@ -57,7 +57,7 @@ export async function PATCH(req: NextRequest) {
     if (fetchError) throw fetchError;
 
     const isPickle = approval?.agent === "pickle";
-    const isBrianOrAdmin = session?.username === "brian" || session?.role === "admin";
+    const isBrianAdmin = session?.username === "brian" && session?.role === "admin";
     const isPublishPost = approval?.agent === "avery" && approval?.action_type === "publish_post";
     const isStackAudit  = approval?.agent === "avery" && approval?.action_type === "stack_audit_report";
     const ideaId = approval?.payload?.idea_id as string | undefined;
@@ -81,8 +81,8 @@ export async function PATCH(req: NextRequest) {
     }
     if (isPickle) {
       // Only Brian (or an admin) may act on Dr. Pickle rows, and only while pending.
-      if (!isBrianOrAdmin) {
-        return NextResponse.json({ error: "Only Brian can act on Pickle approvals" }, { status: 403 });
+      if (!isBrianAdmin) {
+        return NextResponse.json({ error: "Only Brian (admin) can act on Pickle approvals" }, { status: 403 });
       }
       if (approval.status !== "pending") {
         return NextResponse.json({ error: "Approval is no longer pending" }, { status: 409 });
