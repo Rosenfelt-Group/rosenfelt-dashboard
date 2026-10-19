@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { verifySessionToken, COOKIE_NAME } from "@/lib/session";
 
 export const maxDuration = 60;
 
@@ -41,16 +42,22 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
 
-    const reviewer = req.headers.get("x-user-name") ?? null;
+    // Reviewer identity comes from the signed session cookie only. The
+    // x-user-name header is client-controlled and must never be trusted here.
+    const token = req.cookies.get(COOKIE_NAME)?.value;
+    const session = token ? await verifySessionToken(token) : null;
+    const reviewer = session?.username ?? null;
 
     const { data: approval, error: fetchError } = await supabaseAdmin
       .from("pending_approvals")
-      .select("id, agent, action_type, title, payload")
+      .select("id, agent, action_type, title, payload, status")
       .eq("id", id)
       .single();
 
     if (fetchError) throw fetchError;
 
+    const isPickle = approval?.agent === "pickle";
+    const isBrianAdmin = session?.username === "brian" && session?.role === "admin";
     const isPublishPost = approval?.agent === "avery" && approval?.action_type === "publish_post";
     const isStackAudit  = approval?.agent === "avery" && approval?.action_type === "stack_audit_report";
     const ideaId = approval?.payload?.idea_id as string | undefined;
@@ -72,11 +79,31 @@ export async function PATCH(req: NextRequest) {
       updatePayload.reviewed_by = reviewer;
       updatePayload.reviewed_at = new Date().toISOString();
     }
-    const { error: updateError } = await supabaseAdmin
-      .from("pending_approvals")
-      .update(updatePayload)
-      .eq("id", id);
-    if (updateError) throw updateError;
+    if (isPickle) {
+      // Only Brian, with the admin role, may act on Dr. Pickle rows, and only while pending.
+      if (!isBrianAdmin) {
+        return NextResponse.json({ error: "Only Brian (admin) can act on Pickle approvals" }, { status: 403 });
+      }
+      if (approval.status !== "pending") {
+        return NextResponse.json({ error: "Approval is no longer pending" }, { status: 409 });
+      }
+      const { data: updated, error: updateError } = await supabaseAdmin
+        .from("pending_approvals")
+        .update(updatePayload)
+        .eq("id", id)
+        .eq("status", "pending")
+        .select("id");
+      if (updateError) throw updateError;
+      if (!updated || updated.length === 0) {
+        return NextResponse.json({ error: "Approval is no longer pending" }, { status: 409 });
+      }
+    } else {
+      const { error: updateError } = await supabaseAdmin
+        .from("pending_approvals")
+        .update(updatePayload)
+        .eq("id", id);
+      if (updateError) throw updateError;
+    }
 
     // ── APPROVED → publish ───────────────────────────────────────────────────
     if (status === "approved" && isPublishPost) {
