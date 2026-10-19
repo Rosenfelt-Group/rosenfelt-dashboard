@@ -80,7 +80,7 @@ export async function PATCH(req: NextRequest) {
       updatePayload.reviewed_at = new Date().toISOString();
     }
     if (isPickle) {
-      // Only Brian (or an admin) may act on Dr. Pickle rows, and only while pending.
+      // Only Brian, with the admin role, may act on Dr. Pickle rows, and only while pending.
       if (!isBrianAdmin) {
         return NextResponse.json({ error: "Only Brian (admin) can act on Pickle approvals" }, { status: 403 });
       }
