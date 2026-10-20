@@ -1,7 +1,7 @@
 import type { DocType, DocAudience, DocStatus } from "@/lib/doc-types";
 
 export type TaskPriority = "high" | "medium" | "low";
-export type Agent = "riley" | "jordan" | "avery" | "brian" | "sam" | "casey";
+export type Agent = "riley" | "jordan" | "avery" | "brian" | "sam" | "casey" | "pickle";
 
 export interface WorkflowLog {
   id: string;
@@ -122,7 +122,7 @@ export type WorkItemSource =
 
 export type WorkItemType = "internal" | "client";
 
-export type AgentName = "riley" | "jordan" | "avery" | "casey" | "sam" | "brian";
+export type AgentName = "riley" | "jordan" | "avery" | "casey" | "sam" | "brian" | "pickle";
 
 export interface WorkItem {
   id: string;

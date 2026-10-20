@@ -15,7 +15,7 @@ const STATUSES: WorkStatus[] = [
   "done", "deferred", "cancelled", "rejected",
 ];
 const PRIORITIES = ["low", "medium", "high"];
-const AGENTS = ["brian", "jordan", "riley", "avery", "casey", "sam"];
+const AGENTS = ["brian", "jordan", "riley", "avery", "casey", "sam", "pickle"];
 
 export function BulkActionBar({ selectedIds, onClear, onComplete }: Props) {
   const [pending, setPending] = useState(false);
