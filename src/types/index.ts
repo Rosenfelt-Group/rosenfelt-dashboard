@@ -1,7 +1,7 @@
 import type { DocType, DocAudience, DocStatus } from "@/lib/doc-types";
 
 export type TaskPriority = "high" | "medium" | "low";
-export type Agent = "riley" | "jordan" | "avery" | "brian" | "sam" | "casey";
+export type Agent = "riley" | "jordan" | "avery" | "brian" | "sam" | "casey" | "pickle";
 
 export interface WorkflowLog {
   id: string;
@@ -33,7 +33,7 @@ export interface PendingApproval {
   title: string;
   description?: string;
   payload?: Record<string, unknown>;
-  status: "pending" | "approved" | "rejected" | "revision_requested" | "expired";
+  status: "pending" | "approved" | "rejected" | "revision_requested" | "expired" | "executing" | "done" | "failed";
   reviewed_by?: string | null;
   reviewed_at?: string | null;
 }
@@ -122,7 +122,7 @@ export type WorkItemSource =
 
 export type WorkItemType = "internal" | "client";
 
-export type AgentName = "riley" | "jordan" | "avery" | "casey" | "sam" | "brian";
+export type AgentName = "riley" | "jordan" | "avery" | "casey" | "sam" | "brian" | "pickle";
 
 export interface WorkItem {
   id: string;

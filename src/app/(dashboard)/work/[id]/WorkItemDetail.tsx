@@ -24,7 +24,7 @@ const STATUS_OPTIONS: WorkStatus[] = ALL_STATUSES;
 
 const PRIORITY_OPTIONS: TaskPriority[] = ["high", "medium", "low"];
 const ASSIGN_OPTIONS: (AgentName | "unassigned")[] = [
-  "unassigned", "jordan", "riley", "avery", "casey", "sam", "brian",
+  "unassigned", "jordan", "riley", "avery", "casey", "sam", "brian", "pickle",
 ];
 const WORK_TYPE_OPTIONS: WorkType[] = [
   "infrastructure", "agent", "dashboard", "content",
@@ -372,7 +372,7 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
   }, [phaseStep, item.phase_step, patch]);
 
   const canDispatchToAgent = useMemo(
-    () => Boolean(item.assigned_agent) && item.assigned_agent !== "brian",
+    () => Boolean(item.assigned_agent) && item.assigned_agent !== "brian" && item.assigned_agent !== "pickle",
     [item.assigned_agent],
   );
 
@@ -578,7 +578,7 @@ export function WorkItemDetail({ initial }: { initial: WorkItem }) {
                   onChange={(e) => {
                     const v = e.target.value;
                     const next: AgentName | null = v === "unassigned" ? null : (v as AgentName);
-                    const isRealAgent = next && next !== "brian";
+                    const isRealAgent = next && next !== "brian" && next !== "pickle";
                     patch({ assigned_agent: next, ...(isRealAgent ? { dispatch: true } : {}) });
                   }}
                   disabled={busy}

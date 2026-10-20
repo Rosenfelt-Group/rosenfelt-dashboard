@@ -16,6 +16,9 @@ const STATUS_STYLES = {
   revision_requested:  "bg-amber-50 text-amber-700",
   expired:             "bg-gray-100 text-gray-500",
   pending:             "bg-amber-50 text-amber-700",
+  executing:           "bg-blue-50 text-blue-700",
+  done:                "bg-green-50 text-green-700",
+  failed:              "bg-red-50 text-red-700",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -24,6 +27,9 @@ const STATUS_LABELS: Record<string, string> = {
   revision_requested: "Revision",
   expired:            "Expired",
   pending:            "Pending",
+  executing:          "Executing",
+  done:               "Done",
+  failed:             "Failed",
 };
 
 function HistoryRow({ item }: { item: PendingApproval }) {
@@ -234,7 +240,7 @@ function ApprovalsContent() {
         <div className="space-y-4">
           <div className="flex gap-2 flex-wrap">
             <div className="flex gap-1 flex-wrap">
-              {(["all", "approved", "revision_requested", "rejected", "expired"] as const).map(s => (
+              {(["all", "approved", "revision_requested", "rejected", "expired", "done", "failed"] as const).map(s => (
                 <button key={s} onClick={() => setStatusFilter(s)}
                   className={clsx(
                     "px-2.5 py-1 rounded-full text-xs capitalize transition-colors",
