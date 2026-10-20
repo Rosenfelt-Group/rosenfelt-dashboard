@@ -33,7 +33,7 @@ export interface PendingApproval {
   title: string;
   description?: string;
   payload?: Record<string, unknown>;
-  status: "pending" | "approved" | "rejected" | "revision_requested" | "expired";
+  status: "pending" | "approved" | "rejected" | "revision_requested" | "expired" | "executing" | "done" | "failed";
   reviewed_by?: string | null;
   reviewed_at?: string | null;
 }
