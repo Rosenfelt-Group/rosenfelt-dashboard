@@ -45,6 +45,8 @@ async function main() {
   if (!apply) return;
 
   const { intakeLead } = await import("../src/lib/intake/client");
+  // Safe to re-run: intakeLead dedupes by email (matches the existing contact/lead), so repeating --apply
+  // after a partial failure does not create duplicates.
   let ok = 0;
   for (const d of todo) {
     try {
@@ -56,6 +58,7 @@ async function main() {
     }
   }
   console.log(`applied ${ok}/${todo.length}`);
+  if (ok < todo.length) process.exit(1);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

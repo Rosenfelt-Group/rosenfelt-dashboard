@@ -23,17 +23,20 @@ export type FoldDecision =
   | { action: "skip"; table: string; id: string; reason: "test" | "no email"; email: string | null };
 
 const TEST_DOMAINS = ["example.com", "test.com", "sfsfsfs.com"];
-const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+const OWN_EMAILS = ["brian@rosably.com", "crm@rosably.com"];
 
+/** Domain-only match: example.com or any subdomain of it; never a lookalike such as latest.com. */
 export function isTestEmail(email: string): boolean {
   const e = email.trim().toLowerCase();
-  return TEST_DOMAINS.some((d) => e.endsWith(d));
+  const domain = e.slice(e.lastIndexOf("@") + 1);
+  return TEST_DOMAINS.some((d) => domain === d || domain.endsWith("." + d));
 }
 
-/** Pull the first email address out of free text (prospects have no email column). */
+/** Pull the first non-Rosably email address out of free text (prospects have no email column). */
 export function emailFromNotes(notes: string | null | undefined): string | null {
-  const m = (notes ?? "").match(EMAIL_RE);
-  return m ? m[0] : null;
+  const all = (notes ?? "").match(EMAIL_RE) ?? [];
+  return all.find((e) => !OWN_EMAILS.includes(e.toLowerCase())) ?? null;
 }
 
 export function classifyProspect(row: LegacyProspect): FoldDecision {

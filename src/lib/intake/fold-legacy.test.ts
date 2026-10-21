@@ -36,4 +36,15 @@ describe("fold-legacy classification", () => {
     expect(e.action === "intake" && e.input.channel).toBe("ebook");
     if (q.action === "intake") expect(IntakeSchema.safeParse(q.input).success).toBe(true);
   });
+  it("matches domains only, not lookalikes", () => {
+    expect(isTestEmail("a@latest.com")).toBe(false);
+    expect(isTestEmail("x@contest.com")).toBe(false);
+    expect(isTestEmail("x@mail.example.com")).toBe(true);
+    expect(classifyAssessmentLead(a("a@latest.com")).action).toBe("intake");
+  });
+  it("ignores brian@ and crm@ rosably.com in notes", () => {
+    expect(emailFromNotes("Organizer brian@rosably.com crm@rosably.com guest bob@acme.io")).toBe("bob@acme.io");
+    expect(emailFromNotes("only brian@rosably.com")).toBeNull();
+    expect(emailFromNotes("a@b.io then c@d.io")).toBe("a@b.io");
+  });
 });
