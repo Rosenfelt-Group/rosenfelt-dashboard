@@ -265,7 +265,8 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN ok2 := true; END;
   BEGIN INSERT INTO crm.scope_documents (business_id, title) SELECT business_id, 'x' FROM crm.scope_documents WHERE id = d;
   EXCEPTION WHEN insufficient_privilege THEN ok3 := true; END;
-  PERFORM 1 FROM crm.scope_versions LIMIT 1; -- SELECT still works
+  ASSERT (SELECT count(*) FROM crm.scope_versions WHERE scope_document_id = d) >= 2, 'riley can read versions via policy';
+  ASSERT (SELECT count(*) FROM crm.scope_documents WHERE id = d) = 1, 'riley can read documents via policy';
   RESET ROLE;
   ASSERT ok1 AND ok2 AND ok3, 'riley direct writes must be denied';
 EXCEPTION WHEN OTHERS THEN RESET ROLE; RAISE;

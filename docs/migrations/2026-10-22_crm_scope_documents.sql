@@ -317,6 +317,10 @@ begin
   grant usage on schema crm to riley_app;
   revoke all on crm.scope_documents, crm.scope_versions from riley_app;
   grant select on crm.scope_documents, crm.scope_versions to riley_app;
+  drop policy if exists riley_read_scope_documents on crm.scope_documents;
+  create policy riley_read_scope_documents on crm.scope_documents for select to riley_app using (true);
+  drop policy if exists riley_read_scope_versions on crm.scope_versions;
+  create policy riley_read_scope_versions on crm.scope_versions for select to riley_app using (true);
   revoke execute on function crm.accept_scope_version(uuid) from riley_app;
   revoke execute on function crm.create_scope_version_current(uuid, jsonb, text, text, text) from riley_app;
   grant execute on function crm.create_initial_scope_from_brief(uuid, uuid, uuid, uuid, text, jsonb, text, text, uuid) to riley_app;
