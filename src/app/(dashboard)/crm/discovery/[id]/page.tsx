@@ -14,6 +14,7 @@ import { DraftEditor } from "@/components/crm/discovery/DraftEditor";
 import { DeleteDiscoveryButton } from "@/components/crm/discovery/DeleteDiscoveryButton";
 import { QuestionnaireOutline } from "@/components/crm/discovery/QuestionnaireOutline";
 import { ResendInviteEmail } from "@/components/crm/discovery/EmailInvite";
+import { ScopeLink } from "@/components/crm/scope/ScopeLink";
 import { fetchJson } from "@/lib/fetch-json";
 import { Button, EmptyState, ErrorState, LoadingState, PageHeader, Tabs } from "@/components/ui";
 
@@ -159,6 +160,7 @@ export default function DiscoveryDetailPage() {
                 <Link href={`/crm/businesses/${d.business_id ?? d.business?.id}`} className="btn-ghost text-xs px-2 py-1">Business</Link>
               )}
               <Link href={`/crm/leads/${d.lead_id}`} className="btn-ghost text-xs px-2 py-1">Open lead</Link>
+              <ScopeLink leadId={d.lead_id} />
             </>
           }
         />
@@ -209,6 +211,7 @@ export default function DiscoveryDetailPage() {
                 <Link href={`/crm/businesses/${d.business_id ?? d.business?.id}`} className="btn-ghost text-xs px-2 py-1">Business</Link>
               )}
               <Link href={`/crm/leads/${d.lead_id}`} className="btn-ghost text-xs px-2 py-1">Open lead</Link>
+              <ScopeLink leadId={d.lead_id} />
             </>
           }
         />

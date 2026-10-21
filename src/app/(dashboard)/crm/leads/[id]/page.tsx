@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { ScopeLink } from "@/components/crm/scope/ScopeLink";
 import { fetchJson } from "@/lib/fetch-json";
 import { useParams, useRouter } from "next/navigation";
 import { CRMLead, CRMActivity, CRMAssessmentResult, CRMStage, CRMServiceTier } from "@/types";
@@ -230,6 +231,7 @@ export default function LeadDetailPage() {
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <ScopeLink leadId={lead.id} />
             {stageMeta && (
               <span className={clsx("badge", stageMeta.color)}>{stageMeta.label}</span>
             )}

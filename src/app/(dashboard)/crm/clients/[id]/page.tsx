@@ -1,4 +1,5 @@
 "use client";
+import { ScopeLink } from "@/components/crm/scope/ScopeLink";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -153,10 +154,15 @@ export default function ClientDetailPage() {
                 {!client.stripe_customer_id && " · no Stripe customer yet"}
               </>
             }
-            actions={client.stripe_customer_id && (
-              <Button variant="secondary" size="sm" onClick={openPortal}>
-                Portal link →
-              </Button>
+            actions={(
+              <>
+                <ScopeLink clientId={clientId} />
+                {client.stripe_customer_id && (
+                  <Button variant="secondary" size="sm" onClick={openPortal}>
+                    Portal link →
+                  </Button>
+                )}
+              </>
             )}
           />
 
