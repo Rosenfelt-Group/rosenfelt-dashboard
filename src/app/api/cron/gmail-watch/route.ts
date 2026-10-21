@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { gmailRead } from "@/lib/email/gmail-user";
+import { sweepStaleExecuting } from "@/lib/email/executor";
 import { getSyncState, updateSyncState, advanceCursor, logWorkflow } from "@/lib/email/gmail-sync";
 
 const RENEW_WITHIN_MS = 48 * 3600_000;
@@ -27,8 +28,15 @@ async function gmailWatchJob(): Promise<JobResult> {
   return { name: "gmail-watch", ok: true, renewed: true, expiration };
 }
 
-// Named jobs; Task 8 appends the stale-approval sweep here.
-const JOBS: { name: string; run: () => Promise<JobResult> }[] = [{ name: "gmail-watch", run: gmailWatchJob }];
+// Marks approvals stuck in 'executing' for more than 10 minutes as failed ('stale executing').
+async function staleApprovalSweepJob(): Promise<JobResult> {
+  return { name: "stale-approval-sweep", ok: true, swept: await sweepStaleExecuting() };
+}
+
+const JOBS: { name: string; run: () => Promise<JobResult> }[] = [
+  { name: "gmail-watch", run: gmailWatchJob },
+  { name: "stale-approval-sweep", run: staleApprovalSweepJob },
+];
 
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;

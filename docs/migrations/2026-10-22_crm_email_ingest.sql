@@ -50,8 +50,11 @@ begin
     thread_id = excluded.thread_id, rfc_message_id = excluded.rfc_message_id, direction = excluded.direction,
     from_email = excluded.from_email, from_name = excluded.from_name, to_emails = excluded.to_emails,
     cc_emails = excluded.cc_emails, subject = excluded.subject, snippet = excluded.snippet,
-    body_text = excluded.body_text, sent_at = excluded.sent_at, source = excluded.source,
-    delivered_to_crm = excluded.delivered_to_crm
+    body_text = excluded.body_text, sent_at = excluded.sent_at,
+    -- R29: the first writer's source wins (the executor/compose stores a sent message before the Gmail
+    -- watch re-ingests it from SENT), and a true delivered_to_crm is never overwritten with false.
+    source = email_messages.source,
+    delivered_to_crm = coalesce(email_messages.delivered_to_crm, false) or excluded.delivered_to_crm
   returning id into v_id;
 
   if jsonb_typeof(p->'links') = 'array' and jsonb_array_length(p->'links') > 0 then

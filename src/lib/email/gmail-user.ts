@@ -313,10 +313,10 @@ export function gmailRead() {
 export function gmailSend() {
   const getToken = makeAuth("GMAIL_SEND_REFRESH_TOKEN");
   return {
-    async send(raw: RfcMessage): Promise<{ id: string; threadId: string }> {
+    async send(raw: RfcMessage, opts?: { threadId?: string }): Promise<{ id: string; threadId: string }> {
       const j = await call<{ id: string; threadId: string }>(getToken, "/messages/send", {
         method: "POST",
-        body: { raw: Buffer.from(raw, "utf8").toString("base64url") },
+        body: { raw: Buffer.from(raw, "utf8").toString("base64url"), ...(opts?.threadId ? { threadId: opts.threadId } : {}) },
       });
       return { id: j.id, threadId: j.threadId };
     },

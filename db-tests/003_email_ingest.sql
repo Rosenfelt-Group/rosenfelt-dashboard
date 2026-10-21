@@ -71,3 +71,21 @@ BEGIN
   ASSERT NOT has_function_privilege('authenticated', 'crm.store_ingested_email(jsonb)', 'EXECUTE'), 'authenticated must not execute';
   ASSERT has_function_privilege('service_role', 'crm.store_ingested_email(jsonb)', 'EXECUTE'), 'service_role must execute';
 END $$;
+
+-- executor_source_survives_watch_reingest (R29)
+DO $$
+DECLARE p jsonb; q jsonb; r1 jsonb; r2 jsonb;
+BEGIN
+  p := jsonb_build_object(
+    'message', jsonb_build_object('gmail_message_id','gi-exec','thread_id','t','direction','sent','from_email','brian@rosably.com',
+       'to_emails','["x@exec.org"]'::jsonb,'cc_emails','[]'::jsonb,'subject','S','snippet','sn','body_text','b',
+       'sent_at','2026-10-22T00:00:00Z','source','executor','delivered_to_crm',true),
+    'links', '[]'::jsonb);
+  r1 := crm.store_ingested_email(p);
+  -- watch re-ingest of the same message labels it gmail_watch / not delivered
+  q := jsonb_set(jsonb_set(p, '{message,source}', '"gmail_watch"'), '{message,delivered_to_crm}', 'false');
+  r2 := crm.store_ingested_email(q);
+  ASSERT (r1->>'email_message_id') = (r2->>'email_message_id'), 'same row';
+  ASSERT (SELECT source FROM crm.email_messages WHERE gmail_message_id='gi-exec') = 'executor', 'source must stay executor';
+  ASSERT (SELECT delivered_to_crm FROM crm.email_messages WHERE gmail_message_id='gi-exec') = true, 'delivered_to_crm must not go back to false';
+END $$;

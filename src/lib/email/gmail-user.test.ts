@@ -166,6 +166,20 @@ describe("clients", () => {
     expect(JSON.parse(String(calls[1].init?.body)).raw).toBe(Buffer.from(raw).toString("base64url"));
   });
 
+  it("send passes threadId in the body when given", async () => {
+    vi.stubEnv("GMAIL_SEND_REFRESH_TOKEN", "rt-send");
+    vi.stubEnv("GOOGLE_OAUTH_CLIENT_ID", "cid");
+    vi.stubEnv("GOOGLE_OAUTH_CLIENT_SECRET", "sec");
+    const calls: { url: string; init?: RequestInit }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      if (url.includes("oauth2.googleapis.com/token")) return new Response(JSON.stringify({ access_token: "at", expires_in: 3600 }), { status: 200 });
+      return new Response(JSON.stringify({ id: "gid", threadId: "tid" }), { status: 200 });
+    }));
+    await gmailSend().send("raw", { threadId: "tid" });
+    expect(JSON.parse(String(calls[1].init?.body)).threadId).toBe("tid");
+  });
+
   it("getHistory maps pages and tolerates empty history", async () => {
     vi.stubEnv("GMAIL_READ_REFRESH_TOKEN", "rt-read");
     vi.stubEnv("GOOGLE_OAUTH_CLIENT_ID", "cid");
@@ -228,7 +242,7 @@ describe("listMessages", () => {
 describe("static import guard", () => {
   it("only_executor_imports_gmailSend", () => {
     const root = path.resolve(__dirname, "../..");
-    const allowed = new Set([path.join(root, "lib/email/executor.ts"), path.join(root, "lib/email/gmail-user.test.ts"), path.join(root, "lib/email/gmail-user.ts")]);
+    const allowed = new Set([path.join(root, "lib/email/executor.ts"), path.join(root, "lib/email/executor.test.ts"), path.join(root, "lib/email/gmail-user.test.ts"), path.join(root, "lib/email/gmail-user.ts")]);
     const offenders: string[] = [];
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {

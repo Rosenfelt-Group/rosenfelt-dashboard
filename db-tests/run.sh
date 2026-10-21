@@ -108,6 +108,8 @@ CREATE SCHEMA IF NOT EXISTS storage;
 CREATE SCHEMA IF NOT EXISTS graphql;
 CREATE SCHEMA IF NOT EXISTS vault;
 CREATE SCHEMA IF NOT EXISTS realtime;
+-- prod keeps uuid-ossp in schema extensions; some public tables (pending_approvals) default to it
+CREATE OR REPLACE FUNCTION extensions.uuid_generate_v4() RETURNS uuid LANGUAGE sql AS 'select gen_random_uuid()';
 SQL
 
 echo ">> loading schema dump (errors from unrelated objects are tolerated)"

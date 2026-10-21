@@ -142,7 +142,21 @@ function ApprovalsContent() {
       return;
     }
     // Remove from pending immediately; Realtime UPDATE will add it to history
+    const approved = pending.find(a => a.id === id);
     setPending(prev => prev.filter(a => a.id !== id));
+
+    // An approved email_send is sent by the executor, not by the PATCH above.
+    if (status === "approved" && approved?.action_type === "email_send") {
+      try {
+        const er = await fetch(`/api/approvals/${id}/execute`, { method: "POST" });
+        const eb = await er.json().catch(() => ({}));
+        if (er.ok && eb?.status === "done") alert("Email sent.");
+        else alert(`Email NOT sent: ${eb?.error ?? eb?.status ?? `HTTP ${er.status}`}`);
+      } catch (e) {
+        alert(`Email NOT sent: ${e instanceof Error ? e.message : "request failed"}`);
+      }
+      load(true);
+    }
   }
 
   function setAgentFilter(agent: string) {
