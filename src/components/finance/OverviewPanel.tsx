@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { EmptyState, LoadingState } from "@/components/ui";
+import { withoutEmailSend } from "@/lib/approvalFilters";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { PendingApproval } from "@/types";
 import { parseKickPnL } from "@/lib/parseKickSummary";
@@ -38,7 +39,7 @@ export function OverviewPanel() {
     const allApps = approvalsRes.status === "fulfilled" ? approvalsRes.value : [];
 
     const samPending: PendingApproval[] = Array.isArray(allApps)
-      ? allApps.filter((a: PendingApproval) => a.agent === "sam" && a.status === "pending")
+      ? withoutEmailSend(allApps.filter((a: PendingApproval) => a.agent === "sam" && a.status === "pending")) // email_send: /approvals only (R37)
       : [];
 
     const kickPnL = kick?.connected ? parseKickPnL(kick.summary) : null;
