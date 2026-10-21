@@ -40,6 +40,7 @@ export function CreateLeadModal({ onClose, onCreate }: Props) {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -109,58 +110,47 @@ export function CreateLeadModal({ onClose, onCreate }: Props) {
     setEmail("");
   }
 
+  async function post(url: string, body: unknown): Promise<unknown> {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((data as { error?: string }).error || `Request failed (HTTP ${r.status})`);
+    return data;
+  }
+
   async function handleCreate() {
     if (!bizQuery.trim() || (!contactSelected && !firstName.trim())) return;
     setSaving(true);
+    setCreateError(null);
     try {
-      let biz = bizSelected;
-      if (!biz) {
-        const r = await fetch("/api/crm/businesses", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: bizQuery.trim(), source }),
-        });
-        biz = await r.json();
-      }
-
-      let contact = contactSelected;
-      if (!contact) {
-        const r = await fetch("/api/crm/contacts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            business_id: biz!.id,
+      const leadFields = {
+        stage: "new",
+        source,
+        estimated_value: estimatedValue ? parseFloat(estimatedValue) : undefined,
+      };
+      // Existing contact: link by id. New contact: the server matches or creates the
+      // contact and business by email (crm.intake_lead), so nothing is created here.
+      const body = contactSelected
+        ? { business_id: bizSelected?.id, contact_id: contactSelected.id, ...leadFields }
+        : {
+            email: email.trim(),
             first_name: firstName.trim(),
             last_name: lastName.trim() || undefined,
-            email: email.trim() || undefined,
-            is_primary: true,
-          }),
-        });
-        contact = await r.json();
-      }
-
-      const lr = await fetch("/api/crm/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          business_id: biz!.id,
-          contact_id: contact!.id,
-          stage: "new",
-          source,
-          estimated_value: estimatedValue ? parseFloat(estimatedValue) : undefined,
-        }),
-      });
-      const lead: CRMLead = await lr.json();
+            org: bizSelected?.name ?? bizQuery.trim(),
+            ...leadFields,
+          };
+      const lead = (await post("/api/crm/leads", body)) as CRMLead;
 
       if (notes.trim()) {
-        await fetch(`/api/crm/leads/${lead.id}/activities`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ activity_type: "note", content: notes.trim(), logged_by: "brian" }),
-        });
+        await post(`/api/crm/leads/${lead.id}/activities`, { activity_type: "note", content: notes.trim(), logged_by: "brian" });
       }
 
       onCreate(lead);
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : "Couldn't create the lead");
     } finally {
       setSaving(false);
     }
@@ -177,7 +167,7 @@ export function CreateLeadModal({ onClose, onCreate }: Props) {
           <Button
             className="flex-1"
             onClick={handleCreate}
-            disabled={saving || !bizQuery.trim() || (!contactSelected && !firstName.trim())}
+            disabled={saving || !bizQuery.trim() || (!contactSelected && (!firstName.trim() || !email.trim()))}
           >
             {saving ? "Creating…" : "Create lead"}
           </Button>
@@ -185,6 +175,7 @@ export function CreateLeadModal({ onClose, onCreate }: Props) {
       }
     >
       {loadError && <ErrorState message={`Couldn't load businesses and contacts: ${loadError}`} className="mb-4" />}
+      {createError && <ErrorState message={createError} className="mb-4" />}
       <div className="space-y-4">
         {/* Business combobox */}
         <div>
@@ -286,7 +277,7 @@ export function CreateLeadModal({ onClose, onCreate }: Props) {
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="text-xs text-brand-muted mb-1 block">Email</label>
+                  <label className="text-xs text-brand-muted mb-1 block">Email *</label>
                   <input
                     type="email"
                     className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"

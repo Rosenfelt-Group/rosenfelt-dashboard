@@ -26,6 +26,17 @@ export async function POST(req: NextRequest) {
     .insert(body)
     .select("*, business:businesses(*)")
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    if (error.code === "23505" && /email_norm/.test(`${error.message} ${error.details ?? ""}`)) {
+      const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+      const { data: existing } = await supabaseAdmin.schema("crm").from("contacts")
+        .select("id").eq("email_norm", email).maybeSingle();
+      return NextResponse.json(
+        { error: "A contact with this email already exists", existing_contact_id: existing?.id ?? null },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json(data, { status: 201 });
 }

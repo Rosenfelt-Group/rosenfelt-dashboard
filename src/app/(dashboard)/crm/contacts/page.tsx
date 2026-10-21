@@ -113,8 +113,8 @@ export default function ContactsPage() {
         body: JSON.stringify(payload),
       });
       if (!r.ok) {
-        const t = await r.text().catch(() => "");
-        throw new Error(`HTTP ${r.status}: ${t.slice(0, 200)}`);
+        const j = await r.json().catch(() => null);
+        throw new Error(j?.error || `Save failed (HTTP ${r.status})`);
       }
       const contact = await r.json();
       setContacts(prev => editingId
