@@ -3,6 +3,7 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { discoveryLink } from "@/lib/discovery";
 import { defaultTemplateId, snapshotFromTemplate } from "@/lib/discovery/server";
+import { requirePermission } from "@/lib/requirePermission";
 
 const LIST_SELECT =
   "id, token, lead_id, project_title, project_type, engagement_type, template_id, status, sent_at, opened_at, last_saved_at, submitted_at, expires_at, created_at," +
@@ -10,6 +11,9 @@ const LIST_SELECT =
 
 // GET /api/crm/discovery[?lead_id=…]
 export async function GET(req: NextRequest) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const leadId = req.nextUrl.searchParams.get("lead_id");
   const businessId = req.nextUrl.searchParams.get("business_id");
   let q = supabaseAdmin.schema("crm").from("discovery_invites").select(LIST_SELECT).order("created_at", { ascending: false });
@@ -40,6 +44,9 @@ const CreateSchema = z.object({
 // POST /api/crm/discovery — create a draft invite from a template, creating
 // business/contact/lead first if needed. Nothing reaches the prospect until Send.
 export async function POST(req: NextRequest) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const parsed = CreateSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });

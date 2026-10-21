@@ -3,6 +3,7 @@ import { z } from "zod";
 import { finalizeSend } from "@/lib/discovery/send";
 import { emailInvite, EmailSchema } from "@/lib/discovery/email";
 import { isValidEmail } from "@/lib/email";
+import { requirePermission } from "@/lib/requirePermission";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -11,6 +12,9 @@ const Body = z.object({ email: EmailSchema.optional() });
 // POST /api/crm/discovery/:id/send — freeze the draft's questionnaire and mark it sent, then
 // optionally email the link. An email failure never undoes the send; it's reported alongside it.
 export async function POST(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });

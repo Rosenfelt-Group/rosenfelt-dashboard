@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requirePermission } from "@/lib/requirePermission";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const { data, error } = await supabaseAdmin
     .schema("crm")
     .from("contacts")
@@ -12,6 +16,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const body = await req.json();
   const { data, error } = await supabaseAdmin
     .schema("crm")

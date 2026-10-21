@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { sessionUsername } from "@/lib/rooms/session-user";
 import { DeliverablePatchSchema } from "@/lib/rooms/schemas";
 import { removeObjects, type StorageObjectRef } from "@/lib/rooms/storage-cleanup";
+import { requirePermission } from "@/lib/requirePermission";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Ctx = { params: Promise<{ id: string }> };
@@ -11,6 +12,9 @@ type Ctx = { params: Promise<{ id: string }> };
 // (rooms.delete_deliverable); then its files are removed. If file removal fails, the files are
 // orphaned and unreachable, but no row ever points at a missing file.
 export async function DELETE(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid deliverable id." }, { status: 400 });
   const actor = (await sessionUsername(req)) ?? "unknown";
@@ -27,6 +31,9 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
 
 // PATCH — set or clear the deliverable's welcome message (plain text, shown in the room as text).
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid deliverable id." }, { status: 400 });
   const parsed = DeliverablePatchSchema.safeParse(await req.json().catch(() => null));

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getStripe } from "@/lib/stripe";
+import { requirePermission } from "@/lib/requirePermission";
 
 // POST /api/crm/clients/[id]/portal-link
 // Body: { return_url?: string }
@@ -12,6 +13,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
 
   let body: { return_url?: string };

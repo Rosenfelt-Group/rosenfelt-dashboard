@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { IssueAccessSchema } from "@/lib/rooms/schemas";
 import { generateToken, hashToken, roomLink } from "@/lib/rooms/token";
+import { requirePermission } from "@/lib/requirePermission";
 
 const rooms = () => supabaseAdmin.schema("rooms");
 type Ctx = { params: Promise<{ id: string }> };
 
 // GET — list links (never returns tokens or hashes).
-export async function GET(_req: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const { data, error } = await rooms().from("engagement_access")
     .select("id, label, expires_at, revoked_at, last_used_at, created_at")
@@ -18,6 +22,9 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
 // POST — issue a link. The raw token is returned exactly once and never stored.
 export async function POST(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const parsed = IssueAccessSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
@@ -38,6 +45,9 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
 // DELETE ?access_id=… — revoke.
 export async function DELETE(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const accessId = req.nextUrl.searchParams.get("access_id");
   if (!accessId) return NextResponse.json({ error: "access_id required" }, { status: 400 });

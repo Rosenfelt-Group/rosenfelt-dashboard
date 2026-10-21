@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requirePermission } from "@/lib/requirePermission";
 
 // GET /api/engagements/[id] — engagement, org name, deliverables with versions.
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const rooms = supabaseAdmin.schema("rooms");
 

@@ -8,6 +8,10 @@ vi.mock("@/lib/supabase-admin", () => ({
 }));
 import { POST } from "./route";
 
+// Routes check permissions themselves; these tests exercise the handler logic as an admin.
+vi.mock("@/lib/requirePermission", () => ({ requirePermission: async () => ({ ok: true, username: "brian", role: "admin" }) }));
+vi.mock("@/lib/requireAdmin", () => ({ requireAdmin: async () => ({ ok: true, username: "brian" }) }));
+
 const ENG = "11111111-1111-4111-8111-111111111111";
 const SECRET = "s".repeat(32);
 const call = (id = ENG) => POST(new NextRequest(`https://d.test/api/engagements/${id}/room-preview`, { method: "POST" }), { params: Promise.resolve({ id }) });

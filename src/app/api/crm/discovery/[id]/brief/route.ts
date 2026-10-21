@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { DISCOVERY_SITE } from "@/lib/discovery";
+import { requirePermission } from "@/lib/requirePermission";
 
 // Brief generation runs on rosably.com (it holds the Anthropic key and the prompt);
 // this route queues a fresh brief and asks the site to run it.
@@ -8,7 +9,10 @@ export const maxDuration = 300;
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function POST(_: NextRequest, { params }: Ctx) {
+export async function POST(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const crm = supabaseAdmin.schema("crm");
 

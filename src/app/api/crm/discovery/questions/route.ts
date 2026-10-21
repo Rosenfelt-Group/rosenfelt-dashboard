@@ -3,9 +3,13 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { QUESTION_SELECT } from "@/lib/discovery/server";
 import { QuestionInputSchema, cleanQuestion, isCreatableType } from "@/lib/discovery/bank";
 import { slugify } from "@/lib/discovery/snapshot";
+import { requirePermission } from "@/lib/requirePermission";
 
 // GET /api/crm/discovery/questions[?archived=1] — the question bank.
 export async function GET(req: NextRequest) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   let q = supabaseAdmin.schema("crm").from("discovery_questions").select(QUESTION_SELECT)
     .order("section").order("created_at");
   if (req.nextUrl.searchParams.get("archived") !== "1") q = q.is("archived_at", null);
@@ -16,6 +20,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/crm/discovery/questions — add a question to the bank.
 export async function POST(req: NextRequest) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const parsed = QuestionInputSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   const b = cleanQuestion(parsed.data);

@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { getStripe } from "@/lib/stripe";
+import { requirePermission } from "@/lib/requirePermission";
 
 // GET /api/crm/service-templates
 // Lists all service templates ordered by name. Used by admin services page +
 // the "Add Service to Client" modal on /crm/clients/[id].
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const { data, error } = await supabaseAdmin
     .schema("crm")
     .from("service_templates")

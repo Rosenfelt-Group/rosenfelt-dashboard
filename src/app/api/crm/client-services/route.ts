@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requirePermission } from "@/lib/requirePermission";
 
 // POST /api/crm/client-services
 // Adds a service to a client. Row starts in status='pending_activation';
@@ -7,6 +8,9 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 // Body: { client_id, service_template_id, monthly_rate?, project_rate?,
 //         hourly_rate?, billing_start_date?, notes? }
 export async function POST(req: NextRequest) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();

@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requirePermission } from "@/lib/requirePermission";
 
 // GET /api/crm/client-services/[id]
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const { data, error } = await supabaseAdmin
     .schema("crm")
@@ -30,6 +34,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   let body: Record<string, unknown>;
   try {
@@ -68,9 +75,12 @@ export async function PATCH(
 // with a Stripe subscription stays in the DB for the audit trail (cancel via
 // status='cancelled' instead).
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
 
   const { data: row, error: fetchErr } = await supabaseAdmin

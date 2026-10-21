@@ -21,6 +21,7 @@ export const MANAGE_PERMISSIONS = [
   "manage_documents",
   "manage_intelligence",
   "manage_email",
+  "manage_crm",
 ] as const;
 
 export const ALL_PERMISSIONS = [...VIEW_PERMISSIONS, ...MANAGE_PERMISSIONS] as const;
@@ -46,6 +47,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   manage_documents: "Manage Documents",
   manage_intelligence: "Edit Agent Prompts & Memory",
   manage_email:     "Manage Email",
+  manage_crm:       "Edit CRM, Discovery & Rooms",
 };
 
 export const PERMISSION_GROUPS = {

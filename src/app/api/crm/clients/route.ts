@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requirePermission } from "@/lib/requirePermission";
 
 // GET /api/crm/clients?status=active|inactive|all
 // status semantics (default 'all' for backwards-compat with existing callers):
@@ -11,6 +12,9 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 // clients once (single small query) and filter in-app. With <1000 clients
 // this is cheaper than per-row N+1 joins and keeps the response shape stable.
 export async function GET(req: NextRequest) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") ?? "all";
 
@@ -46,6 +50,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const body = await req.json();
   const { data, error } = await supabaseAdmin
     .schema("crm")

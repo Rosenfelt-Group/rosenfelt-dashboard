@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requirePermission } from "@/lib/requirePermission";
 
 // PATCH /api/crm/tm-entries/[id]  (unbilled rows only)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   let body: Record<string, unknown>;
   try {
@@ -53,9 +57,12 @@ export async function PATCH(
 
 // DELETE /api/crm/tm-entries/[id]  (unbilled rows only)
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
 
   const { data: row, error: fetchErr } = await supabaseAdmin

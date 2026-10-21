@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requirePermission } from "@/lib/requirePermission";
 
 // GET /api/crm/clients/[id]/services
 // Lists all crm.client_services rows for a client, joined with templates.
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const { data, error } = await supabaseAdmin
     .schema("crm")

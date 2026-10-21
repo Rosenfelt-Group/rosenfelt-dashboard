@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requirePermission } from "@/lib/requirePermission";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const { service_tier, contract_start, monthly_value } = await req.json();
 

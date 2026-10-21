@@ -26,6 +26,10 @@ vi.mock("@/lib/supabase-admin", () => {
 });
 import { GET } from "./route";
 
+// Routes check permissions themselves; these tests exercise the handler logic as an admin.
+vi.mock("@/lib/requirePermission", () => ({ requirePermission: async () => ({ ok: true, username: "brian", role: "admin" }) }));
+vi.mock("@/lib/requireAdmin", () => ({ requireAdmin: async () => ({ ok: true, username: "brian" }) }));
+
 const ENG = "11111111-1111-4111-8111-111111111111";
 const D1 = "ba906f5a-a10d-4df3-8e51-7fc9016d6aca";
 const D2 = "22222222-2222-4222-8222-222222222222";

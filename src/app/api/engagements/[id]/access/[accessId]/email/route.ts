@@ -4,6 +4,7 @@ import { isPlausibleToken, roomLink } from "@/lib/rooms/token";
 import { sendRoomInvite } from "@/lib/rooms/send-invite";
 import { isValidEmail } from "@/lib/email";
 import { sessionUsername } from "@/lib/rooms/session-user";
+import { requirePermission } from "@/lib/requirePermission";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Ctx = { params: Promise<{ id: string; accessId: string }> };
@@ -12,6 +13,9 @@ type Ctx = { params: Promise<{ id: string; accessId: string }> };
 // shown once), so the client sends it back; sendRoomInvite checks it hashes to this access row's token,
 // so the route can only send a real, live link for this room. The link is never logged or stored.
 export async function POST(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id, accessId } = await params;
   if (!UUID.test(id) || !UUID.test(accessId)) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
   const parsed = SendInviteEmailSchema.safeParse(await req.json().catch(() => ({})));

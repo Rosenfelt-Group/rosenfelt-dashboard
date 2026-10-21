@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requirePermission } from "@/lib/requirePermission";
 
 // GET /api/crm/tm-entries?client_service_id=<uuid>
 // Lists entries for a specific service, newest first.
 export async function GET(req: NextRequest) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const { searchParams } = new URL(req.url);
   const csId = searchParams.get("client_service_id");
   if (!csId) {
@@ -30,6 +34,9 @@ export async function GET(req: NextRequest) {
 //
 // Validates the parent client_service has billing_type='tm'.
 export async function POST(req: NextRequest) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();

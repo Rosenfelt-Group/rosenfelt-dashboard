@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { signPreviewToken } from "@/lib/rooms/grant";
 import { previewRoomLink } from "@/lib/rooms/token";
+import { requirePermission } from "@/lib/requirePermission";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 // POST — mint a 5-minute link that opens the portal's staff preview of this room (drafts included).
 // Dashboard only (the middleware requires a session). The token is never logged or stored.
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
   const secret = process.env.ROOM_GRANT_SECRET;

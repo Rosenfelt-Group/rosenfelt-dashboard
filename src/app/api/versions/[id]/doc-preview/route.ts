@@ -3,13 +3,17 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { docExt } from "@/lib/rooms/documents";
 import { DOC_EXTS, isSafeDocFilename, signDocGrant } from "@/lib/rooms/grant";
 import { canPreviewDoc } from "@/lib/rooms/doc-limits";
+import { requirePermission } from "@/lib/requirePermission";
 
 const FILE_RE = new RegExp(`^document\\.(?:${DOC_EXTS.join("|")})$`);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // GET — a preview URL (120 s grant on the preview host's inline /dp route) for a document version of any
 // status. Dashboard only (the middleware requires a session). Office formats are download-only.
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid version id." }, { status: 400 });
   const secret = process.env.ROOM_GRANT_SECRET;
