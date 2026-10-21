@@ -16,6 +16,8 @@ vi.mock("@/lib/email/push-auth", () => ({ verifyPushToken: (...a: unknown[]) => 
 import { POST } from "./route";
 import { GmailUserError } from "@/lib/email/gmail-user";
 
+const rec = (id: string, ...messageIds: string[]) => ({ id, messageIds });
+const pg = (historyId: string, ...records: { id: string; messageIds: string[] }[]) => ({ historyId, addedMessageIds: records.flatMap((r) => r.messageIds), records });
 const push = (historyId: string, auth: string | null = "Bearer tok") =>
   ({
     headers: new Headers(auth ? { authorization: auth } : {}),
@@ -43,7 +45,7 @@ describe("POST /api/email/gmail-push", () => {
   });
 
   it("processes_history_and_advances_cursor", async () => {
-    gm.getHistory.mockResolvedValue({ historyId: "150", addedMessageIds: ["a", "b"] });
+    gm.getHistory.mockResolvedValue(pg("150", rec("120", "a"), rec("130", "b")));
     const res = await POST(push("150"));
     expect(res.status).toBe(204);
     expect(gm.getHistory).toHaveBeenCalledWith("100", undefined);
@@ -59,7 +61,7 @@ describe("POST /api/email/gmail-push", () => {
   });
 
   it("duplicate_notification_no_double_log", async () => {
-    gm.getHistory.mockResolvedValueOnce({ historyId: "150", addedMessageIds: ["a"] }).mockResolvedValueOnce({ historyId: "150", addedMessageIds: [] });
+    gm.getHistory.mockResolvedValueOnce(pg("150", rec("120", "a"))).mockResolvedValueOnce(pg("150"));
     await POST(push("150"));
     await POST(push("150"));
     expect(ing.applyIngest).toHaveBeenCalledTimes(1);
@@ -68,10 +70,10 @@ describe("POST /api/email/gmail-push", () => {
 
   it("out_of_order_notification_keeps_max_history_id", async () => {
     db.state.row.history_id = "9000";
-    gm.getHistory.mockResolvedValue({ historyId: "999", addedMessageIds: [] }); // "999" > "9000" as strings, but not numerically
+    gm.getHistory.mockResolvedValue(pg("999")); // "999" > "9000" as strings, but not numerically
     await POST(push("999"));
     expect(db.state.row.history_id).toBe("9000");
-    gm.getHistory.mockResolvedValue({ historyId: "10000", addedMessageIds: [] });
+    gm.getHistory.mockResolvedValue(pg("10000"));
     await POST(push("10000"));
     expect(db.state.row.history_id).toBe("10000");
   });
@@ -88,11 +90,29 @@ describe("POST /api/email/gmail-push", () => {
     expect(db.state.row.last_full_sync_at).toBeTruthy();
   });
 
-  it("caps at 200 messages and does not advance the cursor", async () => {
-    gm.getHistory.mockResolvedValue({ historyId: "900", addedMessageIds: Array.from({ length: 250 }, (_, i) => `m${i}`) });
+  it("cap_mid_burst_advances_to_last_complete_record_and_resumes", async () => {
+    const recs = [1, 2, 3, 4, 5].map((n) => rec(String(100 + n * 10), ...Array.from({ length: 50 }, (_, i) => `m${n}-${i}`)));
+    gm.getHistory.mockImplementation(async (start: string) => pg("900", ...recs.filter((r) => BigInt(r.id) > BigInt(start))));
     expect((await POST(push("900"))).status).toBe(204);
     expect(ing.applyIngest).toHaveBeenCalledTimes(200);
-    expect(db.state.row.history_id).toBe("100");
+    expect(db.state.row.history_id).toBe("140");
+    ing.applyIngest.mockClear();
+    await POST(push("900"));
+    expect(gm.getHistory).toHaveBeenLastCalledWith("140", undefined);
+    expect(ing.applyIngest).toHaveBeenCalledTimes(50);
+    expect(db.state.row.history_id).toBe("900");
+  });
+
+  it("failed_message_logged_and_skipped_cursor_advances", async () => {
+    gm.getHistory.mockResolvedValue(pg("150", rec("120", "bad", "good")));
+    ing.applyIngest.mockImplementation(async (_p: unknown, msg: { id: string }) => {
+      if (msg.id === "bad") throw new Error("db down");
+    });
+    expect((await POST(push("150"))).status).toBe(204);
+    expect(ing.applyIngest).toHaveBeenCalledTimes(2);
+    expect(db.state.logs).toHaveLength(1);
+    expect(db.state.logs[0]).toMatchObject({ workflow_name: "gmail-push", status: "error", error_message: expect.stringContaining("bad") });
+    expect(db.state.row.history_id).toBe("150");
   });
 
   it("errors_logged_and_acked", async () => {
@@ -101,14 +121,6 @@ describe("POST /api/email/gmail-push", () => {
     expect(res.status).toBe(204);
     expect(db.state.logs).toHaveLength(1);
     expect(db.state.logs[0]).toMatchObject({ workflow_name: "gmail-push", status: "error", error_message: expect.stringContaining("boom") });
-    expect(db.state.row.history_id).toBe("100");
-  });
-
-  it("acks and logs when a message fails, without advancing", async () => {
-    gm.getHistory.mockResolvedValue({ historyId: "150", addedMessageIds: ["a"] });
-    ing.applyIngest.mockRejectedValue(new Error("db down"));
-    expect((await POST(push("150"))).status).toBe(204);
-    expect(db.state.logs[0]).toMatchObject({ status: "error" });
     expect(db.state.row.history_id).toBe("100");
   });
 });

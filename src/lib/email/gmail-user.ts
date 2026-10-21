@@ -32,6 +32,8 @@ export type HistoryPage = {
   nextPageToken?: string;
   /** Unique ids of messages added (in order of first appearance). */
   addedMessageIds: string[];
+  /** History records in the order Gmail returned them (ascending id), each with the message ids it added. */
+  records: { id: string; messageIds: string[] }[];
 };
 
 /** A complete RFC 5322 message produced by buildRfc822. */
@@ -283,10 +285,15 @@ export function gmailRead() {
     async getHistory(startHistoryId: string, pageToken?: string): Promise<HistoryPage> {
       const q = new URLSearchParams({ startHistoryId, historyTypes: "messageAdded" });
       if (pageToken) q.set("pageToken", pageToken);
-      const j = await call<{ historyId: string; nextPageToken?: string; history?: { messagesAdded?: { message: { id: string } }[] }[] }>(getToken, `/history?${q}`);
+      const j = await call<{ historyId: string; nextPageToken?: string; history?: { id: string; messagesAdded?: { message: { id: string } }[] }[] }>(getToken, `/history?${q}`);
       const ids = new Set<string>();
-      for (const h of j.history ?? []) for (const a of h.messagesAdded ?? []) ids.add(a.message.id);
-      return { historyId: j.historyId, nextPageToken: j.nextPageToken, addedMessageIds: [...ids] };
+      const records: { id: string; messageIds: string[] }[] = [];
+      for (const h of j.history ?? []) {
+        const mine = [...new Set((h.messagesAdded ?? []).map((a) => a.message.id))];
+        mine.forEach((m) => ids.add(m));
+        if (mine.length) records.push({ id: h.id, messageIds: mine });
+      }
+      return { historyId: j.historyId, nextPageToken: j.nextPageToken, addedMessageIds: [...ids], records };
     },
     async listMessages(q: string, pageToken?: string): Promise<{ ids: string[]; nextPageToken?: string }> {
       const params = new URLSearchParams({ q });

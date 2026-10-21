@@ -57,34 +57,28 @@ function isHistoryGone(e: unknown): boolean {
   return status === 404 || /too old|invalid.*history|history.*invalid|startHistoryId/i.test(m);
 }
 
-/** Process up to `budget` ids; returns how many were processed and the first error, if any. */
-async function ingestMany(gmail: Reader, ids: string[], budget: number): Promise<{ done: number; capped: boolean; error?: unknown }> {
-  let done = 0;
-  let error: unknown;
+/** Ingest ids one by one. A failure (other than a 404) is logged by gmail id only and skipped. */
+async function ingestMany(gmail: Reader, ids: string[]): Promise<void> {
   for (const id of ids) {
-    if (done >= budget) return { done, capped: true, error };
     try {
       await ingestOne(gmail, id);
     } catch (e) {
-      error ??= e;
+      const reason = e instanceof Error ? e.message : String(e);
+      await logWorkflow("gmail-push", "error", `ingest failed for gmail message ${id}: ${reason}`, `message ${id}`);
     }
-    done++;
   }
-  return { done, capped: false, error };
 }
 
 export async function resyncSince(days: number, pushHistoryId: string, gmail: Reader = gmailRead()): Promise<number> {
   let processed = 0;
   let pageToken: string | undefined;
-  let error: unknown;
   do {
     const page = await gmail.listMessages(`newer_than:${days}d`, pageToken);
-    const r = await ingestMany(gmail, page.ids, MAX_MESSAGES - processed);
-    processed += r.done;
-    error ??= r.error;
-    pageToken = r.capped || processed >= MAX_MESSAGES ? undefined : page.nextPageToken;
+    const ids = page.ids.slice(0, MAX_MESSAGES - processed);
+    await ingestMany(gmail, ids);
+    processed += ids.length;
+    pageToken = processed >= MAX_MESSAGES ? undefined : page.nextPageToken;
   } while (pageToken);
-  if (error) throw error;
   await updateSyncState({ history_id: maxHistoryId(null, pushHistoryId), last_full_sync_at: new Date().toISOString() });
   return processed;
 }
@@ -100,29 +94,39 @@ export async function processPush(pushHistoryId: string): Promise<{ processed: n
   const seen = new Set<string>();
   let processed = 0;
   let pageToken: string | undefined;
-  let latest = state.history_id;
-  let error: unknown;
+  let latest = state.history_id; // mailbox-current id from the last page (used when every page completes)
+  let lastComplete: string | null = null; // id of the last history record fully processed
   let capped = false;
   try {
     do {
       const page = await gmail.getHistory(state.history_id, pageToken);
-      const ids = page.addedMessageIds.filter((id) => !seen.has(id));
-      ids.forEach((id) => seen.add(id));
-      const r = await ingestMany(gmail, ids, MAX_MESSAGES - processed);
-      processed += r.done;
-      error ??= r.error;
       latest = maxHistoryId(latest, page.historyId) ?? latest;
-      if (r.capped) capped = true;
-      pageToken = capped || error ? undefined : page.nextPageToken;
+      for (const rec of [...page.records].sort((x, y) => (BigInt(x.id) < BigInt(y.id) ? -1 : 1))) {
+        const fresh = rec.messageIds.filter((id) => !seen.has(id));
+        // R26: stop before a record that would push us over the cap. A first record bigger than the cap
+        // is still taken whole (otherwise the cursor could never move past it).
+        if (processed > 0 && processed + fresh.length > MAX_MESSAGES) {
+          capped = true;
+          break;
+        }
+        fresh.forEach((id) => seen.add(id));
+        await ingestMany(gmail, fresh);
+        processed += fresh.length;
+        lastComplete = rec.id;
+      }
+      pageToken = capped ? undefined : page.nextPageToken;
     } while (pageToken);
   } catch (e) {
     if (isHistoryGone(e)) return { processed: await resyncSince(7, pushHistoryId, gmail), resynced: true };
     throw e;
   }
-  if (error) throw error;
-  if (capped) throw new Error(`gmail-push: more than ${MAX_MESSAGES} new messages; cursor not advanced, next push resumes`);
-  // Advance only once every page is processed: a page's historyId is the mailbox's current id, so
-  // storing it after an early page would skip the later pages if this invocation died.
+  if (capped) {
+    // Resume after the last fully processed record; the next push picks up the rest (applyIngest is idempotent).
+    if (lastComplete) await updateSyncState({ history_id: maxHistoryId(state.history_id, lastComplete) });
+    return { processed };
+  }
+  // Advance only once every page is processed. A page's historyId is the mailbox's *current* id, not the
+  // end of that page, so storing it after an early page would skip the later pages if this run died.
   await updateSyncState({ history_id: maxHistoryId(state.history_id, latest) });
   return { processed };
 }

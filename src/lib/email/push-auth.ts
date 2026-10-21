@@ -8,6 +8,8 @@ function defaultJwks(): JWTVerifyGetKey {
   return (remote ??= createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs")));
 }
 
+// GMAIL_PUSH_AUDIENCE is the endpoint URL configured on the Pub/Sub push subscription:
+// https://dashboard.rosably.com/api/email/gmail-push
 /** True only if the token is signed by Google for our audience and push service account. Fails closed. */
 export async function verifyPushToken(token: string, opts: { jwks?: JWTVerifyGetKey } = {}): Promise<boolean> {
   const audience = process.env.GMAIL_PUSH_AUDIENCE;

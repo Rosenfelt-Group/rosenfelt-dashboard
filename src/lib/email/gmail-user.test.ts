@@ -172,10 +172,10 @@ describe("clients", () => {
     vi.stubEnv("GOOGLE_OAUTH_CLIENT_SECRET", "sec");
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.includes("oauth2.googleapis.com/token")) return new Response(JSON.stringify({ access_token: "at", expires_in: 3600 }), { status: 200 });
-      return new Response(JSON.stringify({ historyId: "99", history: [{ messagesAdded: [{ message: { id: "a" } }, { message: { id: "b" } }] }, { messagesAdded: [{ message: { id: "a" } }] }] }), { status: 200 });
+      return new Response(JSON.stringify({ historyId: "99", history: [{ id: "11", messagesAdded: [{ message: { id: "a" } }, { message: { id: "b" } }] }, { id: "12", messagesAdded: [{ message: { id: "a" } }] }] }), { status: 200 });
     }));
     const page = await gmailRead().getHistory("10");
-    expect(page).toEqual({ historyId: "99", nextPageToken: undefined, addedMessageIds: ["a", "b"] });
+    expect(page).toEqual({ historyId: "99", nextPageToken: undefined, addedMessageIds: ["a", "b"], records: [{ id: "11", messageIds: ["a", "b"] }, { id: "12", messageIds: ["a"] }] });
   });
 });
 
