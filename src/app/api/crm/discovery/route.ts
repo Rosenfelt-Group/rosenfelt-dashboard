@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { discoveryLink } from "@/lib/discovery";
 import { defaultTemplateId, snapshotFromTemplate } from "@/lib/discovery/server";
 import { requirePermission } from "@/lib/requirePermission";
+import { intakeLead } from "@/lib/intake/client";
 
 const LIST_SELECT =
   "id, token, lead_id, project_title, project_type, engagement_type, template_id, status, sent_at, opened_at, last_saved_at, submitted_at, expires_at, created_at," +
@@ -70,23 +71,28 @@ export async function POST(req: NextRequest) {
     businessId = lead.business_id ?? undefined;
     contactId = lead.contact_id ?? undefined;
   } else {
-    const { data: biz, error: be } = await crm.from("businesses")
-      .insert({ name: b.org!.name, website: b.org!.website || null, industry: "Nonprofit", source: b.engagement_type === "pro_bono" ? "pro_bono" : "manual" })
-      .select("id").single();
-    if (be) return NextResponse.json({ error: be.message }, { status: 500 });
-    businessId = biz.id;
-
-    const { data: contact, error: ce } = await crm.from("contacts")
-      .insert({ business_id: businessId, first_name: b.contact!.first_name, last_name: b.contact!.last_name || null, email: b.contact!.email, is_primary: true })
-      .select("id").single();
-    if (ce) return NextResponse.json({ error: ce.message }, { status: 500 });
-    contactId = contact.id;
-
-    const { data: lead, error: le } = await crm.from("leads")
-      .insert({ business_id: businessId, contact_id: contactId, stage: "qualification", entry_stage: "new", source: b.engagement_type === "pro_bono" ? "pro_bono" : "manual" })
-      .select("id").single();
-    if (le) return NextResponse.json({ error: le.message }, { status: 500 });
-    leadId = lead.id;
+    const name = [b.contact!.first_name, b.contact!.last_name].filter(Boolean).join(" ");
+    try {
+      const r = await intakeLead({
+        channel: b.engagement_type === "pro_bono" ? "taproot" : "manual",
+        email: b.contact!.email,
+        name,
+        org: b.org!.name,
+        stage: "qualification",
+        summary: b.project_title,
+        payload: { project_type: b.project_type, engagement_type: b.engagement_type },
+      });
+      leadId = r.lead_id;
+      businessId = r.business_id;
+      contactId = r.contact_id;
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Intake failed" }, { status: 500 });
+    }
+    // Intake matches or creates the business; fill in details the form collected, never overwriting.
+    if (businessId) {
+      if (b.org!.website) await crm.from("businesses").update({ website: b.org!.website }).eq("id", businessId).is("website", null);
+      await crm.from("businesses").update({ industry: "Nonprofit" }).eq("id", businessId).is("industry", null);
+    }
   }
 
   const { data: invite, error } = await crm.from("discovery_invites").insert({
