@@ -26,3 +26,20 @@ export function activeSubPageHref(
   }
   return best?.href ?? null;
 }
+
+/**
+ * The nav items that own `pathname`: those whose longest matching `active`
+ * prefix is the longest of all items. A well-formed nav yields exactly one, so
+ * /content/research belongs to Research even though /content (Content) also
+ * prefixes it.
+ */
+export function matchingItems<T extends { active: string[] }>(items: T[], pathname: string): T[] {
+  let best = -1;
+  let hits: T[] = [];
+  for (const item of items) {
+    const len = Math.max(-1, ...item.active.filter(a => pathMatches(a, pathname)).map(a => a.length));
+    if (len < 0) continue;
+    if (len > best) { best = len; hits = [item]; } else if (len === best) hits.push(item);
+  }
+  return hits;
+}

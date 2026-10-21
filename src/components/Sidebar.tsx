@@ -130,16 +130,15 @@ function DesktopSidebar({ pathname, approvalsCount, onLogout }: {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 flex flex-col gap-4 min-h-0">
-        <DesktopGroup items={NAV_GROUPS.operations} pathname={pathname} approvalsCount={approvalsCount} />
-        <DesktopGroup items={NAV_GROUPS.growth} pathname={pathname} approvalsCount={approvalsCount} />
+        <DesktopGroup items={NAV_GROUPS.primary} pathname={pathname} approvalsCount={approvalsCount} />
       </nav>
 
-      {/* Workspace — anchored to bottom, de-emphasized (lower-frequency pages) */}
-      <div className="shrink-0 px-3 pt-3 border-t border-brand-border">
+      {/* Secondary — anchored to bottom, de-emphasized (lower-frequency pages) */}
+      <div className="shrink-0 max-h-[40vh] overflow-y-auto px-3 pt-3 border-t border-brand-border">
         <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-brand-muted/60">
-          Workspace
+          More
         </p>
-        <DesktopGroup items={NAV_GROUPS.workspace} pathname={pathname} approvalsCount={approvalsCount} muted />
+        <DesktopGroup items={NAV_GROUPS.secondary} pathname={pathname} approvalsCount={approvalsCount} muted />
       </div>
 
       <div className="flex items-center justify-between px-4 py-3 border-t border-brand-border shrink-0">
