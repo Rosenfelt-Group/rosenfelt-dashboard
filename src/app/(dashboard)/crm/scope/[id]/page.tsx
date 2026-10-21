@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import clsx from "clsx";
 import { fetchJson } from "@/lib/fetch-json";
@@ -15,14 +15,15 @@ type Version = {
 type Doc = { id: string; title: string; current_version_id: string | null; engagement_type: string | null; delivery_model: string | null };
 type Tab = "edit" | "client" | "history";
 
-function DiffView({ prev, next }: { prev: ScopeSection[] | null; next: ScopeSection[] }) {
-  const diffs = diffSections(prev, next).filter((d) => d.status !== "unchanged");
+const DiffView = memo(function DiffView({ prev, next }: { prev: ScopeSection[] | null; next: ScopeSection[] }) {
+  const diffs = useMemo(() => diffSections(prev, next).filter((d) => d.status !== "unchanged"), [prev, next]);
   if (diffs.length === 0) return <p className="text-xs text-brand-muted">No changes to section text.</p>;
   return (
     <div className="space-y-3">
       {diffs.map((d) => (
         <div key={d.key} className="border border-brand-border rounded-lg">
           <div className="px-3 py-1.5 text-xs font-medium bg-brand-cream rounded-t-lg">{d.title || d.key} <span className="text-brand-muted">({d.status})</span></div>
+          {d.tooLarge && <p className="text-xs px-3 py-1 text-brand-muted">Section too large to diff line by line</p>}
           <pre className="text-xs p-2 whitespace-pre-wrap font-mono">
             {d.lines.map((l, i) => (
               <div key={i} className={clsx(l.type === "add" && "bg-green-100 text-green-900", l.type === "del" && "bg-red-100 text-red-900")}>
@@ -34,7 +35,7 @@ function DiffView({ prev, next }: { prev: ScopeSection[] | null; next: ScopeSect
       ))}
     </div>
   );
-}
+});
 
 export default function ScopePage() {
   const { id } = useParams<{ id: string }>();
@@ -45,7 +46,11 @@ export default function ScopePage() {
   const [tab, setTab] = useState<Tab>("edit");
   const [draft, setDraft] = useState<ScopeSection[]>([]);
   const [note, setNote] = useState("");
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirtyState] = useState(false);
+  const dirtyRef = useRef(false);
+  const setDirty = (v: boolean) => { dirtyRef.current = v; setDirtyState(v); };
+  // The version the draft was loaded from; sent as based_on_version_id on save.
+  const [baseId, setBaseId] = useState<string | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [rejectNote, setRejectNote] = useState<Record<string, string>>({});
@@ -56,9 +61,12 @@ export default function ScopePage() {
     if (!r.ok) { setLoadError(r.error); setLoading(false); return; }
     setDoc(r.data.document);
     setVersions(r.data.versions);
-    const cur = r.data.versions.find((v) => v.id === r.data.document.current_version_id);
-    setDraft(cur?.sections ?? []);
-    setDirty(false);
+    // Keep unsaved edits across a reload (e.g. after accept/reject); only a clean draft follows the current version.
+    if (!dirtyRef.current) {
+      const cur = r.data.versions.find((v) => v.id === r.data.document.current_version_id);
+      setDraft(cur?.sections ?? []);
+      setBaseId(r.data.document.current_version_id);
+    }
     setLoadError(null);
     setLoading(false);
   }, [id]);
@@ -69,7 +77,7 @@ export default function ScopePage() {
 
   const current = versions.find((v) => v.id === doc.current_version_id) ?? null;
   const proposals = versions.filter((v) => v.status === "proposed");
-  const prevOf = (v: Version) => versions.filter((x) => x.version_no < v.version_no).sort((a, b) => b.version_no - a.version_no)[0] ?? null;
+  const prevOf = (v: Version) => versions.filter((x) => x.version_no < v.version_no && x.status !== "rejected").sort((a, b) => b.version_no - a.version_no)[0] ?? null;
 
   const update = (i: number, patch: Partial<ScopeSection>) => {
     setDraft((d) => d.map((s, j) => (j === i ? { ...s, ...patch } : s)));
@@ -80,11 +88,12 @@ export default function ScopePage() {
     setBusy("save"); setError("");
     const r = await fetchJson(`/api/crm/scope/${id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sections: draft, change_note: note || undefined }),
+      body: JSON.stringify({ sections: draft, change_note: note || undefined, based_on_version_id: baseId }),
     });
     setBusy("");
     if (!r.ok) { setError(r.error); return; }
     setNote("");
+    setDirty(false);
     await load();
   }
 
@@ -106,6 +115,13 @@ export default function ScopePage() {
         description={[current ? `v${current.version_no}` : "no current version", doc.engagement_type, doc.delivery_model].filter(Boolean).join(" · ")}
       />
       {error && <ErrorState message={error} className="mb-3" />}
+      {dirty && baseId !== doc.current_version_id && (
+        <div className="card mb-4 border-brand-orange text-sm">
+          The current version changed. Your unsaved edits are based on v{versions.find((v) => v.id === baseId)?.version_no ?? "?"}.
+          Saving will be refused; copy what you need, then reload to start from the latest version.
+          <Button size="sm" variant="secondary" className="ml-2" onClick={() => { setDirty(false); load(); }}>Discard my edits and reload</Button>
+        </div>
+      )}
 
       {proposals.length > 0 && (
         <div className="card mb-4 border-brand-orange">

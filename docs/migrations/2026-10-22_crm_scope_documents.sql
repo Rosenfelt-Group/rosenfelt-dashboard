@@ -118,7 +118,7 @@ begin
     select 1 from crm.scope_versions b
      where b.id = new.based_on_version_id and b.scope_document_id = new.scope_document_id
   ) then
-    raise exception 'based_on_version_id % does not belong to document %', new.based_on_version_id, new.scope_document_id;
+    raise exception 'based_on_version_id % does not belong to document %', new.based_on_version_id, new.scope_document_id using errcode = 'SC005';
   end if;
   return new;
 end;
@@ -145,7 +145,7 @@ declare
 begin
   select scope_document_id into v_doc from crm.scope_versions where id = p_version_id;
   if v_doc is null then
-    raise exception 'scope version not found: %', p_version_id;
+    raise exception 'scope version not found: %', p_version_id using errcode = 'SC003';
   end if;
 
   -- serialize on the document row, then re-read the version under the lock
@@ -153,12 +153,12 @@ begin
   select * into v from crm.scope_versions where id = p_version_id;
 
   if v.status <> 'proposed' then
-    raise exception 'not proposed: version % has status %', p_version_id, v.status;
+    raise exception 'not proposed: version % has status %', p_version_id, v.status using errcode = 'SC002';
   end if;
   -- stale unless based on the current version; NULL base is allowed only for the first version
   if v.based_on_version_id is distinct from d.current_version_id then
     raise exception 'stale proposal: version % is based on %, document current is %',
-      p_version_id, v.based_on_version_id, d.current_version_id;
+      p_version_id, v.based_on_version_id, d.current_version_id using errcode = 'SC001';
   end if;
 
   if d.current_version_id is not null then
@@ -170,8 +170,12 @@ end;
 $$;
 
 -- Insert a new current version (Brian's edits, or version 1 from the brief), superseding the previous one.
+-- p_based_on must equal the document's current version (NULL only when there is none), else SQLSTATE SC001.
+-- Error SQLSTATEs: SC001 stale, SC002 not proposed, SC003 not found, SC004 already exists, SC005 validation/ownership.
+drop function if exists crm.create_scope_version_current(uuid, jsonb, text, text, text);
 create or replace function crm.create_scope_version_current(
-  p_doc_id uuid, p_sections jsonb, p_source text, p_created_by text, p_change_note text
+  p_doc_id uuid, p_sections jsonb, p_source text, p_created_by text, p_change_note text,
+  p_based_on uuid
 ) returns uuid
 language plpgsql
 security definer
@@ -184,7 +188,13 @@ declare
 begin
   select * into d from crm.scope_documents where id = p_doc_id for update;
   if not found then
-    raise exception 'scope document not found: %', p_doc_id;
+    raise exception 'scope document not found: %', p_doc_id using errcode = 'SC003';
+  end if;
+
+  -- optimistic concurrency, checked under the document lock: the caller must have seen the current version
+  if p_based_on is distinct from d.current_version_id then
+    raise exception 'stale edit: based on %, document current is %', p_based_on, d.current_version_id
+      using errcode = 'SC001';
   end if;
 
   select coalesce(max(version_no), 0) + 1 into v_no from crm.scope_versions where scope_document_id = p_doc_id;
@@ -222,29 +232,29 @@ declare
   v_rows integer;
 begin
   if p_business_id is null or (p_lead_id is null and p_client_id is null) then
-    raise exception 'business_id and one of lead_id/client_id are required';
+    raise exception 'business_id and one of lead_id/client_id are required' using errcode = 'SC005';
   end if;
   if v_title is null or char_length(v_title) < 1 or char_length(v_title) > 200 then
-    raise exception 'title must be 1-200 characters';
+    raise exception 'title must be 1-200 characters' using errcode = 'SC005';
   end if;
   if p_lead_id is not null and not exists
      (select 1 from crm.leads where id = p_lead_id and business_id = p_business_id) then
-    raise exception 'lead % does not belong to business %', p_lead_id, p_business_id;
+    raise exception 'lead % does not belong to business %', p_lead_id, p_business_id using errcode = 'SC005';
   end if;
   if p_client_id is not null and not exists
      (select 1 from crm.clients where id = p_client_id and business_id = p_business_id) then
-    raise exception 'client % does not belong to business %', p_client_id, p_business_id;
+    raise exception 'client % does not belong to business %', p_client_id, p_business_id using errcode = 'SC005';
   end if;
   if p_brief_id is not null then
     if p_lead_id is null then
-      raise exception 'a brief requires lead_id';
+      raise exception 'a brief requires lead_id' using errcode = 'SC005';
     end if;
     if not exists (select 1 from crm.discovery_briefs b join crm.discovery_invites i on i.id = b.invite_id
                     where b.id = p_brief_id and i.lead_id = p_lead_id) then
-      raise exception 'brief % does not belong to lead %', p_brief_id, p_lead_id;
+      raise exception 'brief % does not belong to lead %', p_brief_id, p_lead_id using errcode = 'SC005';
     end if;
     if exists (select 1 from crm.discovery_briefs where id = p_brief_id and scope_version_id is not null) then
-      raise exception 'brief % is already linked to a scope version', p_brief_id;
+      raise exception 'brief % is already linked to a scope version', p_brief_id using errcode = 'SC005';
     end if;
   end if;
 
@@ -261,7 +271,7 @@ begin
       (p_business_id, p_lead_id, p_client_id, p_engagement_id, v_title, p_engagement_type, p_delivery_model)
     returning * into d;
   elsif d.current_version_id is not null then
-    raise exception 'scope already exists for document %', d.id;
+    raise exception 'scope already exists for document %', d.id using errcode = 'SC004';
   end if;
 
   insert into crm.scope_versions
@@ -277,7 +287,7 @@ begin
     update crm.discovery_briefs set scope_version_id = v_id where id = p_brief_id and scope_version_id is null;
     get diagnostics v_rows = row_count;
     if v_rows <> 1 then
-      raise exception 'brief % could not be linked', p_brief_id;
+      raise exception 'brief % could not be linked', p_brief_id using errcode = 'SC005';
     end if;
   end if;
   return v_id;
@@ -297,20 +307,20 @@ declare
   v_id uuid;
 begin
   if char_length(p_change_note) > 2000 then
-    raise exception 'change note too long (max 2000 characters)';
+    raise exception 'change note too long (max 2000 characters)' using errcode = 'SC005';
   end if;
   if octet_length(p_sections::text) > 204800 then
-    raise exception 'sections too large (max 200 KB)';
+    raise exception 'sections too large (max 200 KB)' using errcode = 'SC005';
   end if;
   select * into d from crm.scope_documents where id = p_document_id for update;
   if not found then
-    raise exception 'scope document not found: %', p_document_id;
+    raise exception 'scope document not found: %', p_document_id using errcode = 'SC003';
   end if;
   if d.current_version_id is null then
-    raise exception 'scope document % has no current version; cannot propose', p_document_id;
+    raise exception 'scope document % has no current version; cannot propose', p_document_id using errcode = 'SC005';
   end if;
   if (select count(*) from crm.scope_versions where scope_document_id = p_document_id and status = 'proposed') >= 5 then
-    raise exception 'too many pending proposals for document % (max 5)', p_document_id;
+    raise exception 'too many pending proposals for document % (max 5)', p_document_id using errcode = 'SC005';
   end if;
   insert into crm.scope_versions
     (scope_document_id, version_no, sections, status, source, change_note, based_on_version_id, created_by)
@@ -334,9 +344,9 @@ revoke all on crm.scope_documents, crm.scope_versions from public, anon, authent
 grant select, insert, update, delete on crm.scope_documents, crm.scope_versions to service_role;
 
 revoke all on function crm.accept_scope_version(uuid) from public, anon, authenticated;
-revoke all on function crm.create_scope_version_current(uuid, jsonb, text, text, text) from public, anon, authenticated;
+revoke all on function crm.create_scope_version_current(uuid, jsonb, text, text, text, uuid) from public, anon, authenticated;
 grant execute on function crm.accept_scope_version(uuid) to service_role;
-grant execute on function crm.create_scope_version_current(uuid, jsonb, text, text, text) to service_role;
+grant execute on function crm.create_scope_version_current(uuid, jsonb, text, text, text, uuid) to service_role;
 revoke all on function crm.create_initial_scope_from_brief(uuid, uuid, uuid, uuid, text, jsonb, text, text, uuid) from public, anon, authenticated;
 revoke all on function crm.propose_scope_version(uuid, jsonb, text) from public, anon, authenticated;
 grant execute on function crm.create_initial_scope_from_brief(uuid, uuid, uuid, uuid, text, jsonb, text, text, uuid) to service_role;
@@ -361,7 +371,7 @@ begin
   drop policy if exists riley_read_scope_versions on crm.scope_versions;
   create policy riley_read_scope_versions on crm.scope_versions for select to riley_app using (true);
   revoke execute on function crm.accept_scope_version(uuid) from riley_app;
-  revoke execute on function crm.create_scope_version_current(uuid, jsonb, text, text, text) from riley_app;
+  revoke execute on function crm.create_scope_version_current(uuid, jsonb, text, text, text, uuid) from riley_app;
   grant execute on function crm.create_initial_scope_from_brief(uuid, uuid, uuid, uuid, text, jsonb, text, text, uuid) to riley_app;
   grant execute on function crm.propose_scope_version(uuid, jsonb, text) to riley_app;
 end;

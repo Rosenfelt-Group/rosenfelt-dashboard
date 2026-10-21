@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 const s = vi.hoisted(() => ({
-  rpcError: null as { message: string } | null,
+  rpcError: null as { code?: string; message: string } | null,
   rpcs: [] as string[],
   version: { id: "v1", status: "proposed", change_note: "Riley says" } as Record<string, unknown> | null,
   updates: [] as { patch: Record<string, unknown>; eqs: [string, unknown][] }[],
@@ -44,22 +44,31 @@ describe("POST /api/crm/scope/versions/:id/decide", () => {
     expect(s.rpcs).toEqual(["accept_scope_version"]);
   });
   it("accept_stale_proposal_returns_409", async () => {
-    s.rpcError = { message: "stale proposal: version v1 is based on x, document current is y" };
+    s.rpcError = { code: "SC001", message: "stale proposal" };
     expect((await POST(post({ decision: "accept" }), ctx)).status).toBe(409);
   });
   it("accept of a non-proposed version returns 409", async () => {
-    s.rpcError = { message: "not proposed: version v1 has status current" };
+    s.rpcError = { code: "SC002", message: "not proposed" };
     expect((await POST(post({ decision: "accept" }), ctx)).status).toBe(409);
   });
-  it("other rpc errors are 500", async () => {
-    s.rpcError = { message: "boom" };
-    expect((await POST(post({ decision: "accept" }), ctx)).status).toBe(500);
+  it("SC003 is 404", async () => {
+    s.rpcError = { code: "SC003", message: "scope version not found" };
+    expect((await POST(post({ decision: "accept" }), ctx)).status).toBe(404);
+  });
+  it("unknown rpc errors are a generic 500 without details", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    s.rpcError = { code: "XX000", message: "secret db detail" };
+    const res = await POST(post({ decision: "accept" }), ctx);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Internal error" });
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
   it("reject_marks_rejected_with_note", async () => {
     const res = await POST(post({ decision: "reject", note: "too vague" }), ctx);
     expect(res.status).toBe(200);
     expect(s.updates).toHaveLength(1);
-    expect(s.updates[0].patch).toMatchObject({ status: "rejected", change_note: "Riley says\nRejected: too vague" });
+    expect(s.updates[0].patch).toMatchObject({ status: "rejected", change_note: "Riley says\nRejected by brian: too vague" });
     expect(typeof s.updates[0].patch.decided_at).toBe("string");
     expect(s.updates[0].eqs).toEqual([["id", "v1"], ["status", "proposed"]]);
     expect(s.rpcs).toEqual([]);

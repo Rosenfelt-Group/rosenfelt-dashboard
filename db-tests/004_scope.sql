@@ -59,8 +59,8 @@ BEGIN
   BEGIN
     PERFORM crm.accept_scope_version(v3);
     ASSERT false, 'stale accept should have raised';
-  EXCEPTION WHEN raise_exception THEN msg := SQLERRM; END;
-  ASSERT msg LIKE 'stale proposal%', 'stable message, got: ' || coalesce(msg, 'null');
+  EXCEPTION WHEN OTHERS THEN msg := SQLSTATE || ' ' || SQLERRM; END;
+  ASSERT msg LIKE 'SC001 stale proposal%', 'stable message, got: ' || coalesce(msg, 'null');
   ASSERT (SELECT status FROM crm.scope_versions WHERE id = v3) = 'proposed', 'v3 untouched';
   ASSERT (SELECT current_version_id FROM crm.scope_documents WHERE id = d) = v2, 'v2 still current';
 END $$;
@@ -111,17 +111,17 @@ DECLARE b uuid; d uuid; v1 uuid; v2 uuid; v3 uuid;
 BEGIN
   INSERT INTO crm.businesses (name) VALUES ('Scope Test Six') RETURNING id INTO b;
   INSERT INTO crm.scope_documents (business_id, title) VALUES (b, 'S6') RETURNING id INTO d;
-  v1 := crm.create_scope_version_current(d, '[]', 'brief', 'system', 'initial');
+  v1 := crm.create_scope_version_current(d, '[]', 'brief', 'system', 'initial', NULL);
   ASSERT (SELECT version_no FROM crm.scope_versions WHERE id = v1) = 1, 'first is v1';
   ASSERT (SELECT current_version_id FROM crm.scope_documents WHERE id = d) = v1, 'doc -> v1';
-  v2 := crm.create_scope_version_current(d, '[{"key":"a","title":"A","body_md":"x","visibility":"internal"}]', 'brian', 'brian', 'edit');
+  v2 := crm.create_scope_version_current(d, '[{"key":"a","title":"A","body_md":"x","visibility":"internal"}]', 'brian', 'brian', 'edit', v1);
   ASSERT (SELECT version_no FROM crm.scope_versions WHERE id = v2) = 2, 'second is v2';
   ASSERT (SELECT status FROM crm.scope_versions WHERE id = v1) = 'superseded', 'v1 superseded';
   ASSERT (SELECT status FROM crm.scope_versions WHERE id = v2) = 'current', 'v2 current';
   ASSERT (SELECT based_on_version_id FROM crm.scope_versions WHERE id = v2) = v1, 'v2 based on v1';
   ASSERT (SELECT change_note FROM crm.scope_versions WHERE id = v2) = 'edit', 'change note';
   ASSERT (SELECT current_version_id FROM crm.scope_documents WHERE id = d) = v2, 'doc -> v2';
-  v3 := crm.create_scope_version_current(d, '[]', 'brian', 'brian', NULL);
+  v3 := crm.create_scope_version_current(d, '[]', 'brian', 'brian', NULL, v2);
   ASSERT (SELECT count(*) FROM crm.scope_versions WHERE scope_document_id = d AND status = 'current') = 1, 'exactly one current';
 END $$;
 
@@ -131,21 +131,21 @@ DECLARE b uuid; d uuid; v1 uuid; v2 uuid; msg text; s text;
 BEGIN
   INSERT INTO crm.businesses (name) VALUES ('Scope Test Seven') RETURNING id INTO b;
   INSERT INTO crm.scope_documents (business_id, title) VALUES (b, 'S7') RETURNING id INTO d;
-  v1 := crm.create_scope_version_current(d, '[]', 'brief', 'system', NULL);
+  v1 := crm.create_scope_version_current(d, '[]', 'brief', 'system', NULL, NULL);
   INSERT INTO crm.scope_versions (scope_document_id, version_no, sections, status, source, based_on_version_id)
     VALUES (d, 2, '[]', 'rejected', 'riley', v1) RETURNING id INTO v2;
   FOREACH s IN ARRAY ARRAY['current', 'rejected'] LOOP
     msg := NULL;
     BEGIN
       PERFORM crm.accept_scope_version(CASE s WHEN 'current' THEN v1 ELSE v2 END);
-    EXCEPTION WHEN raise_exception THEN msg := SQLERRM; END;
-    ASSERT msg LIKE 'not proposed%', s || ' version must be refused, got: ' || coalesce(msg, 'null');
+    EXCEPTION WHEN OTHERS THEN msg := SQLSTATE || ' ' || SQLERRM; END;
+    ASSERT msg LIKE 'SC002 not proposed%', s || ' version must be refused, got: ' || coalesce(msg, 'null');
   END LOOP;
   msg := NULL;
   BEGIN
     PERFORM crm.accept_scope_version(gen_random_uuid());
-  EXCEPTION WHEN raise_exception THEN msg := SQLERRM; END;
-  ASSERT msg IS NOT NULL, 'unknown version refused';
+  EXCEPTION WHEN OTHERS THEN msg := SQLSTATE || ' ' || SQLERRM; END;
+  ASSERT msg LIKE 'SC003 %', 'unknown version refused with SC003, got: ' || coalesce(msg, 'null');
 END $$;
 
 -- first_version_with_null_base_accepted
@@ -164,8 +164,8 @@ BEGIN
     VALUES (d, 2, '[]', 'proposed', 'riley') RETURNING id INTO v2;
   BEGIN
     PERFORM crm.accept_scope_version(v2);
-  EXCEPTION WHEN raise_exception THEN msg := SQLERRM; END;
-  ASSERT msg LIKE 'stale proposal%', 'null base refused when a current exists, got: ' || coalesce(msg, 'null');
+  EXCEPTION WHEN OTHERS THEN msg := SQLSTATE || ' ' || SQLERRM; END;
+  ASSERT msg LIKE 'SC001 stale proposal%', 'null base refused when a current exists, got: ' || coalesce(msg, 'null');
 END $$;
 
 -- riley_grants_applied_when_role_exists
@@ -188,10 +188,10 @@ BEGIN
   ASSERT has_function_privilege('riley_app', 'crm.create_initial_scope_from_brief(uuid,uuid,uuid,uuid,text,jsonb,text,text,uuid)', 'EXECUTE')
      AND has_function_privilege('riley_app', 'crm.propose_scope_version(uuid,jsonb,text)', 'EXECUTE'), 'riley can call definer fns';
   ASSERT NOT has_function_privilege('riley_app', 'crm.accept_scope_version(uuid)', 'EXECUTE'), 'riley cannot accept';
-  ASSERT NOT has_function_privilege('riley_app', 'crm.create_scope_version_current(uuid,jsonb,text,text,text)', 'EXECUTE'), 'riley cannot create current';
+  ASSERT NOT has_function_privilege('riley_app', 'crm.create_scope_version_current(uuid,jsonb,text,text,text,uuid)', 'EXECUTE'), 'riley cannot create current';
   -- service_role / lockdown
   ASSERT has_function_privilege('service_role', 'crm.accept_scope_version(uuid)', 'EXECUTE'), 'service_role accept';
-  ASSERT has_function_privilege('service_role', 'crm.create_scope_version_current(uuid,jsonb,text,text,text)', 'EXECUTE'), 'service_role create';
+  ASSERT has_function_privilege('service_role', 'crm.create_scope_version_current(uuid,jsonb,text,text,text,uuid)', 'EXECUTE'), 'service_role create';
   ASSERT has_table_privilege('service_role', 'crm.scope_versions', 'DELETE'), 'service_role DML';
   ASSERT NOT has_table_privilege('authenticated', 'crm.scope_versions', 'SELECT'), 'authenticated locked out';
   ASSERT NOT has_table_privilege('anon', 'crm.scope_documents', 'SELECT'), 'anon locked out';
@@ -206,7 +206,7 @@ BEGIN
   ASSERT NOT has_function_privilege('service_role', 'crm._apply_riley_scope_grants()', 'EXECUTE'), 'no service_role grant on helper';
   ASSERT NOT EXISTS (SELECT 1 FROM pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
                       WHERE p.oid IN ('crm.accept_scope_version(uuid)'::regprocedure,
-                                      'crm.create_scope_version_current(uuid,jsonb,text,text,text)'::regprocedure,
+                                      'crm.create_scope_version_current(uuid,jsonb,text,text,text,uuid)'::regprocedure,
                                       'crm.propose_scope_version(uuid,jsonb,text)'::regprocedure,
                                       'crm.create_initial_scope_from_brief(uuid,uuid,uuid,uuid,text,jsonb,text,text,uuid)'::regprocedure)
                         AND a.grantee = 0), 'no PUBLIC execute on scope functions';
@@ -279,7 +279,7 @@ BEGIN
   SELECT id INTO v FROM crm.scope_versions WHERE status = 'proposed' AND source = 'riley' AND change_note = 'tweak';
   SET LOCAL ROLE riley_app;
   BEGIN PERFORM crm.accept_scope_version(v); EXCEPTION WHEN insufficient_privilege THEN ok1 := true; END;
-  BEGIN PERFORM crm.create_scope_version_current((SELECT scope_document_id FROM crm.scope_versions WHERE id = v), '[]', 'brian', 'x', NULL);
+  BEGIN PERFORM crm.create_scope_version_current((SELECT scope_document_id FROM crm.scope_versions WHERE id = v), '[]', 'brian', 'x', NULL, NULL);
   EXCEPTION WHEN insufficient_privilege THEN ok2 := true; END;
   RESET ROLE;
   ASSERT ok1 AND ok2, 'riley cannot accept or create current';
@@ -295,8 +295,8 @@ BEGIN
   INSERT INTO crm.leads (business_id) VALUES (b) RETURNING id INTO l;
   PERFORM crm.create_initial_scope_from_brief(b, l, NULL, NULL, 'T', sec, NULL, NULL, NULL);
   BEGIN PERFORM crm.create_initial_scope_from_brief(b, l, NULL, NULL, 'T', sec, NULL, NULL, NULL);
-  EXCEPTION WHEN raise_exception THEN msg := SQLERRM; END;
-  ASSERT msg LIKE 'scope already exists%', 'got: ' || coalesce(msg, 'null');
+  EXCEPTION WHEN OTHERS THEN msg := SQLSTATE || ' ' || SQLERRM; END;
+  ASSERT msg LIKE 'SC004 scope already exists%', 'got: ' || coalesce(msg, 'null');
   ASSERT (SELECT count(*) FROM crm.scope_documents WHERE business_id = b AND lead_id = l) = 1, 'one doc per business+lead';
 END $$;
 
@@ -307,11 +307,11 @@ BEGIN
   INSERT INTO crm.businesses (name) VALUES ('Scope Base Cross') RETURNING id INTO b;
   INSERT INTO crm.scope_documents (business_id, title) VALUES (b, 'D1') RETURNING id INTO d1;
   INSERT INTO crm.scope_documents (business_id, title) VALUES (b, 'D2') RETURNING id INTO d2;
-  v1 := crm.create_scope_version_current(d1, '[]', 'brief', 'system', NULL);
+  v1 := crm.create_scope_version_current(d1, '[]', 'brief', 'system', NULL, NULL);
   BEGIN
     INSERT INTO crm.scope_versions (scope_document_id, version_no, sections, status, source, based_on_version_id)
       VALUES (d2, 1, '[]', 'proposed', 'riley', v1);
-  EXCEPTION WHEN raise_exception THEN ok := true; END;
+  EXCEPTION WHEN SQLSTATE 'SC005' THEN ok := true; END;
   ASSERT ok, 'cross-document base refused';
 END $$;
 
@@ -319,7 +319,7 @@ END $$;
 CREATE OR REPLACE FUNCTION pg_temp.expect_err(sql text, pat text) RETURNS void LANGUAGE plpgsql AS $f$
 DECLARE msg text;
 BEGIN
-  BEGIN EXECUTE sql; EXCEPTION WHEN raise_exception THEN msg := SQLERRM; END;
+  BEGIN EXECUTE sql; EXCEPTION WHEN OTHERS THEN msg := SQLSTATE || ' ' || SQLERRM; END;
   ASSERT msg LIKE pat, format('expected error like %L, got %L for %s', pat, msg, sql);
 END $f$;
 
@@ -337,21 +337,21 @@ BEGIN
   INSERT INTO crm.discovery_briefs (invite_id) VALUES (inv) RETURNING id INTO br1;
 
   -- initial_rejects_lead_from_other_business
-  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,%L,NULL,NULL,'T','[]',NULL,NULL,NULL)$q$, b1, l2), 'lead % does not belong%');
+  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,%L,NULL,NULL,'T','[]',NULL,NULL,NULL)$q$, b1, l2), 'SC005 lead % does not belong%');
   -- initial_rejects_client_from_other_business
-  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,NULL,%L,NULL,'T','[]',NULL,NULL,NULL)$q$, b1, c2), 'client % does not belong%');
+  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,NULL,%L,NULL,'T','[]',NULL,NULL,NULL)$q$, b1, c2), 'SC005 client % does not belong%');
   -- neither lead nor client; bad title
-  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,NULL,NULL,NULL,'T','[]',NULL,NULL,NULL)$q$, b1), '%required%');
-  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,%L,NULL,NULL,'   ','[]',NULL,NULL,NULL)$q$, b1, l1), 'title must%');
+  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,NULL,NULL,NULL,'T','[]',NULL,NULL,NULL)$q$, b1), 'SC005 %required%');
+  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,%L,NULL,NULL,'   ','[]',NULL,NULL,NULL)$q$, b1, l1), 'SC005 title must%');
   -- initial_rejects_brief_from_other_lead
-  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,%L,NULL,NULL,'T','[]',NULL,NULL,%L)$q$, b2, l2, br1), 'brief % does not belong%');
+  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,%L,NULL,NULL,'T','[]',NULL,NULL,%L)$q$, b2, l2, br1), 'SC005 brief % does not belong%');
   ASSERT (SELECT count(*) FROM crm.scope_documents WHERE business_id IN (b1, b2)) = 0, 'failed calls wrote nothing';
   -- initial_rejects_already_linked_brief
   v := crm.create_initial_scope_from_brief(b1, l1, NULL, NULL, ' Trim me ', '[]', NULL, NULL, br1);
   ASSERT (SELECT title FROM crm.scope_documents WHERE business_id = b1) = 'Trim me', 'title trimmed';
   UPDATE crm.scope_documents SET current_version_id = NULL WHERE business_id = b1;
   UPDATE crm.scope_versions SET status = 'superseded' WHERE id = v;
-  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,%L,NULL,NULL,'T','[]',NULL,NULL,%L)$q$, b1, l1, br1), 'brief % is already linked%');
+  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,%L,NULL,NULL,'T','[]',NULL,NULL,%L)$q$, b1, l1, br1), 'SC005 brief % is already linked%');
   ASSERT (SELECT count(*) FROM crm.scope_versions WHERE scope_document_id = (SELECT id FROM crm.scope_documents WHERE business_id = b1)) = 1, 'no extra version written';
 END $$;
 
@@ -375,7 +375,7 @@ DECLARE b uuid; d uuid;
 BEGIN
   INSERT INTO crm.businesses (name) VALUES ('R48 NoCurrent') RETURNING id INTO b;
   INSERT INTO crm.scope_documents (business_id, title) VALUES (b, 'NC') RETURNING id INTO d;
-  PERFORM pg_temp.expect_err(format($q$select crm.propose_scope_version(%L,'[]','n')$q$, d), '%no current version%');
+  PERFORM pg_temp.expect_err(format($q$select crm.propose_scope_version(%L,'[]','n')$q$, d), 'SC005 %no current version%');
 END $$;
 
 -- propose_caps_pending_at_5 + propose_rejects_oversized_note (+ oversized sections)
@@ -384,13 +384,35 @@ DECLARE b uuid; d uuid; i int;
 BEGIN
   INSERT INTO crm.businesses (name) VALUES ('R48 Caps') RETURNING id INTO b;
   INSERT INTO crm.scope_documents (business_id, title) VALUES (b, 'Caps') RETURNING id INTO d;
-  PERFORM crm.create_scope_version_current(d, '[]', 'brief', 'system', NULL);
+  PERFORM crm.create_scope_version_current(d, '[]', 'brief', 'system', NULL, NULL);
   FOR i IN 1..5 LOOP PERFORM crm.propose_scope_version(d, '[]', 'p' || i); END LOOP;
-  PERFORM pg_temp.expect_err(format($q$select crm.propose_scope_version(%L,'[]','sixth')$q$, d), 'too many pending%');
+  PERFORM pg_temp.expect_err(format($q$select crm.propose_scope_version(%L,'[]','sixth')$q$, d), 'SC005 too many pending%');
   -- rejecting one frees a slot
   UPDATE crm.scope_versions SET status = 'rejected' WHERE scope_document_id = d AND change_note = 'p1';
   PERFORM crm.propose_scope_version(d, '[]', 'sixth ok');
-  PERFORM pg_temp.expect_err(format($q$select crm.propose_scope_version(%L,'[]',%L)$q$, d, repeat('x', 2001)), 'change note too long%');
+  PERFORM pg_temp.expect_err(format($q$select crm.propose_scope_version(%L,'[]',%L)$q$, d, repeat('x', 2001)), 'SC005 change note too long%');
   PERFORM pg_temp.expect_err(format($q$select crm.propose_scope_version(%L,%L::jsonb,'n')$q$, d,
-    jsonb_build_array(jsonb_build_object('key','a','title','A','body_md',repeat('x', 210000),'visibility','internal'))::text), 'sections too large%');
+    jsonb_build_array(jsonb_build_object('key','a','title','A','body_md',repeat('x', 210000),'visibility','internal'))::text), 'SC005 sections too large%');
+END $$;
+
+-- create_current_refuses_stale_base (R51): SC001 when p_based_on is not the current version
+DO $$
+DECLARE b uuid; d uuid; v1 uuid; v2 uuid; msg text;
+BEGIN
+  INSERT INTO crm.businesses (name) VALUES ('Scope Stale Edit') RETURNING id INTO b;
+  INSERT INTO crm.scope_documents (business_id, title) VALUES (b, 'SE') RETURNING id INTO d;
+  v1 := crm.create_scope_version_current(d, '[]', 'brief', 'system', NULL, NULL);
+  v2 := crm.create_scope_version_current(d, '[]', 'brian', 'brian', NULL, v1);
+  BEGIN PERFORM crm.create_scope_version_current(d, '[]', 'brian', 'brian', NULL, v1);
+  EXCEPTION WHEN OTHERS THEN msg := SQLSTATE || ' ' || SQLERRM; END;
+  ASSERT msg LIKE 'SC001 %', 'stale base refused, got: ' || coalesce(msg, 'null');
+  msg := NULL;
+  BEGIN PERFORM crm.create_scope_version_current(d, '[]', 'brian', 'brian', NULL, NULL);
+  EXCEPTION WHEN OTHERS THEN msg := SQLSTATE || ' ' || SQLERRM; END;
+  ASSERT msg LIKE 'SC001 %', 'null base refused when current exists';
+  ASSERT (SELECT current_version_id FROM crm.scope_documents WHERE id = d) = v2, 'unchanged';
+  msg := NULL;
+  BEGIN PERFORM crm.create_scope_version_current(gen_random_uuid(), '[]', 'brian', 'brian', NULL, NULL);
+  EXCEPTION WHEN OTHERS THEN msg := SQLSTATE || ' ' || SQLERRM; END;
+  ASSERT msg LIKE 'SC003 %', 'missing doc SC003';
 END $$;
