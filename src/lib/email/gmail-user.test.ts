@@ -27,7 +27,7 @@ describe("buildRfc822", () => {
 
   it("encodes UTF-8 subjects, plain text body, and omits empty Cc", () => {
     const raw = buildRfc822({ ...base, subject: "Café ☕" });
-    expect(raw).toContain(`Subject: =?UTF-8?B?${Buffer.from("Café ☕").toString("base64")}?=\r\n`);
+    expect(raw).toContain(`Subject:\r\n =?UTF-8?B?${Buffer.from("Café ☕").toString("base64")}?=\r\n`);
     expect(raw).toContain("Content-Type: text/plain; charset=UTF-8");
     expect(raw).toContain("MIME-Version: 1.0");
     expect(raw).not.toMatch(/^Cc:/m);
@@ -44,7 +44,66 @@ describe("buildRfc822", () => {
   });
 });
 
+describe("address and subject encoding", () => {
+  const base = { from: "b@rosably.com", to: ["a@x.org"], cc: [], subject: "S", text: "T" };
+  const unfold = (raw: string) => raw.split("\r\n\r\n")[0].replace(/\r\n /g, " ");
+
+  it("encodes_non_ascii_display_name", () => {
+    const raw = buildRfc822({ ...base, to: [{ name: "José Ñandú", email: "j@x.org" }] });
+    const to = unfold(raw).split("\r\n").find((l) => l.startsWith("To:"))!;
+    const m = /=\?UTF-8\?B\?([^?]+)\?= <j@x\.org>/.exec(to);
+    expect(m).toBeTruthy();
+    expect(Buffer.from(m![1], "base64").toString("utf8")).toBe("José Ñandú");
+    expect(raw.split("\r\n\r\n")[0]).toMatch(/^[\x20-\x7e\r\n]*$/);
+  });
+
+  it("quotes_display_name_with_comma", () => {
+    const raw = buildRfc822({ ...base, to: [{ name: "Smith, Jo \"JJ\"", email: "j@x.org" }, { name: "Dr. Who", email: "w@x.org" }, { name: "Plain Name", email: "p@x.org" }] });
+    expect(raw).toContain('To: "Smith, Jo \\"JJ\\"" <j@x.org>, "Dr. Who" <w@x.org>, Plain Name <p@x.org>');
+  });
+
+  it("rejects bad structured emails", () => {
+    for (const email of ["a@x.org\r\nBcc: e@x.org", "a<b@x.org", "a@x.org>", "a@x.org,b@x.org"]) {
+      expect(() => buildRfc822({ ...base, to: [{ email }] })).toThrow();
+    }
+    expect(() => buildRfc822({ ...base, to: [{ name: "N\nBcc: e", email: "a@x.org" }] })).toThrow();
+  });
+
+  it("folds_long_ascii_subject", () => {
+    const subject = Array.from({ length: 40 }, (_, i) => `word${i}`).join(" ");
+    const head = buildRfc822({ ...base, subject }).split("\r\n\r\n")[0];
+    for (const line of head.split("\r\n")) expect(line.length).toBeLessThanOrEqual(78);
+    expect(head).toMatch(/\r\n word\d+/);
+    expect(unfold(buildRfc822({ ...base, subject }))).toContain(`Subject: ${subject}`);
+  });
+
+  it("splits_long_non_ascii_subject_into_encoded_words", () => {
+    const subject = "Réunion équipe ☕ ".repeat(12) + "😀😀😀😀😀😀😀😀😀😀😀😀😀😀";
+    const head = buildRfc822({ ...base, subject }).split("\r\n\r\n")[0];
+    const words = [...head.matchAll(/=\?UTF-8\?B\?([^?]+)\?=/g)];
+    expect(words.length).toBeGreaterThan(1);
+    for (const w of words) expect(w[0].length).toBeLessThanOrEqual(75);
+    for (const line of head.split("\r\n")) expect(line.length).toBeLessThanOrEqual(78);
+    expect(words.map((w) => Buffer.from(w[1], "base64").toString("utf8")).join("")).toBe(subject);
+  });
+});
+
 describe("message parsing", () => {
+  it("decodes_iso_8859_1_part", () => {
+    const part = { mimeType: "text/plain", headers: [{ name: "Content-Type", value: 'text/plain; charset="ISO-8859-1"' }], body: { data: Buffer.from([0x63, 0x61, 0x66, 0xe9]).toString("base64url") } };
+    expect(extractBody(part)).toBe("café");
+  });
+
+  it("decodes_windows_1252_part", () => {
+    const part = { mimeType: "text/plain", headers: [{ name: "content-type", value: "text/plain; charset=windows-1252" }], body: { data: Buffer.from([0x80, 0x93, 0x94]).toString("base64url") } };
+    expect(extractBody(part)).toBe("\u20ac\u201c\u201d");
+  });
+
+  it("falls back to UTF-8 for unknown charset labels", () => {
+    const part = { mimeType: "text/plain", headers: [{ name: "Content-Type", value: "text/plain; charset=x-bogus" }], body: { data: b64url("héllo") } };
+    expect(extractBody(part)).toBe("héllo");
+  });
+
   it("prefers text/plain over html in multipart/alternative", () => {
     const payload = {
       mimeType: "multipart/alternative",

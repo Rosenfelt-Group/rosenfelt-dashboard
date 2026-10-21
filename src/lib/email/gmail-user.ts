@@ -46,10 +46,13 @@ export class GmailUserError extends Error {
 
 // ---------- RFC 5322 ----------
 
+/** An address: a bare string (used verbatim, CR/LF rejected) or a structured name + email. */
+export type MailAddress = string | { name?: string; email: string };
+
 export type Rfc822Input = {
-  from: string;
-  to: string[];
-  cc: string[];
+  from: MailAddress;
+  to: MailAddress[];
+  cc: MailAddress[];
   subject: string;
   text: string;
   inReplyTo?: string;
@@ -61,21 +64,71 @@ function safeHeader(name: string, value: string): string {
   return value;
 }
 
-function encodeSubject(subject: string): string {
-  // eslint-disable-next-line no-control-regex
-  if (/^[\x20-\x7e]*$/.test(subject)) return subject;
-  return `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`;
+const isAscii = (s: string) => /^[\x20-\x7e]*$/.test(s);
+
+/**
+ * RFC 2047 encoded-words (UTF-8, base64), each at most 75 chars, split on code-point boundaries.
+ * 75 = 10 ("=?UTF-8?B?") + 2 ("?=") + 63 base64 chars, i.e. at most 45 source bytes per word.
+ */
+export function encodeWords(text: string): string[] {
+  const words: string[] = [];
+  let cur: string[] = [];
+  let bytes = 0;
+  const flush = () => {
+    if (cur.length) words.push(`=?UTF-8?B?${Buffer.from(cur.join(""), "utf8").toString("base64")}?=`);
+    cur = [];
+    bytes = 0;
+  };
+  for (const ch of text) {
+    const n = Buffer.byteLength(ch, "utf8");
+    if (bytes + n > 45) flush();
+    cur.push(ch);
+    bytes += n;
+  }
+  flush();
+  return words;
+}
+
+/** Fold an ASCII header at spaces so lines stay within 78 chars (CRLF + space continuation). */
+function fold(name: string, value: string): string {
+  const lines: string[] = [];
+  let line = `${name}:`;
+  for (const w of value.split(" ")) {
+    if (line.length + 1 + w.length > 78 && line.trim().length > name.length + 1) {
+      lines.push(line);
+      line = ` ${w}`;
+    } else {
+      line += line.endsWith(":") ? ` ${w}` : ` ${w}`;
+    }
+  }
+  lines.push(line);
+  return lines.join("\r\n");
+}
+
+function formatAddress(label: string, a: MailAddress): string {
+  if (typeof a === "string") return safeHeader(label, a);
+  safeHeader(label, a.email);
+  if (/[<>,\s]/.test(a.email) || !a.email) throw new GmailUserError("invalid_input", `Invalid email address in ${label}`);
+  if (!a.name) return a.email;
+  safeHeader(label, a.name);
+  if (!isAscii(a.name)) return `${encodeWords(a.name).join(" ")} <${a.email}>`;
+  const display = /[,;:<>@"()\[\]\\.]/.test(a.name) ? `"${a.name.replace(/(["\\])/g, "\\$1")}"` : a.name;
+  return `${display} <${a.email}>`;
+}
+
+function subjectHeader(subject: string): string {
+  safeHeader("Subject", subject);
+  if (isAscii(subject)) return fold("Subject", subject);
+  return `Subject:${encodeWords(subject).map((w) => `\r\n ${w}`).join("")}`;
 }
 
 export function buildRfc822(input: Rfc822Input): RfcMessage {
-  const headers: string[] = [
-    `From: ${safeHeader("From", input.from)}`,
-    `To: ${input.to.map((a) => safeHeader("To", a)).join(", ")}`,
-  ];
-  if (input.cc.length) headers.push(`Cc: ${input.cc.map((a) => safeHeader("Cc", a)).join(", ")}`);
-  headers.push(`Subject: ${encodeSubject(safeHeader("Subject", input.subject))}`);
-  if (input.inReplyTo) headers.push(`In-Reply-To: ${safeHeader("In-Reply-To", input.inReplyTo)}`);
-  if (input.references) headers.push(`References: ${safeHeader("References", input.references)}`);
+  const list = (label: string, xs: MailAddress[]) => fold(label, xs.map((a) => formatAddress(label, a)).join(", "));
+  const headers: string[] = [fold("From", formatAddress("From", input.from)), list("To", input.to)];
+  if (input.cc.length) headers.push(list("Cc", input.cc));
+  headers.push(subjectHeader(input.subject));
+  if (input.inReplyTo) headers.push(fold("In-Reply-To", safeHeader("In-Reply-To", input.inReplyTo)));
+  if (input.references) headers.push(fold("References", safeHeader("References", input.references)));
   headers.push("MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64");
   const body = Buffer.from(input.text.replace(/\r?\n/g, "\r\n"), "utf8").toString("base64").replace(/(.{76})/g, "$1\r\n");
   return `${headers.join("\r\n")}\r\n\r\n${body}`;
@@ -100,7 +153,33 @@ type RawMessage = {
   payload?: Part;
 };
 
-const decodePart = (p: Part) => (p.body?.data ? Buffer.from(p.body.data, "base64url").toString("utf8") : "");
+function partCharset(p: Part): string {
+  const ct = p.headers?.find((h) => h.name.toLowerCase() === "content-type")?.value ?? "";
+  return /charset\s*=\s*"?([^";\s]+)/i.exec(ct)?.[1] ?? "utf-8";
+}
+
+// Node's TextDecoder decodes the windows-1252 label as plain latin1 (0x80-0x9f stay C1 controls).
+// Per WHATWG the iso-8859-1/latin1/ascii labels are windows-1252 too, so decode those ourselves.
+const CP1252_HIGH = "\u20ac\u0081\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030\u0160\u2039\u0152\u008d\u017d\u008f\u0090\u2018\u2019\u201c\u201d\u2022\u2013\u2014\u02dc\u2122\u0161\u203a\u0153\u009d\u017e\u0178";
+const CP1252_LABELS = new Set(["windows-1252", "cp1252", "x-cp1252", "iso-8859-1", "iso8859-1", "latin1", "l1", "us-ascii", "ascii", "iso_8859-1"]);
+
+function decodeCp1252(bytes: Buffer): string {
+  let out = "";
+  for (const b of bytes) out += b >= 0x80 && b <= 0x9f ? CP1252_HIGH[b - 0x80] : String.fromCharCode(b);
+  return out;
+}
+
+function decodePart(p: Part): string {
+  if (!p.body?.data) return "";
+  const bytes = Buffer.from(p.body.data, "base64url");
+  const charset = partCharset(p);
+  if (CP1252_LABELS.has(charset.toLowerCase())) return decodeCp1252(bytes);
+  try {
+    return new TextDecoder(charset).decode(bytes);
+  } catch {
+    return new TextDecoder("utf-8").decode(bytes); // unknown charset label
+  }
+}
 
 function findPart(p: Part, mime: string): string | null {
   if (p.mimeType === mime && !p.filename && p.body?.data) return decodePart(p);

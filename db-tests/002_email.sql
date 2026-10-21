@@ -65,3 +65,15 @@ BEGIN
   EXCEPTION WHEN unique_violation OR check_violation THEN NULL;
   END;
 END $$;
+
+-- new_tables_have_rls_and_no_anon_access
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['email_messages', 'email_message_links', 'gmail_sync_state'] LOOP
+    ASSERT (SELECT relrowsecurity FROM pg_class WHERE oid = format('crm.%I', t)::regclass), format('RLS off on crm.%s', t);
+    ASSERT NOT has_table_privilege('anon', format('crm.%I', t), 'SELECT,INSERT,UPDATE,DELETE'), format('anon has privileges on crm.%s', t);
+    ASSERT NOT has_table_privilege('authenticated', format('crm.%I', t), 'SELECT,INSERT,UPDATE,DELETE'), format('authenticated has privileges on crm.%s', t);
+    ASSERT has_table_privilege('service_role', format('crm.%I', t), 'SELECT,INSERT,UPDATE,DELETE'), format('service_role lacks privileges on crm.%s', t);
+  END LOOP;
+END $$;

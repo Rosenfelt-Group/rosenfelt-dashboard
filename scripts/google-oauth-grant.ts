@@ -42,6 +42,7 @@ export function parseArgs(argv: string[]): { scope: string; env: string; printTo
   resolveScope(scope);
   if (!/^[A-Z][A-Z0-9_]*$/.test(env)) throw new Error(`Invalid env var name "${env}"`);
   const fd = get("--print-to-fd");
+  if (fd !== undefined && !(/^\d+$/.test(fd) && Number(fd) >= 3)) throw new Error("--print-to-fd must be an integer >= 3 (0, 1 and 2 are stdio)");
   return { scope, env, printToFd: fd === undefined ? undefined : Number(fd) };
 }
 
@@ -69,6 +70,14 @@ export function buildVercelEnvRequest(o: { projectId: string; teamId: string; to
   };
 }
 
+export const LISTEN_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** Error code from a Google token-endpoint failure body (e.g. "invalid_grant"); never the body itself. */
+export function googleErrorCode(body: unknown): string {
+  const e = (body as { error?: unknown } | null)?.error;
+  return typeof e === "string" && /^[a-z_]{1,64}$/.test(e) ? e : "unknown_error";
+}
+
 function startListener(state: string): Promise<{ port: number; code: Promise<string>; close: () => void }> {
   return new Promise((resolveStart) => {
     let resolveCode!: (c: string) => void;
@@ -86,8 +95,9 @@ function startListener(state: string): Promise<{ port: number; code: Promise<str
       if (err) rejectCode(new Error(`Consent failed: ${err}`));
       else resolveCode(c!);
     });
+    const timer = setTimeout(() => rejectCode(new Error("Timed out after 10 minutes waiting for browser consent")), LISTEN_TIMEOUT_MS);
     server.listen(0, "127.0.0.1", () =>
-      resolveStart({ port: (server.address() as AddressInfo).port, code, close: () => server.close() }),
+      resolveStart({ port: (server.address() as AddressInfo).port, code, close: () => { clearTimeout(timer); server.close(); } }),
     );
   });
 }
@@ -117,8 +127,9 @@ async function main() {
       redirect_uri: `http://127.0.0.1:${port}`, grant_type: "authorization_code",
     }).toString(),
   });
-  if (!tokenRes.ok) throw new Error(`Token exchange failed (${tokenRes.status})`);
-  const refresh = ((await tokenRes.json()) as { refresh_token?: string }).refresh_token;
+  const tokenBody: unknown = await tokenRes.json().catch(() => null);
+  if (!tokenRes.ok) throw new Error(`Token exchange failed (${tokenRes.status}): ${googleErrorCode(tokenBody)}`);
+  const refresh = (tokenBody as { refresh_token?: string } | null)?.refresh_token;
   if (!refresh) throw new Error("No refresh_token returned (revoke the app's prior grant and retry)");
 
   if (printToFd !== undefined) {

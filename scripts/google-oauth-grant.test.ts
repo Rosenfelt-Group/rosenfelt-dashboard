@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildAuthUrl, resolveScope, parseArgs, buildVercelEnvRequest } from "./google-oauth-grant";
+import { googleErrorCode, buildAuthUrl, resolveScope, parseArgs, buildVercelEnvRequest } from "./google-oauth-grant";
 
 describe("google-oauth-grant", () => {
   it("resolves short scope names and rejects unknown scopes", () => {
@@ -24,6 +24,9 @@ describe("google-oauth-grant", () => {
   it("parses args", () => {
     expect(parseArgs(["--scope", "gmail.send", "--env", "GMAIL_SEND_REFRESH_TOKEN"])).toEqual({ scope: "gmail.send", env: "GMAIL_SEND_REFRESH_TOKEN", printToFd: undefined });
     expect(parseArgs(["--scope", "gmail.send", "--env", "X", "--print-to-fd", "3"]).printToFd).toBe(3);
+    for (const fd of ["0", "1", "2", "abc", "-1", "3.5"]) {
+      expect(() => parseArgs(["--scope", "gmail.send", "--env", "X", "--print-to-fd", fd])).toThrow();
+    }
     expect(() => parseArgs(["--scope", "gmail.send"])).toThrow();
     expect(() => parseArgs(["--scope", "gmail.send", "--env", "bad name"])).toThrow();
   });
@@ -35,5 +38,11 @@ describe("google-oauth-grant", () => {
     expect((r.init.headers as Record<string, string>).Authorization).toBe("Bearer vt");
     expect(JSON.parse(String(r.init.body))).toEqual({ key: "GMAIL_SEND_REFRESH_TOKEN", value: "secret-rt", type: "encrypted", target: ["production"] });
     expect(r.url).not.toContain("secret-rt");
+  });
+
+  it("surfaces only Google's error code", () => {
+    expect(googleErrorCode({ error: "invalid_grant", error_description: "Bad token abc" })).toBe("invalid_grant");
+    expect(googleErrorCode({ error: "has spaces and token=abc" })).toBe("unknown_error");
+    expect(googleErrorCode(null)).toBe("unknown_error");
   });
 });
