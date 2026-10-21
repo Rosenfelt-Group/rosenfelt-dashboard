@@ -203,8 +203,10 @@ begin
 end;
 $$;
 
--- Riley: create v1 from the discovery brief. Finds/creates the document (key: business+lead, else
--- business+client), refuses if it already has a current version.
+-- Riley: create v1 from the discovery brief ("create or fail"). Validates every reference before any
+-- write. Finds/creates the document (key: business+lead, else business+client). An EXISTING document
+-- that has no current version is NOT altered (no engagement_*/type/model backfill): only v1 + the
+-- current pointer are written. Refuses if a current version exists or the brief is already linked.
 create or replace function crm.create_initial_scope_from_brief(
   p_business_id uuid, p_lead_id uuid, p_client_id uuid, p_engagement_id uuid, p_title text,
   p_sections jsonb, p_engagement_type text, p_delivery_model text, p_brief_id uuid
@@ -214,11 +216,36 @@ security definer
 set search_path = crm, public, pg_temp
 as $$
 declare
-  d    crm.scope_documents%rowtype;
-  v_id uuid;
+  d      crm.scope_documents%rowtype;
+  v_id   uuid;
+  v_title text := btrim(p_title);
+  v_rows integer;
 begin
   if p_business_id is null or (p_lead_id is null and p_client_id is null) then
     raise exception 'business_id and one of lead_id/client_id are required';
+  end if;
+  if v_title is null or char_length(v_title) < 1 or char_length(v_title) > 200 then
+    raise exception 'title must be 1-200 characters';
+  end if;
+  if p_lead_id is not null and not exists
+     (select 1 from crm.leads where id = p_lead_id and business_id = p_business_id) then
+    raise exception 'lead % does not belong to business %', p_lead_id, p_business_id;
+  end if;
+  if p_client_id is not null and not exists
+     (select 1 from crm.clients where id = p_client_id and business_id = p_business_id) then
+    raise exception 'client % does not belong to business %', p_client_id, p_business_id;
+  end if;
+  if p_brief_id is not null then
+    if p_lead_id is null then
+      raise exception 'a brief requires lead_id';
+    end if;
+    if not exists (select 1 from crm.discovery_briefs b join crm.discovery_invites i on i.id = b.invite_id
+                    where b.id = p_brief_id and i.lead_id = p_lead_id) then
+      raise exception 'brief % does not belong to lead %', p_brief_id, p_lead_id;
+    end if;
+    if exists (select 1 from crm.discovery_briefs where id = p_brief_id and scope_version_id is not null) then
+      raise exception 'brief % is already linked to a scope version', p_brief_id;
+    end if;
   end if;
 
   if p_lead_id is not null then
@@ -231,7 +258,7 @@ begin
     insert into crm.scope_documents
       (business_id, lead_id, client_id, engagement_id, title, engagement_type, delivery_model)
     values
-      (p_business_id, p_lead_id, p_client_id, p_engagement_id, p_title, p_engagement_type, p_delivery_model)
+      (p_business_id, p_lead_id, p_client_id, p_engagement_id, v_title, p_engagement_type, p_delivery_model)
     returning * into d;
   elsif d.current_version_id is not null then
     raise exception 'scope already exists for document %', d.id;
@@ -244,21 +271,21 @@ begin
      p_sections, 'current', 'brief', 'riley', now())
   returning id into v_id;
 
-  update crm.scope_documents
-     set current_version_id = v_id,
-         engagement_id = coalesce(engagement_id, p_engagement_id),
-         engagement_type = coalesce(engagement_type, p_engagement_type),
-         delivery_model = coalesce(delivery_model, p_delivery_model)
-   where id = d.id;
+  update crm.scope_documents set current_version_id = v_id where id = d.id;
 
   if p_brief_id is not null then
-    update crm.discovery_briefs set scope_version_id = v_id where id = p_brief_id;
+    update crm.discovery_briefs set scope_version_id = v_id where id = p_brief_id and scope_version_id is null;
+    get diagnostics v_rows = row_count;
+    if v_rows <> 1 then
+      raise exception 'brief % could not be linked', p_brief_id;
+    end if;
   end if;
   return v_id;
 end;
 $$;
 
 -- Riley: propose a change, based on the document's current version (read under the document lock).
+-- Refuses documents with no current version; note <= 2000 chars; sections <= 200 KB; <= 5 pending per doc.
 create or replace function crm.propose_scope_version(p_document_id uuid, p_sections jsonb, p_change_note text)
 returns uuid
 language plpgsql
@@ -269,9 +296,21 @@ declare
   d    crm.scope_documents%rowtype;
   v_id uuid;
 begin
+  if char_length(p_change_note) > 2000 then
+    raise exception 'change note too long (max 2000 characters)';
+  end if;
+  if octet_length(p_sections::text) > 204800 then
+    raise exception 'sections too large (max 200 KB)';
+  end if;
   select * into d from crm.scope_documents where id = p_document_id for update;
   if not found then
     raise exception 'scope document not found: %', p_document_id;
+  end if;
+  if d.current_version_id is null then
+    raise exception 'scope document % has no current version; cannot propose', p_document_id;
+  end if;
+  if (select count(*) from crm.scope_versions where scope_document_id = p_document_id and status = 'proposed') >= 5 then
+    raise exception 'too many pending proposals for document % (max 5)', p_document_id;
   end if;
   insert into crm.scope_versions
     (scope_document_id, version_no, sections, status, source, change_note, based_on_version_id, created_by)

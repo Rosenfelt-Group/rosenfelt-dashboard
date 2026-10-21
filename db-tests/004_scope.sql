@@ -236,7 +236,7 @@ BEGIN
   INSERT INTO crm.discovery_invites (lead_id, project_title) VALUES (l, 'P') RETURNING id INTO br;
   INSERT INTO crm.discovery_briefs (invite_id) VALUES (br) RETURNING id INTO br;
   SET LOCAL ROLE riley_app;
-  -- (RLS has no policies, so riley sees no rows directly; it only works through the definer functions)
+  -- (riley reads via SELECT-only RLS policies; all writes go through the definer functions)
   v1 := crm.create_initial_scope_from_brief(b, l, NULL, NULL, 'Riley doc', sec, 'project', 'hybrid', br);
   RESET ROLE;
   SELECT scope_document_id INTO d FROM crm.scope_versions WHERE id = v1;
@@ -313,4 +313,84 @@ BEGIN
       VALUES (d2, 1, '[]', 'proposed', 'riley', v1);
   EXCEPTION WHEN raise_exception THEN ok := true; END;
   ASSERT ok, 'cross-document base refused';
+END $$;
+
+-- R48 helpers: expect a raise_exception whose message matches
+CREATE OR REPLACE FUNCTION pg_temp.expect_err(sql text, pat text) RETURNS void LANGUAGE plpgsql AS $f$
+DECLARE msg text;
+BEGIN
+  BEGIN EXECUTE sql; EXCEPTION WHEN raise_exception THEN msg := SQLERRM; END;
+  ASSERT msg LIKE pat, format('expected error like %L, got %L for %s', pat, msg, sql);
+END $f$;
+
+-- initial_rejects_lead_from_other_business / client / brief_from_other_lead / already_linked_brief
+DO $$
+DECLARE b1 uuid; b2 uuid; l1 uuid; l2 uuid; c2 uuid; br1 uuid; v uuid; inv uuid;
+BEGIN
+  INSERT INTO crm.discovery_templates (id, name) VALUES ('855b74c5-d0f2-5b3a-8953-6661e2eaea1f', 'scope-test') ON CONFLICT DO NOTHING;
+  INSERT INTO crm.businesses (name) VALUES ('R48 A') RETURNING id INTO b1;
+  INSERT INTO crm.businesses (name) VALUES ('R48 B') RETURNING id INTO b2;
+  INSERT INTO crm.leads (business_id) VALUES (b1) RETURNING id INTO l1;
+  INSERT INTO crm.leads (business_id) VALUES (b2) RETURNING id INTO l2;
+  INSERT INTO crm.clients (business_id) VALUES (b2) RETURNING id INTO c2;
+  INSERT INTO crm.discovery_invites (lead_id, project_title) VALUES (l1, 'P') RETURNING id INTO inv;
+  INSERT INTO crm.discovery_briefs (invite_id) VALUES (inv) RETURNING id INTO br1;
+
+  -- initial_rejects_lead_from_other_business
+  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,%L,NULL,NULL,'T','[]',NULL,NULL,NULL)$q$, b1, l2), 'lead % does not belong%');
+  -- initial_rejects_client_from_other_business
+  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,NULL,%L,NULL,'T','[]',NULL,NULL,NULL)$q$, b1, c2), 'client % does not belong%');
+  -- neither lead nor client; bad title
+  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,NULL,NULL,NULL,'T','[]',NULL,NULL,NULL)$q$, b1), '%required%');
+  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,%L,NULL,NULL,'   ','[]',NULL,NULL,NULL)$q$, b1, l1), 'title must%');
+  -- initial_rejects_brief_from_other_lead
+  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,%L,NULL,NULL,'T','[]',NULL,NULL,%L)$q$, b2, l2, br1), 'brief % does not belong%');
+  ASSERT (SELECT count(*) FROM crm.scope_documents WHERE business_id IN (b1, b2)) = 0, 'failed calls wrote nothing';
+  -- initial_rejects_already_linked_brief
+  v := crm.create_initial_scope_from_brief(b1, l1, NULL, NULL, ' Trim me ', '[]', NULL, NULL, br1);
+  ASSERT (SELECT title FROM crm.scope_documents WHERE business_id = b1) = 'Trim me', 'title trimmed';
+  UPDATE crm.scope_documents SET current_version_id = NULL WHERE business_id = b1;
+  UPDATE crm.scope_versions SET status = 'superseded' WHERE id = v;
+  PERFORM pg_temp.expect_err(format($q$select crm.create_initial_scope_from_brief(%L,%L,NULL,NULL,'T','[]',NULL,NULL,%L)$q$, b1, l1, br1), 'brief % is already linked%');
+  ASSERT (SELECT count(*) FROM crm.scope_versions WHERE scope_document_id = (SELECT id FROM crm.scope_documents WHERE business_id = b1)) = 1, 'no extra version written';
+END $$;
+
+-- initial_existing_doc_without_current_not_altered
+DO $$
+DECLARE b uuid; l uuid; e uuid; d uuid; v uuid;
+BEGIN
+  INSERT INTO crm.businesses (name) VALUES ('R48 Existing') RETURNING id INTO b;
+  INSERT INTO crm.leads (business_id) VALUES (b) RETURNING id INTO l;
+  INSERT INTO crm.scope_documents (business_id, lead_id, title, engagement_type, delivery_model)
+    VALUES (b, l, 'Original', 'project', 'manual') RETURNING id INTO d;
+  v := crm.create_initial_scope_from_brief(b, l, NULL, NULL, 'New title', '[]', 'pro_bono', 'agentic', NULL);
+  ASSERT (SELECT current_version_id FROM crm.scope_documents WHERE id = d) = v, 'pointer set on existing doc';
+  ASSERT (SELECT title || engagement_type || delivery_model FROM crm.scope_documents WHERE id = d) = 'Originalprojectmanual', 'existing doc fields untouched';
+  ASSERT (SELECT engagement_id IS NULL FROM crm.scope_documents WHERE id = d), 'engagement untouched';
+END $$;
+
+-- propose_refused_without_current
+DO $$
+DECLARE b uuid; d uuid;
+BEGIN
+  INSERT INTO crm.businesses (name) VALUES ('R48 NoCurrent') RETURNING id INTO b;
+  INSERT INTO crm.scope_documents (business_id, title) VALUES (b, 'NC') RETURNING id INTO d;
+  PERFORM pg_temp.expect_err(format($q$select crm.propose_scope_version(%L,'[]','n')$q$, d), '%no current version%');
+END $$;
+
+-- propose_caps_pending_at_5 + propose_rejects_oversized_note (+ oversized sections)
+DO $$
+DECLARE b uuid; d uuid; i int;
+BEGIN
+  INSERT INTO crm.businesses (name) VALUES ('R48 Caps') RETURNING id INTO b;
+  INSERT INTO crm.scope_documents (business_id, title) VALUES (b, 'Caps') RETURNING id INTO d;
+  PERFORM crm.create_scope_version_current(d, '[]', 'brief', 'system', NULL);
+  FOR i IN 1..5 LOOP PERFORM crm.propose_scope_version(d, '[]', 'p' || i); END LOOP;
+  PERFORM pg_temp.expect_err(format($q$select crm.propose_scope_version(%L,'[]','sixth')$q$, d), 'too many pending%');
+  -- rejecting one frees a slot
+  UPDATE crm.scope_versions SET status = 'rejected' WHERE scope_document_id = d AND change_note = 'p1';
+  PERFORM crm.propose_scope_version(d, '[]', 'sixth ok');
+  PERFORM pg_temp.expect_err(format($q$select crm.propose_scope_version(%L,'[]',%L)$q$, d, repeat('x', 2001)), 'change note too long%');
+  PERFORM pg_temp.expect_err(format($q$select crm.propose_scope_version(%L,%L::jsonb,'n')$q$, d,
+    jsonb_build_array(jsonb_build_object('key','a','title','A','body_md',repeat('x', 210000),'visibility','internal'))::text), 'sections too large%');
 END $$;
