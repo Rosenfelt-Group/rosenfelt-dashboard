@@ -19,14 +19,11 @@ function EmailCard({ contactId, item, onReply }: { contactId: string; item: Emai
   async function loadFull() {
     setLoading(true);
     setErr(null);
-    // The timeline API returns full bodies only on request; ask for the page that starts just after this item.
-    const before = new Date(Date.parse(item.ts) + 1).toISOString();
-    const r = await fetchJson<TimelineItem[]>(`/api/crm/contacts/${contactId}/timeline?before=${encodeURIComponent(before)}&include_body=${item.id}`);
+    // The timeline pages carry previews only; the full body is looked up by message id.
+    const r = await fetchJson<{ body: { body_text: string } }>(`/api/crm/contacts/${contactId}/timeline?include_body=${item.id}`);
     setLoading(false);
     if (!r.ok) return setErr(r.error);
-    const hit = r.data.find((i): i is EmailItem => i.kind === "email" && i.id === item.id);
-    if (!hit) return setErr("Message not found");
-    setFull(hit.body_text ?? "");
+    setFull(r.data.body.body_text);
   }
 
   const sent = item.direction === "sent";

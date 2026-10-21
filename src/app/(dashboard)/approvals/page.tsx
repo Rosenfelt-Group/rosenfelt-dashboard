@@ -8,7 +8,7 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
 import { usePolling } from "@/lib/use-polling";
-import { canSendApproval } from "@/lib/approvals-send";
+import { canSendApproval, executeFailureMessage } from "@/lib/approvals-send";
 import { Button, EmptyState, ErrorState, LoadingState, PageHeader, Tabs } from "@/components/ui";
 
 const STATUS_STYLES = {
@@ -45,7 +45,7 @@ function SendButton({ item, onDone }: { item: PendingApproval; onDone: () => voi
       const res = await fetch(`/api/approvals/${item.id}/execute`, { method: "POST" });
       const body = await res.json().catch(() => ({}));
       if (res.ok && body?.status === "done") { setMsg({ ok: true, text: "Email sent." }); onDone(); }
-      else setMsg({ ok: false, text: `Email NOT sent: ${body?.error ?? body?.status ?? `HTTP ${res.status}`}` });
+      else setMsg({ ok: false, text: executeFailureMessage(body, res.status) });
     } catch (e) {
       setMsg({ ok: false, text: `Email NOT sent: ${e instanceof Error ? e.message : "request failed"}` });
     } finally {
@@ -197,7 +197,7 @@ function ApprovalsContent() {
         const er = await fetch(`/api/approvals/${id}/execute`, { method: "POST" });
         const eb = await er.json().catch(() => ({}));
         if (er.ok && eb?.status === "done") alert("Email sent.");
-        else alert(`Email NOT sent: ${eb?.error ?? eb?.status ?? `HTTP ${er.status}`}`);
+        else alert(executeFailureMessage(eb, er.status));
       } catch (e) {
         alert(`Email NOT sent: ${e instanceof Error ? e.message : "request failed"}`);
       }

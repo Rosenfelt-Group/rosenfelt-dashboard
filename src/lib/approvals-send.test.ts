@@ -11,3 +11,14 @@ describe("canSendApproval (R38)", () => {
     expect(canSendApproval({ ...base, action_type: "publish_post" })).toBe(false);
   });
 });
+
+import { executeFailureMessage } from "./approvals-send";
+describe("executeFailureMessage", () => {
+  it("explains a skipped execute", () => {
+    expect(executeFailureMessage({ status: "skipped" }, 409)).toBe("Not sent: this approval was already executed or is not approved.");
+  });
+  it("shows errors and falls back to HTTP status", () => {
+    expect(executeFailureMessage({ status: "failed", error: "boom" }, 200)).toBe("Email NOT sent: boom");
+    expect(executeFailureMessage(null, 500)).toBe("Email NOT sent: HTTP 500");
+  });
+});

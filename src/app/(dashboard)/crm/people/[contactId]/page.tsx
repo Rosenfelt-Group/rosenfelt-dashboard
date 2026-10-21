@@ -8,7 +8,7 @@ import { Button, ErrorState, LoadingState } from "@/components/ui";
 import { Timeline } from "@/components/crm/Timeline";
 import { ComposeBox, type ComposePrefill } from "@/components/crm/ComposeBox";
 import { replyDefaults } from "@/lib/crm/compose";
-import type { EmailItem, TimelineItem } from "@/lib/crm/timeline";
+import type { EmailItem, TimelineCursor, TimelineItem, TimelinePage } from "@/lib/crm/timeline";
 
 type Contact = { id: string; first_name: string; last_name: string | null; email: string | null; business?: { id: string; name: string } | null };
 
@@ -17,24 +17,24 @@ export default function PersonPage() {
   const [contact, setContact] = useState<Contact | null>(null);
   const [head, setHead] = useState<TimelineItem[]>([]);
   const [older, setOlder] = useState<TimelineItem[]>([]);
-  const [hasMore, setHasMore] = useState(false);
+  const [cursor, setCursor] = useState<TimelineCursor | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false); // compose is admin-only; hidden until /api/auth/me says admin
   const [prefill, setPrefill] = useState<ComposePrefill>({ to: [], subject: "" });
 
   const loadHead = useCallback(async (silent = false) => {
-    const r = await fetchJson<TimelineItem[]>(`/api/crm/contacts/${contactId}/timeline`);
+    const r = await fetchJson<TimelinePage>(`/api/crm/contacts/${contactId}/timeline`);
     if (!r.ok) { if (!silent) setError(r.error); return; }
-    setHead(r.data);
-    if (!silent) setHasMore(r.data.length >= 50);
+    setHead(r.data.items);
+    if (!silent) setCursor(r.data.next_cursor);
   }, [contactId]);
 
   useEffect(() => {
     let live = true;
     Promise.all([
       fetchJson<Contact>(`/api/crm/contacts/${contactId}`),
-      fetchJson<TimelineItem[]>(`/api/crm/contacts/${contactId}/timeline`),
+      fetchJson<TimelinePage>(`/api/crm/contacts/${contactId}/timeline`),
       fetchJson<{ role?: string }>("/api/auth/me"),
     ]).then(([c, t, me]) => {
       if (!live) return;
@@ -42,8 +42,8 @@ export default function PersonPage() {
       else if (!t.ok) setError(t.error);
       else {
         setContact(c.data);
-        setHead(t.data);
-        setHasMore(t.data.length >= 50);
+        setHead(t.data.items);
+        setCursor(t.data.next_cursor);
         if (c.data.email) setPrefill({ to: [c.data.email], subject: "" });
       }
       setIsAdmin(me.ok && me.data.role === "admin");
@@ -60,12 +60,11 @@ export default function PersonPage() {
   }, [head, older]);
 
   async function loadOlder() {
-    const last = items[items.length - 1];
-    if (!last) return;
-    const r = await fetchJson<TimelineItem[]>(`/api/crm/contacts/${contactId}/timeline?before=${encodeURIComponent(last.ts)}`);
+    if (!cursor) return;
+    const r = await fetchJson<TimelinePage>(`/api/crm/contacts/${contactId}/timeline?before_ts=${encodeURIComponent(cursor.before_ts)}&before_id=${cursor.before_id}`);
     if (!r.ok) return setError(r.error);
-    setOlder((o) => [...o, ...r.data]);
-    setHasMore(r.data.length >= 50);
+    setOlder((o) => [...o, ...r.data.items]);
+    setCursor(r.data.next_cursor);
   }
 
   function reply(m: EmailItem) {
@@ -92,7 +91,7 @@ export default function PersonPage() {
       <div className="card">
         <h2 className="text-sm font-medium text-brand-black mb-4">History</h2>
         <Timeline contactId={contactId} items={items} onReply={isAdmin ? reply : undefined} />
-        {hasMore && <div className="mt-4"><Button variant="secondary" size="sm" onClick={loadOlder}>Load older</Button></div>}
+        {cursor && <div className="mt-4"><Button variant="secondary" size="sm" onClick={loadOlder}>Load older</Button></div>}
       </div>
     </div>
   );

@@ -12,7 +12,7 @@ export class InboxError extends Error {
 
 type UnmatchedRow = {
   id: string; email_message_id: string | null; contact_email: string; direction: string | null; subject: string | null;
-  snippet: string | null; timestamp: string | null; suggested_contact_id: string | null;
+  snippet: string | null; timestamp: string | null; suggested_contact_id: string | null; suggestion_checked_at: string | null;
   message: { from_email: string | null; from_name: string | null; subject: string | null; snippet: string | null; sent_at: string | null } | null;
 };
 export type InboxItem = {
@@ -23,7 +23,8 @@ export type InboxItem = {
 
 const LIMIT = 200;
 const CONTACT_COLS = "id, first_name, last_name, email_norm";
-const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+const SAFE_DOMAIN = /^[a-z0-9.-]+$/;
+const SAFE_NAME = /^[\p{L}'.-]+$/u; // safe inside a PostgREST or() filter: no commas, parens or wildcards
 const toSuggest = (c: Record<string, unknown>): SuggestContact => ({
   id: c.id as string, first_name: (c.first_name as string) ?? null, last_name: (c.last_name as string) ?? null, email: (c.email_norm as string) ?? null,
 });
@@ -33,7 +34,7 @@ export async function listInbox(): Promise<InboxItem[]> {
   const db = supabaseAdmin.schema("crm");
   const { data, error } = await db
     .from("unmatched_email_log")
-    .select("id, email_message_id, contact_email, direction, subject, snippet, timestamp, suggested_contact_id, message:email_messages(from_email, from_name, subject, snippet, sent_at)")
+    .select("id, email_message_id, contact_email, direction, subject, snippet, timestamp, suggested_contact_id, suggestion_checked_at, message:email_messages(from_email, from_name, subject, snippet, sent_at)")
     .is("resolved_at", null)
     .order("timestamp", { ascending: false })
     .limit(LIMIT);
@@ -44,31 +45,35 @@ export async function listInbox(): Promise<InboxItem[]> {
   const nameFor = (r: UnmatchedRow) =>
     r.message?.from_name && r.message.from_email && normalizeEmail(r.message.from_email) === normalizeEmail(r.contact_email) ? r.message.from_name : null;
 
-  const need = rows.filter((r) => !r.suggested_contact_id);
+  // R41: each row is looked at once. suggestion_checked_at is set whether or not a suggestion was found.
+  const need = rows.filter((r) => !r.suggestion_checked_at && !r.suggested_contact_id);
   const pool = new Map<string, SuggestContact>();
   const addAll = (list: unknown) => { for (const c of (list ?? []) as Record<string, unknown>[]) pool.set(c.id as string, toSuggest(c)); };
-  const domains = [...new Set(need.map((r) => emailDomain(r.contact_email)).filter((d): d is string => !!d && !(FREE_MAIL_DOMAINS as readonly string[]).includes(d)))];
-  const firsts = [...new Set(need.map(nameFor).filter((n): n is string => !!n).map((n) => n.trim().split(/\s+/)[0]))];
-  for (const d of domains) {
-    const r = await db.from("contacts").select(CONTACT_COLS).ilike("email_norm", `%@${escapeLike(d)}`).limit(50);
-    if (r.error) throw new Error(r.error.message);
-    addAll(r.data);
-  }
-  for (const f of firsts) {
-    const r = await db.from("contacts").select(CONTACT_COLS).ilike("first_name", escapeLike(f)).limit(50);
-    if (r.error) throw new Error(r.error.message);
-    addAll(r.data);
-  }
-
   const suggested = new Map<string, string>(); // unmatched id -> contact id
-  for (const r of need) {
-    const id = suggestContact({ email: r.contact_email, name: nameFor(r) }, [...pool.values()]);
-    if (id) suggested.set(r.id, id);
-  }
-  // Persist, never overwriting a value or touching a row resolved meanwhile.
-  for (const [rowId, contactId] of suggested) {
-    const u = await db.from("unmatched_email_log").update({ suggested_contact_id: contactId }).eq("id", rowId).is("suggested_contact_id", null).is("resolved_at", null);
-    if (u.error) console.error("persist suggestion failed:", u.error.message);
+
+  if (need.length) {
+    const domains = [...new Set(need.map((r) => emailDomain(r.contact_email)).filter((d): d is string => !!d && SAFE_DOMAIN.test(d) && !(FREE_MAIL_DOMAINS as readonly string[]).includes(d)))];
+    const firsts = [...new Set(need.map(nameFor).filter((n): n is string => !!n).map((n) => n.trim().split(/\s+/)[0]).filter((f) => SAFE_NAME.test(f)))];
+    // One query per rule (not per row), in parallel.
+    const lookups = [];
+    if (domains.length) lookups.push(db.from("contacts").select(CONTACT_COLS).or(domains.map((d) => `email_norm.ilike.%@${d}`).join(",")).limit(1000));
+    if (firsts.length) lookups.push(db.from("contacts").select(CONTACT_COLS).or(firsts.map((f) => `first_name.ilike.${f}`).join(",")).limit(1000));
+    for (const r of await Promise.all(lookups)) {
+      if (r.error) throw new Error(r.error.message);
+      addAll(r.data);
+    }
+
+    for (const r of need) {
+      const id = suggestContact({ email: r.contact_email, name: nameFor(r) }, [...pool.values()]);
+      if (id) suggested.set(r.id, id);
+    }
+    // Persist, never overwriting a value or touching a row resolved meanwhile.
+    const checkedAt = new Date().toISOString();
+    const writes = [...suggested].map(([rowId, contactId]) =>
+      db.from("unmatched_email_log").update({ suggested_contact_id: contactId, suggestion_checked_at: checkedAt }).eq("id", rowId).is("suggestion_checked_at", null).is("resolved_at", null));
+    const none = need.filter((r) => !suggested.has(r.id)).map((r) => r.id);
+    if (none.length) writes.push(db.from("unmatched_email_log").update({ suggestion_checked_at: checkedAt }).in("id", none).is("suggestion_checked_at", null).is("resolved_at", null));
+    for (const w of await Promise.all(writes)) if (w.error) console.error("persist suggestion failed:", w.error.message);
   }
 
   const wantIds = [...new Set(rows.map((r) => r.suggested_contact_id ?? suggested.get(r.id)).filter((x): x is string => !!x && !pool.has(x)))];
@@ -105,7 +110,7 @@ export async function resolveUnmatched(input: ResolveInput): Promise<{ contact_i
   if (row.resolved_at) throw new InboxError("Already resolved", 409);
   if (!row.email_message_id) throw new InboxError("This row has no stored message to link", 422);
 
-  const { data: m, error: mErr } = await db.from("email_messages").select("*").eq("id", row.email_message_id).maybeSingle();
+  const { data: m, error: mErr } = await db.from("email_messages").select("gmail_message_id, thread_id, rfc_message_id, direction, from_email, from_name, to_emails, cc_emails, subject, snippet, body_text, sent_at, source, delivered_to_crm").eq("id", row.email_message_id).maybeSingle();
   if (mErr) throw new Error(mErr.message);
   if (!m) throw new InboxError("Stored message not found", 404);
 
@@ -135,7 +140,9 @@ export async function resolveUnmatched(input: ResolveInput): Promise<{ contact_i
   const { error: sErr } = await db.rpc("store_ingested_email", { p });
   if (sErr) throw new Error(`store_ingested_email failed: ${sErr.message}`);
 
-  const { error: uErr } = await db.from("unmatched_email_log").update({ resolved_at: new Date().toISOString(), resolved_contact_id: ref.contact_id }).eq("id", row.id).is("resolved_at", null);
+  // Conditional update: a concurrent resolver that got here first leaves 0 rows for us (the store above is idempotent).
+  const { data: upd, error: uErr } = await db.from("unmatched_email_log").update({ resolved_at: new Date().toISOString(), resolved_contact_id: ref.contact_id }).eq("id", row.id).is("resolved_at", null).select("id");
   if (uErr) throw new Error(uErr.message);
+  if (!upd || upd.length === 0) throw new InboxError("Already resolved", 409);
   return { contact_id: ref.contact_id, lead_id: ref.lead_id, created_contact: created };
 }

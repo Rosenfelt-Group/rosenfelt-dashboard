@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { requirePermission } from "@/lib/requirePermission";
-import { buildTimeline, TIMELINE_PAGE, type ActivityRow, type EmailRow } from "@/lib/crm/timeline";
+import { pageFromRows, TIMELINE_PAGE, type TimelineRow } from "@/lib/crm/timeline";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * GET /api/crm/contacts/:id/timeline?before=<ISO ts>&include_body=<email_message_id>
- * Newest first, 50 per page; pass the last item's ts as `before` for the next page.
- * Email bodies: each email item has a 500-char `preview`; the full `body_text` is included only for the
- * message named by include_body (keeps pages small and bodies out of lists).
+ * GET /api/crm/contacts/:id/timeline?before_ts=<ISO>&before_id=<uuid>
+ *   -> { items: TimelineItem[], next_cursor: {before_ts, before_id} | null }, newest first, 50 per page.
+ * Paging is a keyset on (ts, id) done in crm.contact_timeline (R40); pass next_cursor back as before_ts/before_id.
+ * Email items carry a 500-char preview only.
+ *
+ * GET ...?include_body=<email_message_id>  -> { body: { email_message_id, body_text } }
+ * Looks the message up by id (it must be linked to this contact) with no cursor, so it works for any message.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requirePermission(req, "view_crm");
@@ -17,39 +20,36 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid contact id" }, { status: 400 });
-
   const sp = req.nextUrl.searchParams;
-  let before: string | null = null;
-  if (sp.get("before")) {
-    const t = Date.parse(sp.get("before")!);
-    if (Number.isNaN(t)) return NextResponse.json({ error: "Invalid before timestamp" }, { status: 400 });
-    before = new Date(t).toISOString();
-  }
-  const includeBody = sp.get("include_body") ?? undefined;
-  if (includeBody && !UUID.test(includeBody)) return NextResponse.json({ error: "Invalid include_body" }, { status: 400 });
-
   const db = supabaseAdmin.schema("crm");
 
-  const { data: leads, error: lErr } = await db.from("leads").select("id").eq("contact_id", id);
-  if (lErr) return NextResponse.json({ error: lErr.message }, { status: 500 });
-  const leadIds = (leads ?? []).map((l) => l.id as string).filter((x) => UUID.test(x));
-  const scope = [`contact_id.eq.${id}`, leadIds.length ? `lead_id.in.(${leadIds.join(",")})` : ""].filter(Boolean).join(",");
+  const includeBody = sp.get("include_body");
+  if (includeBody) {
+    if (!UUID.test(includeBody)) return NextResponse.json({ error: "Invalid include_body" }, { status: 400 });
+    const { data, error } = await db
+      .from("email_messages")
+      .select("id, body_text, email_message_links!inner(contact_id)")
+      .eq("id", includeBody)
+      .eq("email_message_links.contact_id", id)
+      .maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: "Message not found" }, { status: 404 });
+    return NextResponse.json({ body: { email_message_id: data.id, body_text: data.body_text ?? "" } });
+  }
 
-  let aq = db.from("lead_activities").select("*").or(scope);
-  if (before) aq = aq.lt("created_at", before);
-  const mq0 = db.from("email_messages").select("*, email_message_links!inner(contact_id)").eq("email_message_links.contact_id", id);
-  const mq = before ? mq0.lt("sent_at", before) : mq0;
+  let beforeTs: string | null = null;
+  const beforeId = sp.get("before_id");
+  if (sp.get("before_ts")) {
+    const t = Date.parse(sp.get("before_ts")!);
+    if (Number.isNaN(t)) return NextResponse.json({ error: "Invalid before_ts" }, { status: 400 });
+    beforeTs = sp.get("before_ts")!; // keep the cursor's microseconds exactly as the database returned it
+  }
+  if (beforeId && !UUID.test(beforeId)) return NextResponse.json({ error: "Invalid before_id" }, { status: 400 });
+  if (beforeId && !beforeTs) return NextResponse.json({ error: "before_id needs before_ts" }, { status: 400 });
 
-  const [acts, msgs] = await Promise.all([
-    aq.order("created_at", { ascending: false }).limit(TIMELINE_PAGE),
-    mq.order("sent_at", { ascending: false }).limit(TIMELINE_PAGE),
-  ]);
-  if (acts.error) return NextResponse.json({ error: acts.error.message }, { status: 500 });
-  if (msgs.error) return NextResponse.json({ error: msgs.error.message }, { status: 500 });
-
-  const emails = (msgs.data ?? []).map((m) => {
-    const { email_message_links: _links, ...row } = m as Record<string, unknown>;
-    return row as unknown as EmailRow;
+  const { data, error } = await db.rpc("contact_timeline", {
+    p_contact_id: id, p_before_ts: beforeTs, p_before_id: beforeId, p_limit: TIMELINE_PAGE,
   });
-  return NextResponse.json(buildTimeline((acts.data ?? []) as ActivityRow[], emails, includeBody));
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(pageFromRows((data ?? []) as TimelineRow[], TIMELINE_PAGE));
 }
