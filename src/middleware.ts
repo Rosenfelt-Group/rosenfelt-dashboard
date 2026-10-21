@@ -38,6 +38,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!login|api/auth/login|api/auth/logout|api/github/webhook|api/vps/deploy|api/stripe/webhook|api/intake(?:/|$)|_next/static|_next/image|favicon\\.ico).*)",
+    "/((?!login|api/auth/login|api/auth/logout|api/github/webhook|api/vps/deploy|api/stripe/webhook|api/intake(?:/|$)|api/email/gmail-push(?:/|$)|api/cron/gmail-watch(?:/|$)|_next/static|_next/image|favicon\\.ico).*)",
   ],
 };

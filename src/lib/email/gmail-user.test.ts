@@ -179,6 +179,33 @@ describe("clients", () => {
   });
 });
 
+describe("listMessages", () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+  it("lists ids for a query with paging", async () => {
+    vi.stubEnv("GMAIL_READ_REFRESH_TOKEN", "rt-read");
+    vi.stubEnv("GOOGLE_OAUTH_CLIENT_ID", "cid");
+    vi.stubEnv("GOOGLE_OAUTH_CLIENT_SECRET", "sec");
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("oauth2.googleapis.com/token")) return new Response(JSON.stringify({ access_token: "at", expires_in: 3600 }), { status: 200 });
+      urls.push(url);
+      return new Response(JSON.stringify({ messages: [{ id: "a", threadId: "t" }, { id: "b", threadId: "t" }], nextPageToken: "np" }), { status: 200 });
+    }));
+    const r = await gmailRead().listMessages("newer_than:7d", "pt");
+    expect(r).toEqual({ ids: ["a", "b"], nextPageToken: "np" });
+    expect(urls[0]).toContain("/messages?");
+    expect(urls[0]).toContain("q=newer_than%3A7d");
+    expect(urls[0]).toContain("pageToken=pt");
+  });
+  it("tolerates an empty mailbox result", async () => {
+    vi.stubEnv("GMAIL_READ_REFRESH_TOKEN", "rt-read");
+    vi.stubEnv("GOOGLE_OAUTH_CLIENT_ID", "cid");
+    vi.stubEnv("GOOGLE_OAUTH_CLIENT_SECRET", "sec");
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.includes("oauth2") ? { access_token: "at" } : {}), { status: 200 })));
+    expect(await gmailRead().listMessages("x")).toEqual({ ids: [], nextPageToken: undefined });
+  });
+});
+
 describe("static import guard", () => {
   it("only_executor_imports_gmailSend", () => {
     const root = path.resolve(__dirname, "../..");

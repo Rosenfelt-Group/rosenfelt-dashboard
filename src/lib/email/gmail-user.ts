@@ -288,6 +288,12 @@ export function gmailRead() {
       for (const h of j.history ?? []) for (const a of h.messagesAdded ?? []) ids.add(a.message.id);
       return { historyId: j.historyId, nextPageToken: j.nextPageToken, addedMessageIds: [...ids] };
     },
+    async listMessages(q: string, pageToken?: string): Promise<{ ids: string[]; nextPageToken?: string }> {
+      const params = new URLSearchParams({ q });
+      if (pageToken) params.set("pageToken", pageToken);
+      const j = await call<{ messages?: { id: string }[]; nextPageToken?: string }>(getToken, `/messages?${params}`);
+      return { ids: (j.messages ?? []).map((m) => m.id), nextPageToken: j.nextPageToken };
+    },
     async getMessage(id: string): Promise<GmailMessage> {
       return parseMessage(await call<RawMessage>(getToken, `/messages/${encodeURIComponent(id)}?format=full`));
     },
