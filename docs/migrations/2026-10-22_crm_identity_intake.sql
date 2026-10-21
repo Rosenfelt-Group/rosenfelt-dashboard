@@ -105,6 +105,8 @@ declare
   v_created_contact boolean := false;
   v_created_lead boolean := false;
   v_cur_stage text;
+  v_stage_ignored text;
+  v_freemail_noorg boolean;
 begin
   if v_channel is null or not (v_channel = any (v_channels)) then
     raise exception 'intake_lead: unknown or missing channel: %', coalesce(v_channel, '(null)');
@@ -114,6 +116,12 @@ begin
   end if;
   if not (v_stage = any (v_stages)) then
     raise exception 'intake_lead: unknown stage: %', v_stage;
+  end if;
+  -- R9: intake never closes a lead. 'lost' is ignored: new leads get the default
+  -- stage, existing leads keep their stage.
+  if v_stage = 'lost' then
+    v_stage_ignored := 'lost';
+    v_stage := 'new';
   end if;
   v_entry := coalesce(nullif(btrim(p->>'entry_stage'), ''),
                       case when v_stage = 'quiz_started' then 'quiz_started' else 'new' end);
@@ -135,6 +143,7 @@ begin
 
   -- Business: contact's own, else match by org name, else create.
   if v_business_id is null then
+    v_freemail_noorg := (v_org is null and v_domain = any (v_freemail));
     if v_org is not null then
       v_bname := v_org;
     elsif v_domain = any (v_freemail) then
@@ -143,8 +152,11 @@ begin
       v_bname := v_domain;
     end if;
 
-    select id into v_business_id from businesses
-    where lower(name) = lower(v_bname) order by created_at limit 1;
+    -- R10: free-mail with no org always gets a new business (never name-matched).
+    if not v_freemail_noorg then
+      select id into v_business_id from businesses
+      where lower(name) = lower(v_bname) order by created_at limit 1;
+    end if;
 
     if v_business_id is null then
       insert into businesses (name, source, email, phone)
@@ -190,7 +202,8 @@ begin
     v_created_lead := true;
   else
     update leads set
-      stage = case when array_position(v_stages, v_stage) > array_position(v_stages, stage)
+      stage = case when v_stage_ignored is null
+                    and array_position(v_stages, v_stage) > array_position(v_stages, stage)
                    then v_stage else stage end,
       estimated_value = coalesce(estimated_value, v_value),
       utm_source   = coalesce(utm_source,   nullif(p->>'utm_source','')),
@@ -206,7 +219,9 @@ begin
 
   insert into lead_activities (lead_id, contact_id, activity_type, content, logged_by, metadata)
   values (v_lead_id, v_contact_id, 'intake', nullif(p->>'summary',''), 'system',
-          jsonb_build_object('channel', v_channel, 'payload', p->'payload'));
+          jsonb_build_object('channel', v_channel, 'payload', p->'payload')
+          || case when v_stage_ignored is not null
+                  then jsonb_build_object('stage_ignored', v_stage_ignored) else '{}'::jsonb end);
 
   return jsonb_build_object(
     'contact_id', v_contact_id,

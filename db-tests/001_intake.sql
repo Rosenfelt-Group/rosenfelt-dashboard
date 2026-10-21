@@ -92,6 +92,52 @@ BEGIN
   ASSERT (SELECT name FROM crm.businesses WHERE id = (d->>'business_id')::uuid) = 'domainco.example', 'domain used when no org';
 END $$;
 
+-- intake_ignores_lost_for_new_lead
+DO $$
+DECLARE r jsonb;
+BEGIN
+  r := crm.intake_lead('{"channel":"manual","email":"lostnew@x.org","name":"Ln","org":"Lost New Co","stage":"lost"}'::jsonb);
+  ASSERT (SELECT stage FROM crm.leads WHERE id = (r->>'lead_id')::uuid) = 'new', 'new lead gets default stage';
+  ASSERT (SELECT metadata->>'stage_ignored' FROM crm.lead_activities
+          WHERE lead_id = (r->>'lead_id')::uuid AND activity_type = 'intake') = 'lost', 'stage_ignored recorded';
+END $$;
+
+-- intake_ignores_lost_for_existing_lead
+DO $$
+DECLARE a jsonb; b jsonb; lid uuid;
+BEGIN
+  a := crm.intake_lead('{"channel":"manual","email":"lostex@x.org","name":"Le","org":"Lost Ex Co","stage":"quiz_started"}'::jsonb);
+  lid := (a->>'lead_id')::uuid;
+  UPDATE crm.leads SET stage = 'engaged' WHERE id = lid;
+  b := crm.intake_lead('{"channel":"manual","email":"lostex@x.org","stage":"lost"}'::jsonb);
+  ASSERT b->>'lead_id' = a->>'lead_id', 'same lead';
+  ASSERT (SELECT stage FROM crm.leads WHERE id = lid) = 'engaged', 'stage unchanged';
+  ASSERT (SELECT count(*) FROM crm.lead_activities WHERE lead_id = lid AND activity_type = 'intake'
+            AND metadata->>'stage_ignored' = 'lost') = 1, 'stage_ignored recorded';
+  -- and an ignored lost must not drag a quiz-stage lead forward to 'new'
+  a := crm.intake_lead('{"channel":"quiz","email":"lostq@x.org","name":"Lq","org":"Lost Q Co","stage":"quiz_started"}'::jsonb);
+  PERFORM crm.intake_lead('{"channel":"manual","email":"lostq@x.org","stage":"lost"}'::jsonb);
+  ASSERT (SELECT stage FROM crm.leads WHERE id = (a->>'lead_id')::uuid) = 'quiz_started', 'quiz stage unchanged';
+END $$;
+
+-- intake_freemail_same_name_distinct_businesses
+DO $$
+DECLARE a jsonb; b jsonb;
+BEGIN
+  a := crm.intake_lead('{"channel":"ebook","email":"bob1@gmail.com","name":"Bob Builder"}'::jsonb);
+  b := crm.intake_lead('{"channel":"ebook","email":"bob2@gmail.com","name":"Bob Builder"}'::jsonb);
+  ASSERT a->>'business_id' <> b->>'business_id', 'free-mail without org must get distinct businesses';
+END $$;
+
+-- intake_freemail_with_org_matches_org
+DO $$
+DECLARE a jsonb; b jsonb;
+BEGIN
+  a := crm.intake_lead('{"channel":"ebook","email":"fo1@gmail.com","name":"Fo One","org":"Shared Org LLC"}'::jsonb);
+  b := crm.intake_lead('{"channel":"ebook","email":"fo2@yahoo.com","name":"Fo Two","org":"shared org llc"}'::jsonb);
+  ASSERT a->>'business_id' = b->>'business_id', 'free-mail with org matches by org name';
+END $$;
+
 -- intake_rejects_unknown_channel
 DO $$
 BEGIN
