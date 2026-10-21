@@ -9,6 +9,8 @@
 // Only src/lib/email/executor.ts may import gmailSend (enforced by gmail-user.test.ts).
 // Uses plain fetch against the Gmail REST API; no googleapis dependency.
 
+import { randomUUID } from "node:crypto";
+
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 
@@ -124,16 +126,24 @@ function subjectHeader(subject: string): string {
   return `Subject:${encodeWords(subject).map((w) => `\r\n ${w}`).join("")}`;
 }
 
-export function buildRfc822(input: Rfc822Input): RfcMessage {
+/** buildRfc822 plus the Message-ID it generated, so callers can store it at send time. */
+export function buildRfc822Message(input: Rfc822Input): { raw: RfcMessage; messageId: string } {
   const list = (label: string, xs: MailAddress[]) => fold(label, xs.map((a) => formatAddress(label, a)).join(", "));
   const headers: string[] = [fold("From", formatAddress("From", input.from)), list("To", input.to)];
   if (input.cc.length) headers.push(list("Cc", input.cc));
   headers.push(subjectHeader(input.subject));
+  const messageId = `<${randomUUID()}@rosably.com>`;
+  headers.push(`Message-ID: ${messageId}`);
+  headers.push(`Date: ${new Date().toUTCString()}`);
   if (input.inReplyTo) headers.push(fold("In-Reply-To", safeHeader("In-Reply-To", input.inReplyTo)));
   if (input.references) headers.push(fold("References", safeHeader("References", input.references)));
   headers.push("MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64");
   const body = Buffer.from(input.text.replace(/\r?\n/g, "\r\n"), "utf8").toString("base64").replace(/(.{76})/g, "$1\r\n");
-  return `${headers.join("\r\n")}\r\n\r\n${body}`;
+  return { raw: `${headers.join("\r\n")}\r\n\r\n${body}`, messageId };
+}
+
+export function buildRfc822(input: Rfc822Input): RfcMessage {
+  return buildRfc822Message(input).raw;
 }
 
 // ---------- MIME parsing ----------

@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PendingApproval } from "@/types";
 import { can } from "@/lib/permissions";
@@ -97,6 +97,7 @@ function ApprovalsContent() {
   const agentFilter = searchParams.get("agent") || "all";
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [permissions, setPermissions] = useState<string[]>([]);
+  const inFlight = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -126,6 +127,22 @@ function ApprovalsContent() {
   usePolling(() => load(true), 10_000);
 
   async function handleApproval(
+    id: string,
+    status: "approved" | "rejected" | "revision_requested",
+    revisionNotes?: string,
+    selectedItems?: string[],
+  ) {
+    // Re-entrancy guard: the card also disables its buttons while this promise is pending.
+    if (inFlight.current.has(id)) return;
+    inFlight.current.add(id);
+    try {
+      await decide(id, status, revisionNotes, selectedItems);
+    } finally {
+      inFlight.current.delete(id);
+    }
+  }
+
+  async function decide(
     id: string,
     status: "approved" | "rejected" | "revision_requested",
     revisionNotes?: string,

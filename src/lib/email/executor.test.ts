@@ -13,13 +13,13 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/supabase-admin", () => {
-  const apply = (filters: [string, unknown][], r: Row) => filters.every(([c, v]) => r[c] === v);
+  const apply = (filters: ((r: Row) => boolean)[], r: Row) => filters.every((f) => f(r));
   return {
     supabaseAdmin: {
       from: (table: string) => ({
         select: () => ({ eq: (_c: string, id: unknown) => ({ single: async () => ({ data: h.rows.find((r) => r.id === id) ?? null, error: null }) }) }),
         update: (patch: Row) => {
-          const filters: [string, unknown][] = [];
+          const filters: ((r: Row) => boolean)[] = [];
           let lt: [string, string] | null = null;
           let orNull = false;
           const run = () => {
@@ -29,7 +29,9 @@ vi.mock("@/lib/supabase-admin", () => {
             return { data: hit.map((r) => ({ ...r })), error: null };
           };
           const chain: Record<string, unknown> = {
-            eq: (c: string, v: unknown) => (filters.push([c, v]), chain),
+            eq: (c: string, v: unknown) => (filters.push((r) => r[c] === v), chain),
+            is: (c: string, _v: null) => (filters.push((r) => r[c] == null), chain),
+            not: (c: string, _op: string, _v: null) => (filters.push((r) => r[c] != null), chain),
             lt: (c: string, v: string) => ((lt = [c, v]), chain),
             or: (expr: string) => { const m = /^(\w+)\.lt\.(.+),\w+\.is\.null$/.exec(expr); if (m) { lt = [m[1], m[2]]; orNull = true; } return chain; },
             select: () => chain,
@@ -72,7 +74,7 @@ vi.mock("./gmail-user", async () => {
 import { executeApproval, sendEmail, sweepStaleExecuting } from "./executor";
 
 const row = (over: Row = {}): Row => ({
-  id: "a1", agent: "riley", action_type: "email_send", status: "approved",
+  id: "a1", agent: "riley", action_type: "email_send", status: "approved", reviewed_by: "brian",
   payload: { to: ["lead@x.org"], cc: [], subject: "Hello", body_text: "Body", drafted_by: "riley" },
   ...over,
 });
@@ -109,6 +111,30 @@ describe("executeApproval", () => {
     expect(await executeApproval("a1")).toEqual({ status: "skipped" });
     expect(h.rows[0].status).toBe("approved");
     expect(h.sends).toHaveLength(0);
+  });
+
+  it("reapproved_done_row_is_not_sent_again", async () => {
+    h.rows.push(row());
+    expect((await executeApproval("a1")).status).toBe("done");
+    h.rows[0].status = "approved"; // someone flips it back
+    expect(await executeApproval("a1")).toEqual({ status: "skipped" });
+    expect(h.sends).toHaveLength(1);
+  });
+
+  it("unreviewed_approved_row_is_not_sent", async () => {
+    h.rows.push(row({ reviewed_by: null }));
+    expect(await executeApproval("a1")).toEqual({ status: "skipped" });
+    expect(h.sends).toHaveLength(0);
+    expect(h.rows[0].status).toBe("approved");
+  });
+
+  it("stored_sent_message_has_rfc_message_id", async () => {
+    h.rows.push(row());
+    await executeApproval("a1");
+    const mid = (h.rpcCalls[0].args.p.message as Row).rfc_message_id as string;
+    expect(mid).toMatch(/^<[0-9a-f-]{36}@rosably\.com>$/);
+    expect(h.sends[0].raw).toContain(`Message-ID: ${mid}`);
+    expect(h.sends[0].raw).toMatch(/^Date: /m);
   });
 
   it("skips pending (unapproved) rows", async () => {

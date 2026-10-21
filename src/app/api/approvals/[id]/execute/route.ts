@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/requirePermission";
-import { executeApproval } from "@/lib/email/executor";
+import { executeApproval, sweepStaleExecuting } from "@/lib/email/executor";
 
 export const maxDuration = 60;
 
@@ -11,6 +11,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { id } = await ctx.params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   try {
+    // Cheap bounded recovery so a stuck row does not wait for the daily cron (R35). Never blocks the execute.
+    await sweepStaleExecuting().catch((e) => console.error("stale sweep failed:", e));
     const r = await executeApproval(id);
     return NextResponse.json(r, { status: r.status === "skipped" ? 409 : 200 });
   } catch (e) {
