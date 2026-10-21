@@ -228,12 +228,16 @@ const chunk = <T,>(a: T[], n: number) => Array.from({ length: Math.ceil(a.length
 export async function loadContactsByEmail(emails: string[]): Promise<Map<string, ContactRef>> {
   const out = new Map<string, ContactRef>();
   const norm = uniq(emails.map(normalizeEmail).filter(Boolean));
-  if (!norm.length) return out;
+  for (const batch of chunk(norm, 50)) await loadBatch(batch, out); // one query per table per batch of 50
+  return out;
+}
+
+async function loadBatch(norm: string[], out: Map<string, ContactRef>): Promise<void> {
   const db = supabaseAdmin.schema("crm");
 
   const { data: contacts, error: cErr } = await db.from("contacts").select("id, email_norm, business_id").in("email_norm", norm);
   if (cErr) throw new Error(`contacts lookup failed: ${cErr.message}`);
-  if (!contacts?.length) return out;
+  if (!contacts?.length) return;
   const ids = contacts.map((c) => c.id as string);
   const bizIds = uniq(contacts.map((c) => c.business_id as string | null).filter((b): b is string => !!b));
 
@@ -255,94 +259,57 @@ export async function loadContactsByEmail(emails: string[]): Promise<Map<string,
 
   for (const c of contacts) {
     const mine = (leads ?? []).filter((l) => l.contact_id === c.id); // newest first
-    const lead =
-      mine.find((l) => l.stage !== "won" && l.stage !== "lost") ?? mine.find((l) => l.stage === "won") ?? null;
+    const lead = mine.find((l) => l.stage !== "won" && l.stage !== "lost") ?? mine.find((l) => l.stage === "won") ?? null;
     const own = (clients ?? []).find((k) => k.contact_id === c.id);
     const client = own ?? (c.business_id ? (clients ?? []).find((k) => k.business_id === c.business_id) : undefined);
     out.set(c.email_norm as string, { contact_id: c.id as string, lead_id: (lead?.id as string) ?? null, client_id: (client?.id as string) ?? null });
   }
-  return out;
 }
 
 // ---------- Store ----------
 
+/**
+ * Stores the message, links, activities and unmatched-queue row in one DB transaction
+ * (crm.store_ingested_email). Re-delivery and retries are idempotent and repair missing rows.
+ */
 export async function applyIngest(plan: IngestPlan, msg: GmailMessage, brian = BRIAN): Promise<void> {
   if (plan.kind === "skip") return;
   const c = classify(msg, brian);
-  const db = supabaseAdmin.schema("crm");
 
   const fromHdr = parseAddressList(msg.headers["from"])[0];
   const sender = c.forwardedOriginal ?? (fromHdr ? { email: fromHdr.email, name: fromHdr.name } : undefined);
   const subject = msg.headers["subject"] ? decodeMimeWords(msg.headers["subject"]) : null;
 
-  const { data: row, error: mErr } = await db
-    .from("email_messages")
-    .upsert(
-      {
-        gmail_message_id: msg.id,
-        thread_id: msg.threadId,
-        rfc_message_id: msg.headers["message-id"] ?? null,
-        direction: c.direction,
-        from_email: sender?.email ?? null,
-        from_name: sender?.name || null,
-        to_emails: uniq(addrs(msg, "to")),
-        cc_emails: uniq(addrs(msg, "cc")),
-        subject,
-        snippet: msg.snippet,
-        body_text: msg.bodyText,
-        sent_at: msg.internalDate ? new Date(msg.internalDate).toISOString() : null,
-        source: c.deliveredToCrm ? "forward" : "gmail_watch",
-        delivered_to_crm: c.deliveredToCrm,
-      },
-      { onConflict: "gmail_message_id" },
-    )
-    .select("id")
-    .single();
-  if (mErr || !row) throw new Error(`email_messages upsert failed: ${mErr?.message ?? "no row"}`);
-  const messageId = row.id as string;
-
-  if (plan.kind === "unmatched") {
-    const { data: existing, error: eErr } = await db.from("unmatched_email_log").select("id").eq("email_message_id", messageId).limit(1);
-    if (eErr) throw new Error(`unmatched_email_log lookup failed: ${eErr.message}`);
-    if (existing?.length) return;
-    const { error } = await db.from("unmatched_email_log").insert({
-      contact_email: plan.email,
+  const p: Record<string, unknown> = {
+    message: {
+      gmail_message_id: msg.id,
+      thread_id: msg.threadId,
+      rfc_message_id: msg.headers["message-id"] ?? null,
+      direction: c.direction,
+      from_email: sender?.email ?? null,
+      from_name: sender?.name || null,
+      to_emails: uniq(addrs(msg, "to")),
+      cc_emails: uniq(addrs(msg, "cc")),
       subject,
-      direction: "received",
       snippet: msg.snippet,
-      logged_by: "system",
-      email_message_id: messageId,
-      suggested_contact_id: null,
-    });
-    if (error) throw new Error(`unmatched_email_log insert failed: ${error.message}`);
-    return;
-  }
-
-  const { data: inserted, error: lErr } = await db
-    .from("email_message_links")
-    .upsert(
-      plan.links.map((l) => ({ email_message_id: messageId, contact_id: l.contact_id, lead_id: l.lead_id, client_id: l.client_id })),
-      { onConflict: "email_message_id,contact_id", ignoreDuplicates: true },
-    )
-    .select("contact_id");
-  if (lErr) throw new Error(`email_message_links insert failed: ${lErr.message}`);
-
-  // Only links newly inserted by this call get an activity, so re-delivery never duplicates.
-  const fresh = new Set((inserted ?? []).map((r) => r.contact_id as string));
-  const activities = plan.links
-    .filter((l) => fresh.has(l.contact_id))
-    .map((l) => ({
-      lead_id: l.lead_id,
-      contact_id: l.contact_id,
-      client_id: l.client_id,
+      body_text: msg.bodyText,
+      sent_at: msg.internalDate ? new Date(msg.internalDate).toISOString() : null,
+      source: c.deliveredToCrm ? "forward" : "gmail_watch",
+      delivered_to_crm: c.deliveredToCrm,
+    },
+    links: [],
+  };
+  if (plan.kind === "unmatched") {
+    p.unmatched = { contact_email: plan.email, subject, snippet: msg.snippet };
+  } else {
+    p.links = plan.links.map((l) => ({ contact_id: l.contact_id, lead_id: l.lead_id, client_id: l.client_id }));
+    p.activity = {
       activity_type: c.direction === "sent" ? "email_sent" : "email_received",
       email_direction: c.direction,
       email_subject: subject,
       content: msg.snippet,
-      logged_by: "system",
-      metadata: { email_message_id: messageId, gmail_message_id: msg.id },
-    }));
-  if (!activities.length) return;
-  const { error: aErr } = await db.from("lead_activities").insert(activities);
-  if (aErr) throw new Error(`lead_activities insert failed: ${aErr.message}`);
+    };
+  }
+  const { error } = await supabaseAdmin.schema("crm").rpc("store_ingested_email", { p });
+  if (error) throw new Error(`store_ingested_email failed: ${error.message}`);
 }

@@ -2,49 +2,29 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 type Row = Record<string, unknown>;
 const db = vi.hoisted(() => ({
-  tables: {} as Record<string, Row[]>,
   calls: [] as [string, ...unknown[]][],
   results: {} as Record<string, unknown[]>,
+  rpcError: null as string | null,
 }));
 
-// Stateful fake: upsert honours onConflict/ignoreDuplicates and returns only newly inserted rows.
 vi.mock("@/lib/supabase-admin", () => ({
   supabaseAdmin: {
     schema: () => ({
+      rpc: (name: string, args: unknown) => {
+        db.calls.push(["rpc", name, args]);
+        return Promise.resolve({ data: {}, error: db.rpcError ? { message: db.rpcError } : null });
+      },
       from: (table: string) => {
-        const rows = (db.tables[table] ??= []);
         let out: unknown = [];
-        let filterEq: [string, unknown] | null = null;
         const b: Record<string, unknown> = {};
-        for (const m of ["select", "in", "or", "neq", "order", "limit", "single"]) {
+        for (const m of ["select", "in", "or", "neq", "order"]) {
           b[m] = (...a: unknown[]) => {
             db.calls.push([`${table}.${m}`, ...a]);
-            if (m === "select" && table in db.results) out = db.results[table];
-            if (m === "single") out = (out as Row[])[0];
+            if (m === "select") out = db.results[table] ?? [];
             return b;
           };
         }
-        b.eq = (c: string, v: unknown) => { filterEq = [c, v]; out = rows.filter((r) => r[c] === v); return b; };
-        b.upsert = (input: Row | Row[], o: { onConflict: string; ignoreDuplicates?: boolean }) => {
-          db.calls.push([`${table}.upsert`, input, o]);
-          const keys = o.onConflict.split(",");
-          const added: Row[] = [];
-          const result: Row[] = [];
-          for (const r of Array.isArray(input) ? input : [input]) {
-            const hit = rows.find((x) => keys.every((k) => x[k] === r[k]));
-            if (hit) { if (!o.ignoreDuplicates) Object.assign(hit, r); if (!o.ignoreDuplicates) result.push(hit); }
-            else { const n = { id: `${table}-${rows.length + 1}`, ...r }; rows.push(n); added.push(n); result.push(n); }
-          }
-          out = result;
-          return b;
-        };
-        b.insert = (input: Row | Row[]) => {
-          db.calls.push([`${table}.insert`, input]);
-          for (const r of Array.isArray(input) ? input : [input]) rows.push({ ...r });
-          return b;
-        };
         b.then = (res: (v: unknown) => unknown) => Promise.resolve({ data: out, error: null }).then(res);
-        void filterEq;
         return b;
       },
     }),
@@ -62,7 +42,7 @@ const msg = (headers: Record<string, string>, over: Partial<GmailMessage> = {}):
 const ref = (id: string): ContactRef => ({ contact_id: id, lead_id: `lead-${id}`, client_id: null });
 const map = (...pairs: [string, ContactRef][]) => new Map(pairs);
 
-beforeEach(() => { db.tables = {}; db.calls = []; db.results = {}; });
+beforeEach(() => { db.calls = []; db.results = {}; db.rpcError = null; });
 
 describe("parseAddressList", () => {
   it("handles quoted names containing commas", () => {
@@ -145,38 +125,41 @@ describe("classify / planIngest", () => {
 });
 
 describe("applyIngest", () => {
-  it("applyIngest_is_idempotent", async () => {
+  const rpcCalls = () => db.calls.filter((c) => c[0] === "rpc");
+  it("sends one rpc with message, links and activity for a logged message", async () => {
     const m = msg({ From: "brian@rosably.com", To: "a@x.com, b@y.com", Subject: "Hello" });
-    const plan = planIngest(m, map(["a@x.com", ref("c1")], ["b@y.com", ref("c2")]));
-    await applyIngest(plan, m);
-    await applyIngest(plan, m);
-    expect(db.tables.email_messages).toHaveLength(1);
-    expect(db.tables.email_message_links).toHaveLength(2);
-    expect(db.tables.lead_activities).toHaveLength(2);
-    expect(db.tables.lead_activities[0]).toMatchObject({
-      activity_type: "email_sent", email_direction: "sent", email_subject: "Hello", logged_by: "system", contact_id: "c1", lead_id: "lead-c1",
-    });
-    expect((db.tables.lead_activities[0].metadata as Row).email_message_id).toBe("email_messages-1");
-    expect(db.tables.email_messages[0]).toMatchObject({ source: "gmail_watch", delivered_to_crm: false, direction: "sent" });
+    await applyIngest(planIngest(m, map(["a@x.com", ref("c1")], ["b@y.com", ref("c2")])), m);
+    expect(rpcCalls()).toHaveLength(1);
+    const [, name, args] = rpcCalls()[0] as [string, string, { p: Row }];
+    expect(name).toBe("store_ingested_email");
+    expect(args.p.message).toMatchObject({ gmail_message_id: "g1", direction: "sent", source: "gmail_watch", delivered_to_crm: false, subject: "Hello", to_emails: ["a@x.com", "b@y.com"] });
+    expect(args.p.links).toEqual([
+      { contact_id: "c1", lead_id: "lead-c1", client_id: null },
+      { contact_id: "c2", lead_id: "lead-c2", client_id: null },
+    ]);
+    expect(args.p.activity).toEqual({ activity_type: "email_sent", email_direction: "sent", email_subject: "Hello", content: "snip" });
+    expect(args.p.unmatched).toBeUndefined();
   });
   it("received mail gets email_received", async () => {
     const m = msg({ From: "jane@x.com", To: "brian@rosably.com" });
     await applyIngest(planIngest(m, map(["jane@x.com", ref("c1")])), m);
-    expect(db.tables.lead_activities[0]).toMatchObject({ activity_type: "email_received", email_direction: "received" });
+    expect((rpcCalls()[0][2] as { p: Row }).p.activity).toMatchObject({ activity_type: "email_received", email_direction: "received" });
   });
-  it("unmatched: forward source, one log row, idempotent", async () => {
+  it("unmatched: forward source, original sender, unmatched payload, no links", async () => {
     const m = msg({ From: "brian@rosably.com", To: "crm@rosably.com", Subject: "Fwd: Hi" }, {
       bodyText: "---------- Forwarded message ---------\nFrom: Pat <pat@new.com>\n",
     });
-    const plan = planIngest(m, new Map());
-    await applyIngest(plan, m);
-    await applyIngest(plan, m);
-    expect(db.tables.email_messages).toHaveLength(1);
-    expect(db.tables.email_messages[0]).toMatchObject({ source: "forward", delivered_to_crm: true, direction: "received", from_email: "pat@new.com" });
-    expect(db.tables.unmatched_email_log).toEqual([
-      expect.objectContaining({ contact_email: "pat@new.com", direction: "received", logged_by: "system", email_message_id: "email_messages-1", suggested_contact_id: null }),
-    ]);
-    expect(db.tables.lead_activities ?? []).toHaveLength(0);
+    await applyIngest(planIngest(m, new Map()), m);
+    const p = (rpcCalls()[0][2] as { p: Row }).p;
+    expect(p.message).toMatchObject({ source: "forward", delivered_to_crm: true, direction: "received", from_email: "pat@new.com" });
+    expect(p.links).toEqual([]);
+    expect(p.unmatched).toEqual({ contact_email: "pat@new.com", subject: "Fwd: Hi", snippet: "snip" });
+    expect(p.activity).toBeUndefined();
+  });
+  it("throws when the rpc fails", async () => {
+    db.rpcError = "boom";
+    const m = msg({ From: "jane@x.com", To: "brian@rosably.com" });
+    await expect(applyIngest(planIngest(m, map(["jane@x.com", ref("c1")])), m)).rejects.toThrow(/boom/);
   });
   it("skip writes nothing", async () => {
     await applyIngest({ kind: "skip", reason: "x" }, msg({}));
@@ -206,6 +189,12 @@ describe("loadContactsByEmail", () => {
     expect(froms).toEqual(["contacts.select", "leads.select", "clients.select"]);
     expect(db.calls).toContainEqual(["contacts.in", "email_norm", ["a@x.com", "b@x.com"]]);
     expect(db.calls).toContainEqual(["clients.neq", "billing_status", "cancelled"]);
+  });
+  it("chunks lookups into batches of 50 addresses", async () => {
+    const emails = Array.from({ length: 120 }, (_, i) => `u${i}@x.com`);
+    await loadContactsByEmail(emails);
+    const ins = db.calls.filter((c) => c[0] === "contacts.in").map((c) => (c[2] as string[]).length);
+    expect(ins).toEqual([50, 50, 20]);
   });
   it("returns empty without querying for no emails", async () => {
     expect((await loadContactsByEmail([])).size).toBe(0);
