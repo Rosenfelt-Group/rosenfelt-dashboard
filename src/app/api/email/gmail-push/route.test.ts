@@ -60,12 +60,17 @@ describe("POST /api/email/gmail-push", () => {
     expect(gm.getHistory).not.toHaveBeenCalled();
   });
 
-  it("duplicate_notification_no_double_log", async () => {
-    gm.getHistory.mockResolvedValueOnce(pg("150", rec("120", "a"))).mockResolvedValueOnce(pg("150"));
+  it("duplicate_notification_replays_same_plans_and_cursor_is_stable", async () => {
+    gm.getHistory.mockResolvedValue(pg("150", rec("120", "a", "b")));
+    ing.planIngest.mockImplementation((m: { id: string }) => ({ kind: "log", links: [{ contact_id: `c-${m.id}` }] }));
     await POST(push("150"));
-    await POST(push("150"));
-    expect(ing.applyIngest).toHaveBeenCalledTimes(1);
+    const first = ing.applyIngest.mock.calls.map((c) => c[0]);
     expect(db.state.row.history_id).toBe("150");
+    ing.applyIngest.mockClear();
+    await POST(push("150"));
+    expect(ing.applyIngest.mock.calls.map((c) => c[0])).toEqual(first);
+    expect(db.state.row.history_id).toBe("150");
+    expect(db.state.logs).toHaveLength(0);
   });
 
   it("out_of_order_notification_keeps_max_history_id", async () => {
@@ -113,6 +118,45 @@ describe("POST /api/email/gmail-push", () => {
     expect(db.state.logs).toHaveLength(1);
     expect(db.state.logs[0]).toMatchObject({ workflow_name: "gmail-push", status: "error", error_message: expect.stringContaining("bad") });
     expect(db.state.row.history_id).toBe("150");
+  });
+
+  it("systemic_error_stops_run_and_keeps_cursor", async () => {
+    gm.getHistory.mockResolvedValue(pg("150", rec("120", "a"), rec("130", "b")));
+    gm.getMessage.mockRejectedValue(new GmailUserError("auth_failed", "Token refresh failed (401)", 401));
+    expect((await POST(push("150"))).status).toBe(204);
+    expect(gm.getMessage).toHaveBeenCalledTimes(1); // stopped, did not skip through the rest
+    expect(db.state.row.history_id).toBe("100");
+    expect(db.state.logs[0]).toMatchObject({ workflow_name: "gmail-push", status: "error" });
+    gm.getMessage.mockReset().mockRejectedValue(new GmailUserError("api_error", "Gmail GET /messages/x failed (503)", 503));
+    await POST(push("150"));
+    expect(db.state.row.history_id).toBe("100");
+  });
+
+  it("history_401_does_not_resync_and_keeps_cursor", async () => {
+    gm.getHistory.mockRejectedValue(new GmailUserError("api_error", "Gmail GET /history failed (401)", 401));
+    expect((await POST(push("150"))).status).toBe(204);
+    expect(gm.listMessages).not.toHaveBeenCalled();
+    expect(db.state.row.history_id).toBe("100");
+    expect(db.state.logs[0]).toMatchObject({ status: "error" });
+  });
+
+  it("time budget stops at a record boundary and advances to the last complete record", async () => {
+    gm.getHistory.mockResolvedValue(pg("900", rec("110", "a"), rec("120", "b"), rec("130", "c")));
+    let t = 0;
+    gm.getMessage.mockImplementation(async (id: string) => { t += 100; return { id }; });
+    const { processPush } = await import("@/lib/email/gmail-sync");
+    await processPush("900", { now: () => t, budgetMs: 150 });
+    expect(ing.applyIngest).toHaveBeenCalledTimes(2); // a (t=100), b (t=200 > 150 deadline) then stop before c
+    expect(db.state.row.history_id).toBe("120");
+  });
+
+  it("resync truncation is logged", async () => {
+    gm.getHistory.mockRejectedValue(new GmailUserError("api_error", "Gmail GET /history failed (404)", 404));
+    gm.listMessages.mockResolvedValue({ ids: Array.from({ length: 200 }, (_, i) => `m${i}`), nextPageToken: "more" });
+    await POST(push("777"));
+    expect(ing.applyIngest).toHaveBeenCalledTimes(200);
+    expect(db.state.logs.some((l) => String(l.error_message).includes("truncated"))).toBe(true);
+    expect(db.state.row.history_id).toBe("777");
   });
 
   it("errors_logged_and_acked", async () => {

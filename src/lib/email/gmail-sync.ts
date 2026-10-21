@@ -1,9 +1,11 @@
 // Server-only. Cursor handling, history processing and bounded re-sync for the Gmail push endpoint.
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { gmailRead } from "./gmail-user";
+import { gmailRead, GmailUserError } from "./gmail-user";
 import { classify, loadContactsByEmail, planIngest, applyIngest } from "./ingest";
 
 export const MAX_MESSAGES = 200;
+/** Per-run wall-clock budget; the route allows 300s (maxDuration), so stop well before that. */
+export const RUN_BUDGET_MS = 240_000;
 
 type SyncRow = { history_id: string | null; watch_expiration: string | null; last_full_sync_at: string | null };
 
@@ -16,6 +18,16 @@ export async function getSyncState(): Promise<SyncRow> {
 export async function updateSyncState(patch: Partial<SyncRow>): Promise<void> {
   const { error } = await supabaseAdmin.schema("crm").from("gmail_sync_state").update(patch).eq("id", true);
   if (error) throw new Error(`gmail_sync_state update failed: ${error.message}`);
+}
+
+/**
+ * The only way the history cursor moves: crm.advance_gmail_cursor is one atomic UPDATE using
+ * greatest(stored, new) numerically, so concurrent or out-of-order runs can never regress it.
+ */
+export async function advanceCursor(historyId: string, markFullSync = false): Promise<string> {
+  const { data, error } = await supabaseAdmin.schema("crm").rpc("advance_gmail_cursor", { p_history_id: historyId, p_mark_full_sync: markFullSync });
+  if (error) throw new Error(`advance_gmail_cursor failed: ${error.message}`);
+  return data as string;
 }
 
 /** Larger of two Gmail history ids, compared numerically (decimal strings, can exceed 2^53). */
@@ -31,8 +43,10 @@ export function maxHistoryId(a: string | null | undefined, b: string | null | un
 
 export async function logWorkflow(workflow_name: string, status: "success" | "error" | "pending", error_message: string | null, trigger_text: string): Promise<void> {
   try {
-    await supabaseAdmin.from("workflow_logs").insert({ workflow_name, status, error_message, trigger_text });
-  } catch {
+    const { error } = await supabaseAdmin.from("workflow_logs").insert({ workflow_name, status, error_message, trigger_text });
+    if (error) console.error("workflow_logs insert failed:", error.message);
+  } catch (e) {
+    console.error("workflow_logs insert threw:", e instanceof Error ? e.message : e);
     // logging must never break the caller
   }
 }
@@ -57,12 +71,19 @@ function isHistoryGone(e: unknown): boolean {
   return status === 404 || /too old|invalid.*history|history.*invalid|startHistoryId/i.test(m);
 }
 
+/** Failures that affect every message (auth, config, Gmail 5xx), as opposed to one bad message. */
+function isSystemic(e: unknown): boolean {
+  if (!(e instanceof GmailUserError)) return false;
+  return e.code === "auth_failed" || e.code === "not_configured" || (e.status !== undefined && e.status >= 500);
+}
+
 /** Ingest ids one by one. A failure (other than a 404) is logged by gmail id only and skipped. */
 async function ingestMany(gmail: Reader, ids: string[]): Promise<void> {
   for (const id of ids) {
     try {
       await ingestOne(gmail, id);
     } catch (e) {
+      if (isSystemic(e)) throw e; // R28: stop the run, hold the cursor
       const reason = e instanceof Error ? e.message : String(e);
       await logWorkflow("gmail-push", "error", `ingest failed for gmail message ${id}: ${reason}`, `message ${id}`);
     }
@@ -77,20 +98,27 @@ export async function resyncSince(days: number, pushHistoryId: string, gmail: Re
     const ids = page.ids.slice(0, MAX_MESSAGES - processed);
     await ingestMany(gmail, ids);
     processed += ids.length;
-    pageToken = processed >= MAX_MESSAGES ? undefined : page.nextPageToken;
+    if (processed >= MAX_MESSAGES && page.nextPageToken) {
+      await logWorkflow("gmail-push", "error", `resync truncated at ${MAX_MESSAGES} messages (newer_than:${days}d had more)`, `resync ${days}d`);
+      pageToken = undefined;
+    } else {
+      pageToken = processed >= MAX_MESSAGES ? undefined : page.nextPageToken;
+    }
   } while (pageToken);
-  await updateSyncState({ history_id: maxHistoryId(null, pushHistoryId), last_full_sync_at: new Date().toISOString() });
+  await advanceCursor(pushHistoryId, true);
   return processed;
 }
 
 /** Handle one Pub/Sub notification. Throws on failure (the route logs and acks). */
-export async function processPush(pushHistoryId: string): Promise<{ processed: number; resynced?: boolean }> {
+export async function processPush(pushHistoryId: string, opts: { now?: () => number; budgetMs?: number } = {}): Promise<{ processed: number; resynced?: boolean }> {
   const state = await getSyncState();
   if (!state.history_id) {
-    await updateSyncState({ history_id: pushHistoryId });
+    await advanceCursor(pushHistoryId);
     return { processed: 0 };
   }
   const gmail = gmailRead();
+  const now = opts.now ?? Date.now;
+  const deadline = now() + (opts.budgetMs ?? RUN_BUDGET_MS);
   const seen = new Set<string>();
   let processed = 0;
   let pageToken: string | undefined;
@@ -105,7 +133,7 @@ export async function processPush(pushHistoryId: string): Promise<{ processed: n
         const fresh = rec.messageIds.filter((id) => !seen.has(id));
         // R26: stop before a record that would push us over the cap. A first record bigger than the cap
         // is still taken whole (otherwise the cursor could never move past it).
-        if (processed > 0 && processed + fresh.length > MAX_MESSAGES) {
+        if (processed > 0 && (processed + fresh.length > MAX_MESSAGES || now() > deadline)) {
           capped = true;
           break;
         }
@@ -122,11 +150,11 @@ export async function processPush(pushHistoryId: string): Promise<{ processed: n
   }
   if (capped) {
     // Resume after the last fully processed record; the next push picks up the rest (applyIngest is idempotent).
-    if (lastComplete) await updateSyncState({ history_id: maxHistoryId(state.history_id, lastComplete) });
+    if (lastComplete) await advanceCursor(lastComplete);
     return { processed };
   }
   // Advance only once every page is processed. A page's historyId is the mailbox's *current* id, not the
   // end of that page, so storing it after an early page would skip the later pages if this run died.
-  await updateSyncState({ history_id: maxHistoryId(state.history_id, latest) });
+  await advanceCursor(latest);
   return { processed };
 }

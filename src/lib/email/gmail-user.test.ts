@@ -179,6 +179,25 @@ describe("clients", () => {
   });
 });
 
+describe("history draft filter", () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+  it("history_skips_draft_messages", async () => {
+    vi.stubEnv("GMAIL_READ_REFRESH_TOKEN", "rt");
+    vi.stubEnv("GOOGLE_OAUTH_CLIENT_ID", "cid");
+    vi.stubEnv("GOOGLE_OAUTH_CLIENT_SECRET", "sec");
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.includes("oauth2") ? { access_token: "at" } : {
+      historyId: "9",
+      history: [
+        { id: "1", messagesAdded: [{ message: { id: "d", labelIds: ["DRAFT"] } }, { message: { id: "ok", labelIds: ["INBOX"] } }] },
+        { id: "2", messagesAdded: [{ message: { id: "d2", labelIds: ["DRAFT"] } }] },
+      ],
+    }), { status: 200 })));
+    const page = await gmailRead().getHistory("1");
+    expect(page.addedMessageIds).toEqual(["ok"]);
+    expect(page.records).toEqual([{ id: "1", messageIds: ["ok"] }]);
+  });
+});
+
 describe("listMessages", () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
   it("lists ids for a query with paging", async () => {

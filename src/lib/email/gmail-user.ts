@@ -285,11 +285,11 @@ export function gmailRead() {
     async getHistory(startHistoryId: string, pageToken?: string): Promise<HistoryPage> {
       const q = new URLSearchParams({ startHistoryId, historyTypes: "messageAdded" });
       if (pageToken) q.set("pageToken", pageToken);
-      const j = await call<{ historyId: string; nextPageToken?: string; history?: { id: string; messagesAdded?: { message: { id: string } }[] }[] }>(getToken, `/history?${q}`);
+      const j = await call<{ historyId: string; nextPageToken?: string; history?: { id: string; messagesAdded?: { message: { id: string; labelIds?: string[] } }[] }[] }>(getToken, `/history?${q}`);
       const ids = new Set<string>();
       const records: { id: string; messageIds: string[] }[] = [];
       for (const h of j.history ?? []) {
-        const mine = [...new Set((h.messagesAdded ?? []).map((a) => a.message.id))];
+        const mine = [...new Set((h.messagesAdded ?? []).filter((a) => !a.message.labelIds?.includes("DRAFT")).map((a) => a.message.id))];
         mine.forEach((m) => ids.add(m));
         if (mine.length) records.push({ id: h.id, messageIds: mine });
       }

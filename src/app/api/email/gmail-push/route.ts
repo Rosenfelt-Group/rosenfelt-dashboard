@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyPushToken } from "@/lib/email/push-auth";
 import { processPush, logWorkflow } from "@/lib/email/gmail-sync";
 
+export const maxDuration = 300; // processPush stops at ~240s (RUN_BUDGET_MS)
+
 // Pub/Sub push endpoint. Excluded from session middleware; authenticated by Google's OIDC JWT.
 export async function POST(request: NextRequest) {
   const auth = request.headers.get("authorization") ?? "";

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { gmailRead } from "@/lib/email/gmail-user";
-import { getSyncState, updateSyncState, logWorkflow } from "@/lib/email/gmail-sync";
+import { getSyncState, updateSyncState, advanceCursor, logWorkflow } from "@/lib/email/gmail-sync";
 
 const RENEW_WITHIN_MS = 48 * 3600_000;
 
@@ -22,7 +22,8 @@ async function gmailWatchJob(): Promise<JobResult> {
   if (!topic) throw new Error("GMAIL_WATCH_TOPIC is not set");
   const w = await gmailRead().watch(topic);
   const expiration = new Date(Number(w.expiration)).toISOString();
-  await updateSyncState({ watch_expiration: expiration, ...(state.history_id ? {} : { history_id: w.historyId }) });
+  await updateSyncState({ watch_expiration: expiration });
+  if (!state.history_id) await advanceCursor(w.historyId); // seed only; atomic and never regresses
   return { name: "gmail-watch", ok: true, renewed: true, expiration };
 }
 
