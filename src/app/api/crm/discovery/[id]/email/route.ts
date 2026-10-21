@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { emailInvite, EmailSchema } from "@/lib/discovery/email";
 import { isValidEmail } from "@/lib/email";
+import { requirePermission } from "@/lib/requirePermission";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 // POST /api/crm/discovery/:id/email — (re)send the invite email for an already-sent questionnaire.
 // Doesn't touch the frozen questions or the invite's status.
 export async function POST(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const parsed = EmailSchema.safeParse(await req.json().catch(() => ({})));

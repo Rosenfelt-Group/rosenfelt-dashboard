@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { CreateEngagementSchema } from "@/lib/rooms/schemas";
 import { sessionUsername } from "@/lib/rooms/session-user";
+import { requirePermission } from "@/lib/requirePermission";
 
 const rooms = () => supabaseAdmin.schema("rooms");
 
 // GET /api/engagements?business_id=…&limit=…
 export async function GET(req: NextRequest) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const params = req.nextUrl.searchParams;
   const businessId = params.get("business_id");
   const parsedLimit = Number.parseInt(params.get("limit") ?? "", 10);
@@ -33,6 +37,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/engagements
 export async function POST(req: NextRequest) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const parsed = CreateEngagementSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });

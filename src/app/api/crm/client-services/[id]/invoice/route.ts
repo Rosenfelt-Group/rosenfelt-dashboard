@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getStripe } from "@/lib/stripe";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 // POST /api/crm/client-services/[id]/invoice
 // Body: { invoice_type: 'one_time' | 'tm_monthly', description?, amount? }
@@ -12,6 +13,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await requireAdmin(req);
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
 
   let body: { invoice_type?: string; description?: string; amount?: number };

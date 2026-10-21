@@ -40,6 +40,10 @@ vi.mock("@/lib/supabase-admin", () => ({
 }));
 import { POST } from "./route";
 
+// Routes check permissions themselves; these tests exercise the handler logic as an admin.
+vi.mock("@/lib/requirePermission", () => ({ requirePermission: async () => ({ ok: true, username: "brian", role: "admin" }) }));
+vi.mock("@/lib/requireAdmin", () => ({ requireAdmin: async () => ({ ok: true, username: "brian" }) }));
+
 vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
   s.fetchInit = init ?? null;
   if (s.fetchMode === "hang") throw new DOMException("The operation was aborted due to timeout", "TimeoutError");

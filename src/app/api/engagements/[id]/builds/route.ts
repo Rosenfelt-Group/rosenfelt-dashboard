@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { BUILD_CLOSED_STATUSES, BUILD_LOG_LIMIT, deliverableIdFromBrief, isStalled, type Build, type BuildLog } from "@/lib/rooms/builds";
+import { requirePermission } from "@/lib/requirePermission";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MSG_MAX = 300;
@@ -8,7 +9,10 @@ const fail = () => NextResponse.json({ error: "Could not load build status." }, 
 
 // GET — open agent prototype requests (work items) for this engagement's prototype deliverables, with
 // the agent's latest log lines. Read-only. Dashboard session required by the middleware.
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
   const nowMs = Date.now();

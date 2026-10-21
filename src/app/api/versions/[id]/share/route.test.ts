@@ -4,6 +4,10 @@ const rpc = vi.fn();
 vi.mock("@/lib/supabase-admin", () => ({ supabaseAdmin: { schema: () => ({ rpc }) } }));
 import { POST } from "./route";
 
+// Routes check permissions themselves; these tests exercise the handler logic as an admin.
+vi.mock("@/lib/requirePermission", () => ({ requirePermission: async () => ({ ok: true, username: "brian", role: "admin" }) }));
+vi.mock("@/lib/requireAdmin", () => ({ requireAdmin: async () => ({ ok: true, username: "brian" }) }));
+
 const V = "3e9c4f31-5a6d-4e8f-9aa1-2c3d4e5f6071";
 const call = (id: string) => POST(new Request("https://d.test/x", { method: "POST" }) as never, { params: Promise.resolve({ id }) });
 

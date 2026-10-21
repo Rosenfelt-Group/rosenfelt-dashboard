@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requirePermission } from "@/lib/requirePermission";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -11,7 +12,10 @@ type VersionRow = { id: string; version_no: number; deliverable: { title: string
 
 // GET — latest room activity (opens, introductions, views) for the engagement.
 // Never selects `meta` (only the single key deliverable_title) or `access_id`.
-export async function GET(_req: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   const rooms = supabaseAdmin.schema("rooms");

@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { loadTemplate } from "@/lib/discovery/server";
+import { requirePermission } from "@/lib/requirePermission";
 
 // GET /api/crm/discovery/templates[?archived=1]
 export async function GET(req: NextRequest) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   let q = supabaseAdmin.schema("crm").from("discovery_templates")
     .select("id, name, description, intro_text, estimated_minutes, sections, is_default, archived_at, created_at, updated_at, items:discovery_template_items(count)")
     .order("is_default", { ascending: false }).order("name");
@@ -23,6 +27,9 @@ const CreateSchema = z.object({
 
 // POST /api/crm/discovery/templates — blank, or a copy of an existing template.
 export async function POST(req: NextRequest) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const parsed = CreateSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   const b = parsed.data;

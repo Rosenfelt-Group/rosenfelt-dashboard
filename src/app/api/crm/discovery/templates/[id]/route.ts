@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { loadTemplate } from "@/lib/discovery/server";
+import { requirePermission } from "@/lib/requirePermission";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function GET(_: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   try {
     const t = await loadTemplate(id);
@@ -48,6 +52,9 @@ const PatchSchema = z.object({
 });
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const parsed = PatchSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });

@@ -5,6 +5,7 @@ import { DocumentUploadSchema } from "@/lib/rooms/schemas";
 import { docExt, sanitizeDocFilename } from "@/lib/rooms/documents";
 import { DOC_TYPES } from "@/lib/rooms/grant";
 import { DOC_BUCKET } from "@/lib/rooms/doc-limits";
+import { requirePermission } from "@/lib/requirePermission";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TYPES_MSG = "Allowed file types: PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx), PNG, JPG, TXT, CSV, Markdown.";
@@ -13,6 +14,9 @@ type Ctx = { params: Promise<{ id: string }> };
 // POST — prepare a document upload: resolve or create the document deliverable and return a signed
 // upload URL. The browser sends the file straight to Storage (never through this function).
 export async function POST(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
   const parsed = DocumentUploadSchema.safeParse(await req.json().catch(() => ({})));

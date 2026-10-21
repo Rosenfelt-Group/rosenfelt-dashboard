@@ -5,6 +5,7 @@ import { discoveryLink } from "@/lib/discovery";
 import { snapshotFromTemplate } from "@/lib/discovery/server";
 import { DraftSnapshotSchema } from "@/lib/discovery/snapshot";
 import { DiscoveryProjectType } from "@/types";
+import { requirePermission } from "@/lib/requirePermission";
 
 const DETAIL_SELECT =
   "*, business:businesses(id, name, website), contact:contacts(id, first_name, last_name, email)," +
@@ -12,7 +13,10 @@ const DETAIL_SELECT =
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function GET(_: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "view_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const { data, error } = await supabaseAdmin.schema("crm").from("discovery_invites")
     .select(DETAIL_SELECT).eq("id", id).maybeSingle();
@@ -40,6 +44,9 @@ const PatchSchema = z.object({
 });
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const parsed = PatchSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message }, { status: 400 });
@@ -88,7 +95,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
 // DELETE /api/crm/discovery/:id — any status. Responses and briefs cascade; a linked
 // room keeps going without the link. The prospect's link stops working immediately.
-export async function DELETE(_: NextRequest, { params }: Ctx) {
+export async function DELETE(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const crm = supabaseAdmin.schema("crm");
   const { data: invite, error: le } = await crm.from("discovery_invites")

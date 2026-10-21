@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getStripe } from "@/lib/stripe";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 // POST /api/crm/client-services/[id]/cancel
 // Body: { effective_date: 'YYYY-MM-DD' }
@@ -16,6 +17,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await requireAdmin(req);
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
 
   let body: { effective_date?: string };

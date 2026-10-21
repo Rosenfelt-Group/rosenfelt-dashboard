@@ -3,11 +3,15 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { PrototypeRequestSchema } from "@/lib/rooms/schemas";
 import { buildPrototypeBrief } from "@/lib/rooms/brief";
 import { dispatchBeginWork, dispatchBaseUrl } from "@/lib/rooms/dispatch";
+import { requirePermission } from "@/lib/requirePermission";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 // POST — create the agent work item for a prototype (new deliverable or a new version).
 export async function POST(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const parsed = PrototypeRequestSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {

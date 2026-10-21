@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { DocumentFinalizeSchema } from "@/lib/rooms/schemas";
 import { docExt, sanitizeDocFilename, sniffDocument } from "@/lib/rooms/documents";
 import { DOC_BUCKET } from "@/lib/rooms/doc-limits";
+import { requirePermission } from "@/lib/requirePermission";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Ctx = { params: Promise<{ id: string }> };
@@ -16,6 +17,9 @@ const STEP_TIMEOUT_MS = 15_000;
 // MIME are checked again in the database (rooms.add_document_version) from Storage's own metadata.
 // The object is deleted only on a definite refusal, never on an unknown error (a row might exist).
 export async function POST(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
   const parsed = DocumentFinalizeSchema.safeParse(await req.json().catch(() => ({})));

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { QUESTION_SELECT } from "@/lib/discovery/server";
 import { QuestionInputSchema, cleanQuestion } from "@/lib/discovery/bank";
+import { requirePermission } from "@/lib/requirePermission";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -9,6 +10,9 @@ type Ctx = { params: Promise<{ id: string }> };
 // changes (it's the answer id). Sent questionnaires are frozen snapshots, so
 // edits only affect templates and drafts built afterwards.
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission(req, "manage_crm");
+  if (!guard.ok) return guard.response;
+
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
   const crm = supabaseAdmin.schema("crm");
