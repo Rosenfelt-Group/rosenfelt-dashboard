@@ -8,7 +8,8 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
 import { usePolling } from "@/lib/use-polling";
-import { EmptyState, ErrorState, LoadingState, PageHeader, Tabs } from "@/components/ui";
+import { canSendApproval } from "@/lib/approvals-send";
+import { Button, EmptyState, ErrorState, LoadingState, PageHeader, Tabs } from "@/components/ui";
 
 const STATUS_STYLES = {
   approved:            "bg-green-50 text-green-700",
@@ -32,7 +33,34 @@ const STATUS_LABELS: Record<string, string> = {
   failed:             "Failed",
 };
 
-function HistoryRow({ item }: { item: PendingApproval }) {
+// R38: an approved email_send that was never executed (e.g. the send failed or was interrupted) can be sent from here.
+function SendButton({ item, onDone }: { item: PendingApproval; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function send() {
+    if (busy) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/approvals/${item.id}/execute`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body?.status === "done") { setMsg({ ok: true, text: "Email sent." }); onDone(); }
+      else setMsg({ ok: false, text: `Email NOT sent: ${body?.error ?? body?.status ?? `HTTP ${res.status}`}` });
+    } catch (e) {
+      setMsg({ ok: false, text: `Email NOT sent: ${e instanceof Error ? e.message : "request failed"}` });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="px-4 pb-3 flex items-center gap-3">
+      <Button size="sm" onClick={send} disabled={busy}>{busy ? "Sending…" : "Send"}</Button>
+      {msg && <span role="status" className={clsx("text-xs", msg.ok ? "text-green-700" : "text-red-700")}>{msg.text}</span>}
+    </div>
+  );
+}
+
+function HistoryRow({ item, canSend, onSent }: { item: PendingApproval; canSend: boolean; onSent: () => void }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="border-b border-brand-border last:border-0">
@@ -71,6 +99,7 @@ function HistoryRow({ item }: { item: PendingApproval }) {
           )}
         </div>
       )}
+      {canSend && canSendApproval(item) && <SendButton item={item} onDone={onSent} />}
     </div>
   );
 }
@@ -287,7 +316,7 @@ function ApprovalsContent() {
             <EmptyState title="No history yet" />
           ) : (
             <div className="card p-0 overflow-hidden">
-              {filteredHistory.map(item => <HistoryRow key={item.id} item={item} />)}
+              {filteredHistory.map(item => <HistoryRow key={item.id} item={item} canSend={can(permissions, "manage_approvals")} onSent={() => load(true)} />)}
             </div>
           )}
           <p className="text-xs text-brand-muted text-right">

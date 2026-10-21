@@ -60,6 +60,7 @@ export const SUB_PAGES: Record<string, SubPage[]> = {
   crm: [
     { label: "Pipeline",   href: "/crm",                 icon: "kanban" },
     { label: "Contacts",   href: "/crm/contacts",        icon: "users"  },
+    { label: "Inbox",      href: "/crm/inbox",           icon: "edit"   },
     { label: "Businesses", href: "/crm/businesses",      icon: "folder" },
     { label: "Clients",    href: "/crm/clients",         icon: "users"  },
     { label: "Discovery",  href: "/crm/discovery",       icon: "edit"   },

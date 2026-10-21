@@ -217,6 +217,11 @@ export default function LeadDetailPage() {
             {lead.contact?.email && (
               <p className="text-sm text-brand-orange mt-0.5">{lead.contact.email}</p>
             )}
+            {lead.contact_id && (
+              <Link href={`/crm/people/${lead.contact_id}`} className="text-sm text-brand-orange hover:underline mt-0.5 block">
+                Full history with this person →
+              </Link>
+            )}
             {quizUrl && (
               <a href={quizUrl} target="_blank" rel="noopener noreferrer"
                 className="text-sm text-brand-orange hover:underline mt-0.5 block">
