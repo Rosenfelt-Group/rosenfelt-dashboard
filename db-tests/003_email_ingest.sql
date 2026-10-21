@@ -37,12 +37,31 @@ BEGIN
     'message', jsonb_build_object('gmail_message_id','gi-2','direction','received','from_email','pat@new.com','to_emails','["crm@rosably.com"]'::jsonb,
        'cc_emails','[]'::jsonb,'subject','Fwd','snippet','sn','body_text','b','sent_at','2026-10-22T00:00:00Z','source','forward','delivered_to_crm',true),
     'links', '[]'::jsonb,
-    'unmatched', jsonb_build_object('contact_email','pat@new.com','subject','Fwd','snippet','sn'));
+    'unmatched', jsonb_build_object('direction','received','contact_emails',jsonb_build_array('pat@new.com'),'subject','Fwd','snippet','sn'));
   r1 := crm.store_ingested_email(p);
   r2 := crm.store_ingested_email(p);
   m := (r1->>'email_message_id')::uuid;
   ASSERT (r1->>'unmatched_added')::int = 1 AND (r2->>'unmatched_added')::int = 0, 'unmatched once';
   ASSERT (SELECT count(*) FROM crm.unmatched_email_log WHERE email_message_id = m AND direction='received' AND logged_by='system' AND suggested_contact_id IS NULL) = 1, 'one log row';
+END $$;
+
+-- unmatched_bcc_keeps_sent_direction + bcc_two_new_recipients_two_unmatched_rows
+DO $$
+DECLARE p jsonb; r1 jsonb; r2 jsonb; m uuid;
+BEGIN
+  p := jsonb_build_object(
+    'message', jsonb_build_object('gmail_message_id','gi-3','direction','sent','from_email','brian@rosably.com',
+       'to_emails','["n1@new.com","N2@new.com"]'::jsonb,'cc_emails','[]'::jsonb,'subject','Intro','snippet','sn','body_text','b',
+       'sent_at','2026-10-22T00:00:00Z','source','forward','delivered_to_crm',true),
+    'links', '[]'::jsonb,
+    'unmatched', jsonb_build_object('direction','sent','contact_emails',jsonb_build_array('n1@new.com','N2@new.com','n2@NEW.com'),'subject','Intro','snippet','sn'));
+  r1 := crm.store_ingested_email(p);
+  r2 := crm.store_ingested_email(p);
+  m := (r1->>'email_message_id')::uuid;
+  ASSERT (r1->>'unmatched_added')::int = 2, 'two unmatched rows (case-insensitive dedupe): ' || r1::text;
+  ASSERT (r2->>'unmatched_added')::int = 0, 'retry adds none';
+  ASSERT (SELECT count(*) FROM crm.unmatched_email_log WHERE email_message_id = m) = 2, 'two rows';
+  ASSERT (SELECT count(*) FROM crm.unmatched_email_log WHERE email_message_id = m AND direction = 'sent') = 2, 'direction stays sent';
 END $$;
 
 -- execute is restricted to service_role

@@ -97,19 +97,56 @@ describe("classify / planIngest", () => {
     const gmail = msg({ From: "Brian <brian@rosably.com>", To: "crm@rosably.com" }, {
       bodyText: "fyi\n\n---------- Forwarded message ---------\nFrom: Pat Lee <pat@new.com>\nDate: Mon\nSubject: Hi\n\nhello",
     });
-    expect(classify(gmail)).toEqual({ direction: "received", participants: ["pat@new.com"], deliveredToCrm: true, forwardedOriginal: { email: "pat@new.com", name: "Pat Lee" } });
-    expect(planIngest(gmail, new Map())).toEqual({ kind: "unmatched", email: "pat@new.com" });
+    expect(classify(gmail)).toEqual({ direction: "received", participants: ["pat@new.com"], deliveredToCrm: true, forwardedOriginal: { email: "pat@new.com", name: "Pat Lee", to: [], cc: [] } });
+    expect(planIngest(gmail, new Map())).toEqual({ kind: "unmatched", email: "pat@new.com", emails: ["pat@new.com"], direction: "received" });
 
-    const outlook = msg({ From: "brian@rosably.com", To: "crm@rosably.com" }, {
+    const outlook = msg({ From: "brian@rosably.com", To: "crm@rosably.com", Subject: "FW: Q" }, {
       bodyText: "see below\n\nFrom: Sam Roe <sam@out.com>\nSent: Monday, October 20, 2026 9:00 AM\nTo: Brian\nSubject: Q\n\nbody",
     });
-    expect(classify(outlook).forwardedOriginal).toEqual({ email: "sam@out.com", name: "Sam Roe" });
+    expect(classify(outlook).forwardedOriginal).toMatchObject({ email: "sam@out.com", name: "Sam Roe" });
     expect(planIngest(outlook, map(["sam@out.com", ref("c9")]))).toEqual({ kind: "log", links: [ref("c9")] });
   });
   it("crm_bcc_uses_to_recipients", () => {
     const m = msg({ From: "brian@rosably.com", To: "New Person <new@p.com>", "Delivered-To": "crm@rosably.com" }, { bodyText: "Nice to meet you" });
     expect(classify(m)).toMatchObject({ direction: "sent", participants: ["new@p.com"], deliveredToCrm: true });
-    expect(planIngest(m, new Map())).toEqual({ kind: "unmatched", email: "new@p.com" });
+    expect(planIngest(m, new Map())).toEqual({ kind: "unmatched", email: "new@p.com", emails: ["new@p.com"], direction: "sent" });
+  });
+  it("outlook_reply_with_crm_bcc_uses_recipients_not_quote", () => {
+    const m = msg({ From: "brian@rosably.com", To: "new@p.com", Subject: "Re: Question", "Delivered-To": "crm@rosably.com" }, {
+      bodyText: "Thanks!\n\nFrom: Old Quote <old@quoted.com>\nSent: Monday, October 20, 2026 9:00 AM\nTo: Brian\nSubject: Question\n\nhi",
+    });
+    const c = classify(m);
+    expect(c).toMatchObject({ direction: "sent", participants: ["new@p.com"] });
+    expect(c.forwardedOriginal).toBeUndefined();
+  });
+  it("outlook_forward_with_fw_subject_parsed", () => {
+    const m = msg({ From: "brian@rosably.com", To: "crm@rosably.com", Subject: "re: FW: Question" }, {
+      bodyText: "fyi\n\nFrom: Sam Roe <sam@out.com>\nSent: Monday\nTo: Brian\nSubject: Question\n",
+    });
+    expect(classify(m).forwardedOriginal).toEqual({ email: "sam@out.com", name: "Sam Roe", to: [], cc: [] });
+  });
+  it("outlook separator line marks a forward without a Fw subject", () => {
+    const m = msg({ From: "brian@rosably.com", To: "crm@rosably.com", Subject: "look" }, {
+      bodyText: "look\n\n-----Original Message-----\nFrom: Sam Roe <sam@out.com>\nSent: Monday\nSubject: x\n",
+    });
+    expect(classify(m).participants).toEqual(["sam@out.com"]);
+  });
+  it("outlook_mailto_bracket_from_parsed", () => {
+    const m = msg({ From: "brian@rosably.com", To: "crm@rosably.com", Subject: "Fw: Q" }, {
+      bodyText: "x\n\nFrom: Sam Roe [mailto:Sam@Out.com]\nSent: Monday\nTo: Brian\nSubject: Q\n",
+    });
+    expect(classify(m).forwardedOriginal).toMatchObject({ email: "sam@out.com", name: "Sam Roe" });
+  });
+  it("forward_of_brian_sent_message_uses_original_recipients", () => {
+    const m = msg({ From: "brian@rosably.com", To: "crm@rosably.com", Subject: "Fwd: Intro" }, {
+      bodyText: "---------- Forwarded message ---------\nFrom: Brian <brian@rosably.com>\nDate: Mon\nSubject: Intro\nTo: Pat <pat@new.com>, \"Lee, Kim\" <kim@new.com>\nCc: Brian <brian@rosably.com>, crm@rosably.com, cc@new.com\n\nhello",
+    });
+    expect(classify(m)).toMatchObject({ direction: "sent", participants: ["pat@new.com", "kim@new.com", "cc@new.com"], deliveredToCrm: true });
+    expect(planIngest(m, new Map())).toEqual({ kind: "unmatched", email: "pat@new.com", emails: ["pat@new.com", "kim@new.com", "cc@new.com"], direction: "sent" });
+  });
+  it("brian_to_himself_only_is_skipped", () => {
+    const m = msg({ From: "brian@rosably.com", To: "Brian@Rosably.com" });
+    expect(planIngest(m, new Map())).toEqual({ kind: "skip", reason: "no_contact" });
   });
   it("normalizes_addresses_case_whitespace", () => {
     const m = msg({ From: "  Jane <JANE@X.COM> ", To: "Brian@Rosably.com" });
@@ -121,6 +158,13 @@ describe("classify / planIngest", () => {
     expect(classify(m).deliveredToCrm).toBe(true);
     const m2 = msg({ From: "jane@x.com", To: "crm@rosably.com" });
     expect(classify(m2).participants).toEqual(["jane@x.com"]);
+  });
+});
+
+describe("bcc candidates", () => {
+  it("queues every new recipient", () => {
+    const m = msg({ From: "brian@rosably.com", To: "a@new.com, b@new.com", Bcc: "crm@rosably.com", "Delivered-To": "crm@rosably.com" });
+    expect(planIngest(m, new Map())).toEqual({ kind: "unmatched", email: "a@new.com", emails: ["a@new.com", "b@new.com"], direction: "sent" });
   });
 });
 
@@ -153,7 +197,7 @@ describe("applyIngest", () => {
     const p = (rpcCalls()[0][2] as { p: Row }).p;
     expect(p.message).toMatchObject({ source: "forward", delivered_to_crm: true, direction: "received", from_email: "pat@new.com" });
     expect(p.links).toEqual([]);
-    expect(p.unmatched).toEqual({ contact_email: "pat@new.com", subject: "Fwd: Hi", snippet: "snip" });
+    expect(p.unmatched).toEqual({ direction: "received", contact_emails: ["pat@new.com"], subject: "Fwd: Hi", snippet: "snip" });
     expect(p.activity).toBeUndefined();
   });
   it("throws when the rpc fails", async () => {

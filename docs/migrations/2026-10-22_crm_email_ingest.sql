@@ -4,8 +4,14 @@
 
 begin;
 
-create unique index if not exists unmatched_email_log_message_uidx
-  on crm.unmatched_email_log (email_message_id) where email_message_id is not null;
+-- Why these unique indexes are safe on existing data: both are partial. email_message_id on
+-- unmatched_email_log is a new column (NULL for every existing row), and the lead_activities index only
+-- covers email_received/email_sent rows carrying metadata->>'email_message_id', which no existing row has.
+-- So no existing row can violate either index.
+-- R20: one unmatched row per (message, candidate address), case-insensitive.
+drop index if exists crm.unmatched_email_log_message_uidx;
+create unique index if not exists unmatched_email_log_message_email_uidx
+  on crm.unmatched_email_log (email_message_id, lower(contact_email)) where email_message_id is not null;
 
 create unique index if not exists lead_activities_email_msg_contact_uidx
   on crm.lead_activities ((metadata->>'email_message_id'), contact_id)
@@ -16,7 +22,7 @@ create unique index if not exists lead_activities_email_msg_contact_uidx
 --               subject, snippet, body_text, sent_at, source, delivered_to_crm},
 --   links:     [{contact_id, lead_id, client_id}],
 --   activity:  {activity_type, email_direction, email_subject, content}      (applied to every link),
---   unmatched: {contact_email, subject, snippet} | absent
+--   unmatched: {direction, contact_emails[], subject, snippet} | absent  (one log row per address)
 -- }
 -- One transaction: message upsert, links, one activity per link (every link, so a retry repairs a
 -- missing activity), unmatched log. All inserts are ON CONFLICT DO NOTHING.
@@ -67,8 +73,9 @@ begin
 
   if jsonb_typeof(p->'unmatched') = 'object' then
     insert into unmatched_email_log (contact_email, subject, direction, snippet, logged_by, email_message_id, suggested_contact_id, "timestamp")
-    values (p->'unmatched'->>'contact_email', p->'unmatched'->>'subject', 'received', p->'unmatched'->>'snippet',
-            'system', v_id, null, now())
+    select e, p->'unmatched'->>'subject', coalesce(p->'unmatched'->>'direction', m->>'direction'), p->'unmatched'->>'snippet',
+           'system', v_id, null, now()
+      from jsonb_array_elements_text(p->'unmatched'->'contact_emails') e
     on conflict do nothing;
     get diagnostics v_unm = row_count;
   end if;

@@ -125,7 +125,7 @@ export function parseAddressList(header: string | undefined | null): ParsedAddre
 // ---------- Classification ----------
 
 export type Direction = "received" | "sent";
-export type ForwardedOriginal = { email: string; name: string };
+export type ForwardedOriginal = { email: string; name: string; to: string[]; cc: string[] };
 export type Classification = {
   direction: Direction;
   participants: string[];
@@ -147,26 +147,53 @@ function isDeliveredToCrm(msg: GmailMessage): boolean {
   return addrs(msg, "to", "cc", "delivered-to", "x-original-to").includes(CRM_ADDRESS);
 }
 
-/** Parse a forwarded-header block out of a body (Gmail or Outlook style). */
-export function parseForwardedOriginal(body: string): ForwardedOriginal | undefined {
-  const lines = body.split(/\r?\n/).map((l) => l.replace(/^[>\s]+/, ""));
-  const fromOf = (line: string): ForwardedOriginal | undefined => {
-    const m = line.match(/^\*?From:\*?\s*(.+)$/i);
+const FW_SUBJECT = /^\s*(?:re:\s*)*fwd?:/i;
+const SEPARATOR = /^(?:-{3,}\s*(?:Original Message|Forwarded message)\s*-{3,}|_{10,})$/i;
+
+/** Outlook "[mailto:x@y]" and Gmail "x@y<mailto:x@y>" forms reduced to something parseAddressList accepts. */
+function cleanHeaderAddrs(v: string): string {
+  return v
+    .replace(/\[mailto:([^\]]*)\]/gi, "<$1>")
+    .replace(/(@[^\s<>,;]*)\s*<mailto:[^>]*>/gi, "$1")
+    .replace(/;/g, ",");
+}
+
+/**
+ * Parse a forwarded-header block out of a body (Gmail or Outlook style). It is only treated as a forward
+ * when the subject starts with Fw:/Fwd: (after optional Re:) or the body has a separator line, so a quoted
+ * reply chain in a BCC'd message is not mistaken for a forward.
+ */
+export function parseForwardedOriginal(body: string, subject = ""): ForwardedOriginal | undefined {
+  const lines = body.split(/\r?\n/).map((l) => l.replace(/^[>\s]+/, "").trim());
+  const isForward = FW_SUBJECT.test(subject) || lines.some((l) => SEPARATOR.test(l));
+  if (!isForward) return undefined;
+
+  const build = (i: number): ForwardedOriginal | undefined => {
+    const m = lines[i].match(/^\*?From:\*?\s*(.+)$/i);
     if (!m) return undefined;
-    const a = parseAddressList(m[1].replace(/<mailto:[^>]*>/gi, ""))[0];
-    return a ? { email: a.email, name: a.name } : undefined;
+    const a = parseAddressList(cleanHeaderAddrs(m[1]))[0];
+    if (!a) return undefined;
+    const to: string[] = [];
+    const cc: string[] = [];
+    for (let j = i + 1; j < Math.min(lines.length, i + 10) && lines[j] !== ""; j++) {
+      const h = lines[j].match(/^\*?(To|Cc):\*?\s*(.*)$/i);
+      if (!h) continue;
+      (h[1].toLowerCase() === "to" ? to : cc).push(...parseAddressList(cleanHeaderAddrs(h[2])).map((x) => x.email));
+    }
+    return { email: a.email, name: a.name, to, cc };
   };
+
   for (let i = 0; i < lines.length; i++) {
-    if (/^-{3,}\s*Forwarded message\s*-{3,}$/i.test(lines[i].trim())) {
+    if (/^-{3,}\s*Forwarded message\s*-{3,}$/i.test(lines[i])) {
       for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {
-        const f = fromOf(lines[j].trim());
+        const f = build(j);
         if (f) return f;
       }
     }
   }
   for (let i = 0; i + 1 < lines.length; i++) {
-    if (/^\*?Sent:\*?\s/i.test(lines[i + 1].trim())) {
-      const f = fromOf(lines[i].trim());
+    if (/^\*?Sent:\*?\s/i.test(lines[i + 1])) {
+      const f = build(i);
       if (f) return f;
     }
   }
@@ -181,9 +208,14 @@ export function classify(msg: GmailMessage, brian = BRIAN): Classification {
   const exclude = (list: string[]) => uniq(list.filter((e) => e !== me && !(deliveredToCrm && e === CRM_ADDRESS)));
 
   if (deliveredToCrm && from === me) {
-    const original = parseForwardedOriginal(msg.bodyText);
+    const original = parseForwardedOriginal(msg.bodyText, msg.headers["subject"] ?? "");
     if (original && original.email !== me) {
       return { direction: "received", participants: exclude([original.email]), deliveredToCrm, forwardedOriginal: original };
+    }
+    if (original) {
+      // Forward of a message Brian sent: the original's recipients are the candidates.
+      const others = exclude([...original.to, ...original.cc]);
+      if (others.length) return { direction: "sent", participants: others, deliveredToCrm, forwardedOriginal: original };
     }
     // BCC / no forwarded block: the other recipients are the candidates.
     return { direction: "sent", participants: exclude(addrs(msg, "to", "cc")), deliveredToCrm };
@@ -199,7 +231,7 @@ export function classify(msg: GmailMessage, brian = BRIAN): Classification {
 export type ContactRef = { contact_id: string; lead_id: string | null; client_id: string | null };
 export type IngestPlan =
   | { kind: "log"; links: ContactRef[] }
-  | { kind: "unmatched"; email: string }
+  | { kind: "unmatched"; email: string; emails: string[]; direction: Direction }
   | { kind: "skip"; reason: string };
 
 export function planIngest(msg: GmailMessage, contactsByEmail: Map<string, ContactRef>, brian = BRIAN): IngestPlan {
@@ -216,9 +248,8 @@ export function planIngest(msg: GmailMessage, contactsByEmail: Map<string, Conta
   }
   if (links.length) return { kind: "log", links };
   if (!c.deliveredToCrm) return { kind: "skip", reason: "no_contact" };
-  const candidate = c.participants[0];
-  if (!candidate) return { kind: "skip", reason: "no_candidate" };
-  return { kind: "unmatched", email: candidate };
+  if (!c.participants.length) return { kind: "skip", reason: "no_candidate" };
+  return { kind: "unmatched", email: c.participants[0], emails: c.participants, direction: c.direction };
 }
 
 // ---------- Contact lookup (one query per table) ----------
@@ -300,7 +331,7 @@ export async function applyIngest(plan: IngestPlan, msg: GmailMessage, brian = B
     links: [],
   };
   if (plan.kind === "unmatched") {
-    p.unmatched = { contact_email: plan.email, subject, snippet: msg.snippet };
+    p.unmatched = { direction: plan.direction, contact_emails: plan.emails, subject, snippet: msg.snippet };
   } else {
     p.links = plan.links.map((l) => ({ contact_id: l.contact_id, lead_id: l.lead_id, client_id: l.client_id }));
     p.activity = {
