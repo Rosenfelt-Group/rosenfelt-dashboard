@@ -90,8 +90,13 @@ export async function POST(req: NextRequest) {
     }
     // Intake matches or creates the business; fill in details the form collected, never overwriting.
     if (businessId) {
-      if (b.org!.website) await crm.from("businesses").update({ website: b.org!.website }).eq("id", businessId).is("website", null);
-      await crm.from("businesses").update({ industry: "Nonprofit" }).eq("id", businessId).is("industry", null);
+      const fills: [string, string | undefined][] = [["website", b.org!.website || undefined], ["industry", "Nonprofit"]];
+      for (const [col, val] of fills) {
+        if (!val) continue;
+        // Fill when null or empty, never overwrite a real value.
+        const { error: fe } = await crm.from("businesses").update({ [col]: val }).eq("id", businessId).or(`${col}.is.null,${col}.eq.`);
+        if (fe) console.error(`discovery: could not set business ${col}`, businessId, fe.message);
+      }
     }
   }
 

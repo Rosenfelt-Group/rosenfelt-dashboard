@@ -55,6 +55,7 @@ function BusinessDetail() {
   const [showAddContact, setShowAddContact] = useState(false);
   const [contactForm, setContactForm] = useState<ContactForm>(BLANK_CONTACT);
   const [savingContact, setSavingContact] = useState(false);
+  const [contactErr, setContactErr] = useState<string | null>(null);
 
   const [researching, setResearching] = useState(false);
   const [researchErr, setResearchErr] = useState<string | null>(null);
@@ -85,6 +86,7 @@ function BusinessDetail() {
   async function addContact() {
     if (!contactForm.first_name.trim()) return;
     setSavingContact(true);
+    setContactErr(null);
     try {
       const res = await fetch("/api/crm/contacts", {
         method: "POST",
@@ -101,10 +103,13 @@ function BusinessDetail() {
           linkedin_url: contactForm.linkedin_url.trim() || undefined,
         }),
       });
-      const contact = await res.json();
+      const contact = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(contact.error || `Couldn't add the contact (HTTP ${res.status})`);
       setContacts(prev => [contact, ...prev]);
       setContactForm(BLANK_CONTACT);
       setShowAddContact(false);
+    } catch (e) {
+      setContactErr(e instanceof Error ? e.message : "Couldn't add the contact");
     } finally {
       setSavingContact(false);
     }
@@ -188,6 +193,7 @@ function BusinessDetail() {
 
           {showAddContact && (
             <div className="border border-brand-border rounded-lg p-3 mb-3 space-y-2">
+              {contactErr && <ErrorState message={contactErr} />}
               <div className="grid grid-cols-2 gap-2">
                 <input
                   className="border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"

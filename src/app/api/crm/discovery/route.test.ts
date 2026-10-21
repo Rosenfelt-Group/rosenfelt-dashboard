@@ -17,7 +17,7 @@ vi.mock("@/lib/supabase-admin", () => ({
   supabaseAdmin: {
     schema: () => ({
       from: (table: string) => ({
-        update: () => { const u: Record<string, unknown> = {}; u.eq = () => u; u.is = async () => ({ error: null }); return u; },
+        update: () => { const u: Record<string, unknown> = {}; u.eq = () => u; u.or = async () => ({ error: null }); return u; },
         insert: (row: Record<string, unknown>) => {
           state.inserts.push({ table, row });
           const r = { data: { id: "inv1", token: "tok", lead_id: row.lead_id }, error: null };
