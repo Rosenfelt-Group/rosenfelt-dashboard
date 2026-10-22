@@ -36,10 +36,10 @@ vi.mock("@/lib/supabase-admin", () => ({
   },
 }));
 vi.mock("@/lib/requirePermission", () => ({ requirePermission: async () => ({ ok: true, username: "brian", role: "admin" }) }));
-vi.mock("@/lib/riley/discovery", async orig => ({ ...(await orig<typeof import("@/lib/riley/discovery")>()), requestBrief: (...a: unknown[]) => s.brief(...a) }));
+vi.mock("@/lib/riley/client", async orig => ({ ...(await orig<typeof import("@/lib/riley/client")>()), requestBrief: (...a: unknown[]) => s.brief(...a) }));
 
 import { POST } from "./route";
-import { RileyNotConfiguredError } from "@/lib/riley/discovery";
+import { RileyNotConfiguredError } from "@/lib/riley/client";
 
 const ID = "3e9c4f31-5a6d-4e8f-9aa1-2c3d4e5f6071";
 const call = () => POST(new NextRequest(`http://x/api/crm/discovery/${ID}/brief`, { method: "POST" }), { params: Promise.resolve({ id: ID }) });

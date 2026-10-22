@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { requestBrief, RileyNotConfiguredError, type BriefResponse, type RileyResult } from "@/lib/riley/discovery";
+import { requestBrief, RileyNotConfiguredError, type BriefResponse, type RileyResult } from "@/lib/riley/client";
 
 /** Mark the invite's pending brief failed (Riley never got to; when Riley itself fails it marks the row). */
 export async function failPendingBrief(inviteId: string, error: string): Promise<void> {

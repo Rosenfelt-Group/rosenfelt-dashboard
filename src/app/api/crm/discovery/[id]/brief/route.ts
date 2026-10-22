@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { requirePermission } from "@/lib/requirePermission";
-import { RileyNotConfiguredError } from "@/lib/riley/discovery";
+import { RileyNotConfiguredError } from "@/lib/riley/client";
 import { runBrief } from "@/lib/discovery/briefs";
 import { riley502 } from "@/lib/discovery/riley-errors";
 

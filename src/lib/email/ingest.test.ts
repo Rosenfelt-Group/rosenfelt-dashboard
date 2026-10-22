@@ -5,6 +5,17 @@ const db = vi.hoisted(() => ({
   calls: [] as [string, ...unknown[]][],
   results: {} as Record<string, unknown[]>,
   rpcError: null as string | null,
+  rpcData: {} as Record<string, unknown>,
+  riley: vi.fn(),
+  afterCb: [] as (() => unknown)[],
+  afterThrows: false,
+}));
+vi.mock("next/server", () => ({
+  after: (cb: () => unknown) => { if (db.afterThrows) throw new Error("outside request scope"); db.afterCb.push(cb); },
+}));
+vi.mock("@/lib/riley/client", async (orig) => ({
+  ...(await orig<typeof import("@/lib/riley/client")>()),
+  requestDraftReply: (...a: unknown[]) => db.riley(...a),
 }));
 
 vi.mock("@/lib/supabase-admin", () => ({
@@ -12,7 +23,7 @@ vi.mock("@/lib/supabase-admin", () => ({
     schema: () => ({
       rpc: (name: string, args: unknown) => {
         db.calls.push(["rpc", name, args]);
-        return Promise.resolve({ data: {}, error: db.rpcError ? { message: db.rpcError } : null });
+        return Promise.resolve({ data: db.rpcData, error: db.rpcError ? { message: db.rpcError } : null });
       },
       from: (table: string) => {
         let out: unknown = [];
@@ -33,6 +44,7 @@ vi.mock("@/lib/supabase-admin", () => ({
 
 import { classify, planIngest, applyIngest, loadContactsByEmail, parseAddressList, decodeMimeWords, type ContactRef } from "./ingest";
 import type { GmailMessage } from "./gmail-user";
+import { RileyNotConfiguredError } from "@/lib/riley/client";
 
 const msg = (headers: Record<string, string>, over: Partial<GmailMessage> = {}): GmailMessage => ({
   id: "g1", threadId: "t1", labelIds: ["INBOX"], internalDate: 1_760_000_000_000, snippet: "snip",
@@ -42,7 +54,11 @@ const msg = (headers: Record<string, string>, over: Partial<GmailMessage> = {}):
 const ref = (id: string): ContactRef => ({ contact_id: id, lead_id: `lead-${id}`, client_id: null });
 const map = (...pairs: [string, ContactRef][]) => new Map(pairs);
 
-beforeEach(() => { db.calls = []; db.results = {}; db.rpcError = null; });
+beforeEach(() => {
+  db.calls = []; db.results = {}; db.rpcError = null; db.rpcData = {}; db.afterCb = []; db.afterThrows = false;
+  db.riley.mockReset(); db.riley.mockResolvedValue({ ok: true, data: { status: "drafted" } });
+  vi.restoreAllMocks();
+});
 
 describe("parseAddressList", () => {
   it("handles quoted names containing commas", () => {
@@ -208,6 +224,114 @@ describe("applyIngest", () => {
   it("skip writes nothing", async () => {
     await applyIngest({ kind: "skip", reason: "x" }, msg({}));
     expect(db.calls).toHaveLength(0);
+  });
+});
+
+describe("applyIngest: Riley reply draft hook (R73)", () => {
+  const MID = "11111111-2222-4333-8444-555555555555";
+  const NOW = 1_760_000_000_000;
+  const fresh = (headers: Record<string, string> = {}, over: Partial<GmailMessage> = {}) =>
+    msg({ From: "jane@x.com", To: "brian@rosably.com", ...headers }, { internalDate: NOW - 3_600_000, ...over });
+  const stored = (over: Record<string, unknown> = {}) => { db.rpcData = { email_message_id: MID, newly_stored: true, links_added: 1, ...over }; };
+  const run = async (m: GmailMessage, c: ContactRef = ref("c1")) => {
+    await applyIngest(planIngest(m, map(["jane@x.com", c])), m);
+    for (const cb of db.afterCb) await cb();
+  };
+  beforeEach(() => { vi.spyOn(Date, "now").mockReturnValue(NOW); vi.spyOn(console, "error").mockImplementation(() => {}); vi.spyOn(console, "info").mockImplementation(() => {}); stored(); });
+
+  it("fires for a received, new, recent message linked to a lead", async () => {
+    await run(fresh());
+    expect(db.riley).toHaveBeenCalledTimes(1);
+    expect(db.riley).toHaveBeenCalledWith(MID, false);
+  });
+  it("fires for one linked to a client only", async () => {
+    await run(fresh(), { contact_id: "c1", lead_id: null, client_id: "k1" });
+    expect(db.riley).toHaveBeenCalledWith(MID, false);
+  });
+  it("passes has_list_unsubscribe through", async () => {
+    await run(fresh({ "List-Unsubscribe": "<mailto:u@x.com>" }));
+    expect(db.riley).toHaveBeenCalledWith(MID, true);
+  });
+  it("does not fire for a sent message", async () => {
+    const m = msg({ From: "brian@rosably.com", To: "jane@x.com" }, { internalDate: NOW - 1000 });
+    await applyIngest(planIngest(m, map(["jane@x.com", ref("c1")])), m);
+    for (const cb of db.afterCb) await cb();
+    expect(db.riley).not.toHaveBeenCalled();
+  });
+  it("does not fire for an unmatched message", async () => {
+    const m = msg({ From: "brian@rosably.com", To: "crm@rosably.com", Subject: "Fwd: Hi" }, {
+      internalDate: NOW - 1000, bodyText: "---------- Forwarded message ---------\nFrom: Pat <pat@new.com>\n",
+    });
+    await applyIngest(planIngest(m, new Map()), m);
+    for (const cb of db.afterCb) await cb();
+    expect(db.riley).not.toHaveBeenCalled();
+  });
+  it("does not fire when the links have no lead or client", async () => {
+    await run(fresh(), { contact_id: "c1", lead_id: null, client_id: null });
+    expect(db.riley).not.toHaveBeenCalled();
+  });
+  it("does not fire for a re-delivered message", async () => {
+    stored({ newly_stored: false });
+    await run(fresh());
+    expect(db.riley).not.toHaveBeenCalled();
+  });
+  it("does not fire when the rpc result has no newly_stored flag", async () => {
+    db.rpcData = { email_message_id: MID, links_added: 1 };
+    await run(fresh());
+    expect(db.riley).not.toHaveBeenCalled();
+  });
+  it("does not fire for a message older than 72h, fires just inside it", async () => {
+    await run(fresh({}, { internalDate: NOW - 73 * 3_600_000 }));
+    expect(db.riley).not.toHaveBeenCalled();
+    await run(fresh({}, { internalDate: NOW - 71 * 3_600_000 }));
+    expect(db.riley).toHaveBeenCalledTimes(1);
+  });
+  it("does not fire for a missing internalDate", async () => {
+    await run(fresh({}, { internalDate: 0 }));
+    expect(db.riley).not.toHaveBeenCalled();
+  });
+  it("is deferred with after(), so applyIngest returns before Riley is called", async () => {
+    const m = fresh();
+    await applyIngest(planIngest(m, map(["jane@x.com", ref("c1")])), m);
+    expect(db.riley).not.toHaveBeenCalled();
+    expect(db.afterCb).toHaveLength(1);
+  });
+  it("outside a request scope it awaits the call instead", async () => {
+    db.afterThrows = true;
+    const m = fresh();
+    await applyIngest(planIngest(m, map(["jane@x.com", ref("c1")])), m);
+    expect(db.riley).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    ["throws", () => db.riley.mockRejectedValue(new Error("secret body text"))],
+    ["not configured", () => db.riley.mockRejectedValue(new RileyNotConfiguredError())],
+    ["500", () => db.riley.mockResolvedValue({ ok: false, kind: "failed", status: 500 })],
+    ["unreachable", () => db.riley.mockResolvedValue({ ok: false, kind: "unreachable" })],
+  ])("a Riley failure (%s) never makes applyIngest throw and is logged without content", async (_n, arrange) => {
+    arrange();
+    await expect(run(fresh({ Subject: "private subject" }))).resolves.toBeUndefined();
+    expect(console.error).toHaveBeenCalledWith("riley draft-reply failed", MID, expect.any(String));
+    const logged = JSON.stringify((console.error as unknown as { mock: { calls: unknown[] } }).mock.calls);
+    expect(logged).not.toContain("secret body text");
+    expect(logged).not.toContain("private subject");
+  });
+  it("awaited path also swallows failures", async () => {
+    db.afterThrows = true;
+    db.riley.mockRejectedValue(new Error("x"));
+    const m = fresh();
+    await expect(applyIngest(planIngest(m, map(["jane@x.com", ref("c1")])), m)).resolves.toBeUndefined();
+    expect(console.error).toHaveBeenCalledWith("riley draft-reply failed", MID, "Error");
+  });
+  it("logs a timeout as dispatched, not failed", async () => {
+    db.riley.mockResolvedValue({ ok: false, kind: "timeout" });
+    await run(fresh());
+    expect(console.info).toHaveBeenCalledWith("riley draft-reply dispatched (timeout)", MID);
+    expect(console.error).not.toHaveBeenCalled();
+  });
+  it("a failing rpc still throws and never reaches Riley", async () => {
+    db.rpcError = "boom";
+    await expect(run(fresh())).rejects.toThrow(/boom/);
+    expect(db.riley).not.toHaveBeenCalled();
   });
 });
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { RileyFailKind } from "@/lib/riley/discovery";
+import type { RileyFailKind } from "@/lib/riley/client";
 
 /** Generic browser-facing response for a failed Riley call. Never includes Riley's own text. */
 export function riley502(r: { kind: RileyFailKind }, message: string): NextResponse {

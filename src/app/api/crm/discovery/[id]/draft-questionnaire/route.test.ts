@@ -24,10 +24,10 @@ vi.mock("@/lib/requirePermission", () => ({
   requirePermission: async (_r: unknown, perm: string) =>
     s.allowed ? { ok: true, username: "brian", role: "admin", perm } : { ok: false, response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) },
 }));
-vi.mock("@/lib/riley/discovery", async orig => ({ ...(await orig<typeof import("@/lib/riley/discovery")>()), draftQuestionnaire: (...a: unknown[]) => s.draft(...a) }));
+vi.mock("@/lib/riley/client", async orig => ({ ...(await orig<typeof import("@/lib/riley/client")>()), draftQuestionnaire: (...a: unknown[]) => s.draft(...a) }));
 
 import { POST, maxDuration } from "./route";
-import { RileyNotConfiguredError } from "@/lib/riley/discovery";
+import { RileyNotConfiguredError } from "@/lib/riley/client";
 
 const ID = "3e9c4f31-5a6d-4e8f-9aa1-2c3d4e5f6071";
 const call = (id = ID) => POST(new NextRequest(`http://x/api/crm/discovery/${id}/draft-questionnaire`, { method: "POST" }), { params: Promise.resolve({ id }) });

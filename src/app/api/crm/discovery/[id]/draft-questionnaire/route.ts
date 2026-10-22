@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { requirePermission } from "@/lib/requirePermission";
-import { draftQuestionnaire, RileyNotConfiguredError } from "@/lib/riley/discovery";
+import { draftQuestionnaire, RileyNotConfiguredError } from "@/lib/riley/client";
 import { riley502 } from "@/lib/discovery/riley-errors";
 
 // Riley (Opus) drafts the questionnaire for a draft invite and writes questionnaire_snapshot itself.

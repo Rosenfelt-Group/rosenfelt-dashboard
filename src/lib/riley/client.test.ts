@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { draftQuestionnaire, requestBrief, RileyNotConfiguredError } from "./discovery";
+import { draftQuestionnaire, requestBrief, requestDraftReply, RileyNotConfiguredError } from "./client";
 
 const ID = "3e9c4f31-5a6d-4e8f-9aa1-2c3d4e5f6071";
 const fetchMock = vi.fn();
@@ -75,5 +75,47 @@ describe("riley discovery client", () => {
   it("treats a 200 with an unexpected body as failed", async () => {
     fetchMock.mockResolvedValue(json(200, { nope: 1 }));
     expect(await requestBrief(ID)).toMatchObject({ ok: false, kind: "failed" });
+  });
+
+  describe("requestDraftReply", () => {
+    const MSG = "7a1b2c3d-0000-4000-8000-000000000001";
+    it("fails closed when not configured, without a request", async () => {
+      delete process.env.RILEY_DISCOVERY_SECRET;
+      await expect(requestDraftReply(MSG, false)).rejects.toBeInstanceOf(RileyNotConfiguredError);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+    it("posts the message id and flag with the secret header and a 10s timeout", async () => {
+      const spy = vi.spyOn(AbortSignal, "timeout");
+      fetchMock.mockResolvedValue(json(200, { status: "drafted", approval_id: "a", summary: "s" }));
+      const r = await requestDraftReply(MSG, true);
+      expect(r).toEqual({ ok: true, data: { status: "drafted", approval_id: "a", summary: "s" } });
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe("https://riley.example/email/draft-reply");
+      expect(init.method).toBe("POST");
+      expect(init.headers["X-Webhook-Secret"]).toBe("disc-secret");
+      expect(JSON.parse(init.body)).toEqual({ email_message_id: MSG, has_list_unsubscribe: true });
+      expect(spy.mock.calls.map(c => c[0])).toEqual([10_000]);
+    });
+    it("accepts skipped / exists / no_reply bodies", async () => {
+      for (const b of [{ status: "skipped", reason: "newsletter" }, { status: "exists" }, { status: "no_reply", summary: "x" }]) {
+        fetchMock.mockResolvedValueOnce(json(200, b));
+        expect(await requestDraftReply(MSG, false)).toMatchObject({ ok: true });
+      }
+    });
+    it("reports a timeout as its own kind, other network errors as unreachable", async () => {
+      fetchMock.mockRejectedValueOnce(new DOMException("timed out", "TimeoutError"));
+      expect(await requestDraftReply(MSG, false)).toEqual({ ok: false, kind: "timeout" });
+      fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
+      expect(await requestDraftReply(MSG, false)).toEqual({ ok: false, kind: "unreachable" });
+    });
+    it("maps non-2xx to failed without leaking detail or the secret", async () => {
+      fetchMock.mockResolvedValue(json(502, { detail: "reply draft failed: X" }));
+      expect(await requestDraftReply(MSG, false)).toEqual({ ok: false, kind: "failed", status: 502 });
+      expect(JSON.stringify((console.error as unknown as { mock: { calls: unknown[] } }).mock.calls)).not.toContain("disc-secret");
+    });
+    it("rejects a 200 with an unexpected body", async () => {
+      fetchMock.mockResolvedValue(json(200, { nope: 1 }));
+      expect(await requestDraftReply(MSG, false)).toMatchObject({ ok: false, kind: "failed" });
+    });
   });
 });

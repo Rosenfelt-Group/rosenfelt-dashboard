@@ -1,6 +1,8 @@
 // Server-only. Pure classification/matching for Gmail messages plus a store step (applyIngest).
 // Message bodies are untrusted data: they are stored and parsed for addresses only, never interpreted.
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { after } from "next/server";
+import { requestDraftReply } from "@/lib/riley/client";
 import type { GmailMessage } from "./gmail-user";
 
 export const BRIAN = "brian@rosably.com";
@@ -341,6 +343,46 @@ export async function applyIngest(plan: IngestPlan, msg: GmailMessage, brian = B
       content: msg.snippet,
     };
   }
-  const { error } = await supabaseAdmin.schema("crm").rpc("store_ingested_email", { p });
+  const { data, error } = await supabaseAdmin.schema("crm").rpc("store_ingested_email", { p });
   if (error) throw new Error(`store_ingested_email failed: ${error.message}`);
+  await maybeRequestReplyDraft(plan, msg, c.direction, data);
+}
+
+// ---------- Riley reply drafts (R73, R74) ----------
+
+/** Mail older than this is never drafted for: stops the 7-day re-sync and a first sync from drafting a backlog. */
+export const REPLY_DRAFT_MAX_AGE_MS = 72 * 3_600_000;
+
+type StoreResult = { email_message_id?: unknown; newly_stored?: unknown } | null;
+
+/**
+ * Asks Riley for an approval-gated reply draft when a lead's or client's email is newly stored.
+ * Never throws and never delays ingestion: the call runs in after() (the Pub/Sub push route is the only
+ * caller and has a request scope); outside a request scope it is awaited instead, capped at 10s by the
+ * client timeout. Failures are logged (R74), never rethrown.
+ */
+function maybeRequestReplyDraft(plan: IngestPlan, msg: GmailMessage, direction: Direction, result: unknown): void | Promise<void> {
+  if (direction !== "received" || plan.kind !== "log") return;
+  if (!plan.links.some((l) => l.lead_id || l.client_id)) return;
+  const r = result as StoreResult;
+  if (!r || r.newly_stored !== true || typeof r.email_message_id !== "string") return;
+  if (!(msg.internalDate > 0) || Date.now() - msg.internalDate > REPLY_DRAFT_MAX_AGE_MS) return;
+
+  const id = r.email_message_id;
+  const hasListUnsubscribe = Boolean(msg.headers["list-unsubscribe"]);
+  const dispatch = async (): Promise<void> => {
+    try {
+      const res = await requestDraftReply(id, hasListUnsubscribe);
+      if (res.ok) return;
+      if (res.kind === "timeout") console.info("riley draft-reply dispatched (timeout)", id); // Riley keeps working
+      else console.error("riley draft-reply failed", id, res.kind);
+    } catch (e) {
+      console.error("riley draft-reply failed", id, e instanceof Error ? e.name : "error");
+    }
+  };
+  try {
+    after(dispatch);
+  } catch {
+    return dispatch(); // no request scope: await it
+  }
 }
