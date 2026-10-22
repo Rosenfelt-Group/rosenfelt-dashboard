@@ -84,7 +84,7 @@ describe("POST /api/intake", () => {
   });
 
   it("compares_secrets_in_constant_time", () => {
-    const src = readFileSync("src/app/api/intake/route.ts", "utf8");
+    const src = readFileSync("src/lib/intake/auth.ts", "utf8");
     expect(src).toMatch(/timingSafeEqual/);
   });
 });

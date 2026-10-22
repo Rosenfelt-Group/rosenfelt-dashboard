@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { DISCOVERY_SITE } from "@/lib/discovery";
 import { requirePermission } from "@/lib/requirePermission";
+import { RileyNotConfiguredError } from "@/lib/riley/discovery";
+import { runBrief } from "@/lib/discovery/briefs";
+import { riley502 } from "@/lib/discovery/riley-errors";
 
-// Brief generation runs on rosably.com (it holds the Anthropic key and the prompt);
-// this route queues a fresh brief and asks the site to run it.
+// Brief generation runs on Riley (R65): this route queues a fresh brief row and waits for Riley's
+// synchronous endpoint. Riley marks the brief failed itself when it errors; we do it only when
+// Riley never answered.
 export const maxDuration = 300;
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -16,7 +19,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const { id } = await params;
   const crm = supabaseAdmin.schema("crm");
 
-  const { data: invite } = await crm.from("discovery_invites").select("id, token, status").eq("id", id).maybeSingle();
+  const { data: invite } = await crm.from("discovery_invites").select("id, status").eq("id", id).maybeSingle();
   if (!invite) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (invite.status !== "submitted") return NextResponse.json({ error: "Questionnaire hasn't been submitted yet" }, { status: 409 });
 
@@ -26,16 +29,12 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (ie) return NextResponse.json({ error: ie.message }, { status: 500 });
 
   try {
-    const res = await fetch(`${DISCOVERY_SITE}/wp-json/rosably/v1/discovery/brief`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: invite.token }),
-      signal: AbortSignal.timeout(280_000),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) return NextResponse.json({ error: body.message ?? `Site returned ${res.status}` }, { status: 502 });
+    const r = await runBrief(id);
+    if (!r.ok) return riley502(r, "Riley could not generate the brief. Try again.");
+    const { status, brief_id, scope_version_id, fit_verdict } = r.data;
+    return NextResponse.json({ status, brief_id, scope_version_id, fit_verdict });
   } catch (e) {
-    return NextResponse.json({ error: `Could not reach ${DISCOVERY_SITE}: ${(e as Error).message}` }, { status: 502 });
+    if (e instanceof RileyNotConfiguredError) return NextResponse.json({ error: "Riley discovery is not configured" }, { status: 503 });
+    throw e;
   }
-  return NextResponse.json({ ok: true });
 }

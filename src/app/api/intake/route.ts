@@ -1,27 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHash, timingSafeEqual } from "node:crypto";
-import { CALLER_CHANNELS, CALLER_SECRET_ENV, IntakeSchema } from "@/lib/intake/schema";
+import { identifyCaller } from "@/lib/intake/auth";
+import { CALLER_CHANNELS, IntakeSchema } from "@/lib/intake/schema";
 import { intakeLead } from "@/lib/intake/client";
 
-// Authenticated by per-caller bearer secrets, not by a session (excluded in middleware).
-// A caller whose secret env var is unset or empty is disabled (fail closed).
-
-const digest = (s: string) => createHash("sha256").update(s).digest();
-
-function identifyCaller(req: NextRequest): string | null {
-  const header = req.headers.get("authorization") ?? "";
-  const m = /^Bearer (.+)$/.exec(header);
-  if (!m) return null;
-  const presented = digest(m[1]);
-  let found: string | null = null;
-  // No early exit: every configured secret is compared.
-  for (const [caller, envName] of Object.entries(CALLER_SECRET_ENV)) {
-    const secret = process.env[envName];
-    if (!secret) continue;
-    if (timingSafeEqual(presented, digest(secret))) found = caller;
-  }
-  return found;
-}
+// Authenticated by per-caller bearer secrets (src/lib/intake/auth.ts), not by a session (excluded in middleware).
 
 export async function POST(req: NextRequest) {
   const caller = identifyCaller(req);

@@ -141,6 +141,21 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
     });
   }
 
+  async function draftWithRiley() {
+    if (dirty) return;
+    setBusy("riley"); setError("");
+    const res = await fetch(`/api/crm/discovery/${invite.id}/draft-questionnaire`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { setBusy(""); setError(data.error ?? "Riley could not draft the questionnaire"); return; }
+    // Riley wrote the new snapshot server-side: reload the invite so the editor shows it.
+    const r = await fetchJson<Detail>(`/api/crm/discovery/${invite.id}`);
+    setBusy("");
+    if (!r.ok || !r.data.questionnaire_snapshot) { setError(r.ok ? "Riley's draft is saved, but could not be shown. Reload the page." : r.error); return; }
+    setDef(r.data.questionnaire_snapshot);
+    setDirty(false);
+    onChanged(r.data);
+  }
+
   function addFromBank(qs: DiscoveryQuestion[], sectionId: string) {
     edit(addFields(def, sectionId, qs.map(q => questionToField(q))));
     setPicker(null);
@@ -276,6 +291,11 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
           {busy === "save" ? "Saving…" : "Save draft"}
         </Button>
         <Button variant="ghost" onClick={preview} disabled={!!busy}>{busy === "preview" ? "Saving…" : "Preview ↗"}</Button>
+        <Button variant="ghost" onClick={draftWithRiley} disabled={!!busy || dirty}
+          title={dirty ? "Save first" : "Riley rewrites this draft's questions"}>
+          {busy === "riley" ? "Riley is drafting…" : "Draft with Riley"}
+        </Button>
+        {dirty && !busy && <span className="text-xs text-brand-muted">Save first</span>}
         {emailConfigured ? (
           <>
             <Button onClick={() => send(true)} disabled={!!busy || !keys.size || !project.title.trim() || !recipient.to.trim()}>
