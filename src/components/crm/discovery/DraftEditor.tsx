@@ -226,6 +226,8 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
 
   return (
     <div>
+      {/* Read-only while Riley drafts: a reload would otherwise discard edits made in that window. */}
+      <fieldset disabled={busy === "riley"} className="min-w-0 border-0 p-0 m-0">
       <div className="card mb-4 space-y-4">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
@@ -277,6 +279,7 @@ export function DraftEditor({ invite, onChanged }: { invite: Detail; onChanged: 
         onAddCustom={sectionId => { setSaveToBank(false); setCustom({ sectionId }); }}
         onEditField={setEditing}
       />
+      </fieldset>
 
       {emailConfigured && (
         <div className="card mt-6 space-y-2">
