@@ -266,6 +266,14 @@ describe("applyIngest: Riley reply draft hook (R73)", () => {
     for (const cb of db.afterCb) await cb();
     expect(db.riley).not.toHaveBeenCalled();
   });
+  it("does not fire for Brian's forward to crm@ of a lead's email (source forward)", async () => {
+    const m = msg({ From: "brian@rosably.com", To: "crm@rosably.com", Subject: "Fwd: Hi" }, {
+      internalDate: NOW - 1000, bodyText: "---------- Forwarded message ---------\nFrom: Jane <jane@x.com>\nSubject: Hi\n",
+    });
+    await applyIngest(planIngest(m, map(["jane@x.com", ref("c1")])), m);
+    for (const cb of db.afterCb) await cb();
+    expect(db.riley).not.toHaveBeenCalled();
+  });
   it("does not fire when the links have no lead or client", async () => {
     await run(fresh(), { contact_id: "c1", lead_id: null, client_id: null });
     expect(db.riley).not.toHaveBeenCalled();

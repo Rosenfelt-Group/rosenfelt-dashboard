@@ -345,7 +345,7 @@ export async function applyIngest(plan: IngestPlan, msg: GmailMessage, brian = B
   }
   const { data, error } = await supabaseAdmin.schema("crm").rpc("store_ingested_email", { p });
   if (error) throw new Error(`store_ingested_email failed: ${error.message}`);
-  await maybeRequestReplyDraft(plan, msg, c.direction, data);
+  await maybeRequestReplyDraft(plan, msg, c.direction, data, c.deliveredToCrm);
 }
 
 // ---------- Riley reply drafts (R73, R74) ----------
@@ -361,8 +361,9 @@ type StoreResult = { email_message_id?: unknown; newly_stored?: unknown } | null
  * caller and has a request scope); outside a request scope it is awaited instead, capped at 10s by the
  * client timeout. Failures are logged (R74), never rethrown.
  */
-function maybeRequestReplyDraft(plan: IngestPlan, msg: GmailMessage, direction: Direction, result: unknown): void | Promise<void> {
+function maybeRequestReplyDraft(plan: IngestPlan, msg: GmailMessage, direction: Direction, result: unknown, deliveredToCrm: boolean): void | Promise<void> {
   if (direction !== "received" || plan.kind !== "log") return;
+  if (deliveredToCrm) return; // Brian's forward to crm@ (source 'forward') is not a lead email to answer
   if (!plan.links.some((l) => l.lead_id || l.client_id)) return;
   const r = result as StoreResult;
   if (!r || r.newly_stored !== true || typeof r.email_message_id !== "string") return;
