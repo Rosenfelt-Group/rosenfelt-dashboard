@@ -7,6 +7,7 @@ import { buildRfc822Message, gmailRead, gmailSend } from "./gmail-user";
 import { BRIAN, loadContactsByEmail, normalizeEmail } from "./ingest";
 
 export const FROM = { name: "Brian Rosenfelt", email: BRIAN };
+const READBACK_TIMEOUT_MS = 5000;
 export const STALE_EXECUTING_MS = 10 * 60_000;
 
 const emailAddr = z.string().trim().email().max(320);
@@ -60,8 +61,18 @@ export async function sendEmail(input: EmailInput, source: SendSource): Promise<
   // (best effort). On any failure keep the generated id; the watch sync's upsert corrects it later.
   let rfcMessageId = messageId;
   try {
-    const real = await gmailRead().getRfcMessageId(sent.id);
-    if (real) rfcMessageId = real;
+    // hard 5s cap (token refresh + GET): the abort signal covers the GET, the race covers everything
+    const ac = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cap = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => { ac.abort(); reject(new Error("Message-ID read-back timed out")); }, READBACK_TIMEOUT_MS);
+    });
+    try {
+      const real = await Promise.race([gmailRead().getRfcMessageId(sent.id, ac.signal), cap]);
+      if (real) rfcMessageId = real;
+    } finally {
+      clearTimeout(timer);
+    }
   } catch (e) {
     console.error("email executor: could not read back Message-ID, using generated", sent.id, errMsg(e));
   }

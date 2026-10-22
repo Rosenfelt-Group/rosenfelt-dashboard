@@ -22,8 +22,6 @@ begin
 end $$;
 
 grant usage on schema crm, public to riley_app;
--- pending_approvals.id defaults to extensions.uuid_generate_v4(); the inserting role needs to reach it
-grant usage on schema extensions to riley_app;
 
 -- reads: explicit table list (no ALL TABLES, so future tables are not auto-exposed)
 do $$
@@ -66,21 +64,24 @@ create policy riley_update_discovery_invites on crm.discovery_invites for update
 revoke all on public.pending_approvals from riley_app;
 grant select, insert on public.pending_approvals to riley_app;
 drop policy if exists riley_read_pending_approvals on public.pending_approvals;
-create policy riley_read_pending_approvals on public.pending_approvals for select to riley_app using (true);
+-- pending_approvals is shared by every agent (Sam's invoices/refunds etc.): riley sees only its own email drafts
+create policy riley_read_pending_approvals on public.pending_approvals for select to riley_app
+  using (agent = 'riley' and action_type = 'email_send');
 drop policy if exists riley_insert_pending_approvals on public.pending_approvals;
 create policy riley_insert_pending_approvals on public.pending_approvals for insert to riley_app
-  with check (action_type = 'email_send');
+  with check (agent = 'riley' and action_type = 'email_send');
 
 -- belt and braces: keyed on current_user (SECURITY INVOKER, so it sees the real caller). Other roles
 -- (service_role, the dashboard) are untouched.
 create or replace function public.riley_guard_pending_approvals()
 returns trigger
 language plpgsql
+set search_path = ''
 as $fn$
 begin
   if current_user = 'riley_app' then
-    if new.action_type is distinct from 'email_send' then
-      raise exception 'riley_app may only insert email_send approvals' using errcode = '42501';
+    if new.action_type is distinct from 'email_send' or new.agent is distinct from 'riley' then
+      raise exception 'riley_app may only insert riley email_send approvals' using errcode = '42501';
     end if;
     if tg_op <> 'INSERT'
        or new.status is distinct from 'pending'
@@ -89,6 +90,8 @@ begin
        or new.error is not null or new.executing_since is not null then
       raise exception 'riley_app may only insert pending approvals with no review/execution fields' using errcode = '42501';
     end if;
+    -- created_at is server-assigned; expires_at has no column default, so it is left as supplied
+    new.created_at := pg_catalog.now();
   end if;
   return new;
 end;

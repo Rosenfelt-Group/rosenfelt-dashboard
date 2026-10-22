@@ -19,6 +19,11 @@ create table if not exists public.work_items (id uuid default gen_random_uuid() 
 alter table public.agent_memory enable row level security;
 alter table public.work_items enable row level security;
 
+insert into crm.email_messages (id, gmail_message_id, direction, from_email, to_emails, subject, snippet, body_text, sent_at, source)
+  values ('00000000-0000-0000-0006-000000000006', 'riley-test-gm', 'received', 'x@riley.test', '{}', 's', 'sn', 'b', now(), 'gmail_watch');
+insert into public.pending_approvals (agent, action_type, title) values ('sam', 'sam_send_invoice', 'sam-secret');
+insert into public.pending_approvals (agent, action_type, title) values ('riley', 'email_send', 'riley-own');
+
 set role riley_app;
 
 -- riley_can_read_contacts (policy, not just grant)
@@ -26,7 +31,7 @@ do $$
 begin
   assert (select count(*) from crm.contacts where id = '00000000-0000-0000-0006-000000000002') = 1, 'riley sees seeded contact';
   assert (select count(*) from crm.leads where id = '00000000-0000-0000-0006-000000000003') = 1, 'riley sees seeded lead';
-  assert (select count(*) from crm.email_messages) >= 0, 'email_messages readable';
+  assert (select count(*) from crm.email_messages where id = '00000000-0000-0000-0006-000000000006') = 1, 'riley sees seeded email_messages row';
 end $$;
 
 -- riley_cannot_read_billing
@@ -94,7 +99,7 @@ do $$
 begin
   insert into public.pending_approvals (agent, action_type, title, payload)
     values ('riley', 'email_send', 't', '{"to":"a@b.test"}');
-  assert (select count(*) from public.pending_approvals where agent = 'riley' and action_type = 'email_send' and status = 'pending') = 1, 'approval inserted';
+  assert (select count(*) from public.pending_approvals where agent = 'riley' and action_type = 'email_send' and status = 'pending' and title = 't') = 1, 'approval inserted';
   insert into public.pending_approvals (agent, action_type, status) values ('riley', 'email_send', 'pending');
 end $$;
 
@@ -104,8 +109,29 @@ declare ok boolean := false;
 begin
   begin
     insert into public.pending_approvals (agent, action_type, title) values ('riley', 'wire_transfer', 't');
-  exception when others then ok := true; end;
+  exception when insufficient_privilege then ok := true; end;
   assert ok, 'non email_send action_type rejected';
+  ok := false;
+  begin
+    insert into public.pending_approvals (agent, action_type, title) values ('sam', 'email_send', 't');
+  exception when insufficient_privilege then ok := true; end;
+  assert ok, 'agent other than riley rejected';
+end $$;
+
+-- riley_sees_only_own_approvals
+do $$
+begin
+  assert (select count(*) from public.pending_approvals where agent = 'sam') = 0, 'sam row invisible to riley';
+  assert (select count(*) from public.pending_approvals where title = 'sam-secret') = 0, 'sam_send_invoice invisible';
+  assert (select count(*) from public.pending_approvals where title = 'riley-own') = 1, 'own email_send row visible';
+end $$;
+
+-- riley_insert_created_at_is_server_assigned
+do $$
+declare c timestamptz;
+begin
+  insert into public.pending_approvals (agent, action_type, title, created_at) values ('riley', 'email_send', 'backdated', '2000-01-01') returning created_at into c;
+  assert c > now() - interval '1 minute', 'created_at forced to now()';
 end $$;
 
 -- riley_cannot_insert_preapproved
@@ -119,7 +145,7 @@ begin
         case v when 'status' then 'approved' when 'reviewed_by' then 'riley'
                  when 'result' then '{}' when 'error' then 'e'
                  else now()::text end);
-    exception when others then ok := true; end;
+    exception when insufficient_privilege then ok := true; end;
     assert ok, 'pre-set ' || v || ' must be rejected';
   end loop;
 end $$;

@@ -279,11 +279,12 @@ function makeAuth(refreshEnv: string) {
   };
 }
 
-async function call<T>(getToken: () => Promise<string>, path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+async function call<T>(getToken: () => Promise<string>, path: string, init: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     method: init.method ?? "GET",
     headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    signal: init.signal,
   });
   if (!res.ok) throw new GmailUserError("api_error", `Gmail ${init.method ?? "GET"} ${path.split("?")[0]} failed (${res.status})`, res.status);
   return (await res.json()) as T;
@@ -315,8 +316,8 @@ export function gmailRead() {
       return parseMessage(await call<RawMessage>(getToken, `/messages/${encodeURIComponent(id)}?format=full`));
     },
     /** Metadata-only read of the RFC Message-ID header Gmail assigned (Gmail replaces the one we send). null if absent. */
-    async getRfcMessageId(id: string): Promise<string | null> {
-      const raw = await call<RawMessage>(getToken, `/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=Message-ID`);
+    async getRfcMessageId(id: string, signal?: AbortSignal): Promise<string | null> {
+      const raw = await call<RawMessage>(getToken, `/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=Message-ID`, { signal });
       return parseMessage(raw).headers["message-id"]?.trim() || null;
     },
     async watch(topic: string): Promise<{ historyId: string; expiration: string }> {
