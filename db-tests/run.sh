@@ -118,6 +118,21 @@ echo "   load errors: $(grep -c 'ERROR' "$CACHE/load.log" || true) (see db-tests
 docker exec "$NAME" psql -U postgres -X -tA -c "select to_regclass('crm.leads') is not null and to_regclass('crm.lead_activities') is not null" | grep -qx t \
   || { echo "FATAL: crm tables missing after load" >&2; exit 1; }
 
+# The dump is schema-only, but prod already has the three discovery templates (migration
+# 2026-10-16 seeded them). Stand-in rows so template-editing migrations have something to act on.
+echo ">> seeding stand-in discovery templates"
+psqlc -v ON_ERROR_STOP=1 <<'SQL'
+insert into crm.discovery_questions (key, label, section, type) values
+  ('seed_a', 'Seed A', 'Seed', 'text'), ('seed_b', 'Seed B', 'Seed', 'text'), ('seed_c', 'Seed C', 'Seed', 'text');
+insert into crm.discovery_templates (name, is_default, sections) values
+  ('Standard Discovery', true, '[{"id":"project","title":"Your project","intro":"x"}]'),
+  ('Small Nonprofit: Productivity & Integration', false, '[{"id":"organization","title":"Organization"}]'),
+  ('Blank: custom questions', false, '[{"id":"questions","title":"Questions"}]');
+insert into crm.discovery_template_items (template_id, question_id, "position", section_id)
+  select t.id, q.id, row_number() over (order by q.key), 'project'
+    from crm.discovery_templates t, crm.discovery_questions q where q.key like 'seed_%';
+SQL
+
 # Apply every 2026-10-22_*.sql migration in filename order (they are idempotent). The
 # --no-privileges dump drops prod's REVOKEs/GRANTs; re-applying restores them.
 shopt -s nullglob
@@ -127,6 +142,10 @@ for m in "${MIGRATIONS[@]}"; do
   echo ">> applying migration $(basename "$m")"
   psqlc -v ON_ERROR_STOP=1 < "$m"
 done
+
+# Idempotency: re-apply the Fit migration; db-tests/007 asserts nothing was duplicated.
+echo ">> re-applying 2026-10-22_discovery_fit_questions.sql (idempotency check)"
+psqlc -v ON_ERROR_STOP=1 < "$REPO/docs/migrations/2026-10-22_discovery_fit_questions.sql"
 
 fail=0
 for t in "$HERE"/*.sql; do
