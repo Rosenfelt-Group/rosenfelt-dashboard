@@ -10,6 +10,9 @@ const h = vi.hoisted(() => ({
   rpcError: null as string | null,
   contacts: new Map<string, { contact_id: string; lead_id: string | null; client_id: string | null }>(),
   lookups: [] as string[][],
+  readId: null as string | null, // Message-ID the mocked Gmail read returns
+  readError: null as string | null,
+  readHang: false,
 }));
 
 vi.mock("@/lib/supabase-admin", () => {
@@ -61,6 +64,13 @@ vi.mock("./gmail-user", async () => {
   const actual = await vi.importActual<typeof import("./gmail-user")>("./gmail-user");
   return {
     ...actual,
+    gmailRead: () => ({
+      getRfcMessageId: async () => {
+        if (h.readHang) return new Promise<string | null>(() => {});
+        if (h.readError) throw new Error(h.readError);
+        return h.readId;
+      },
+    }),
     gmailSend: () => ({
       send: async (raw: string, opts?: { threadId?: string }) => {
         if (h.sendError) throw new Error(h.sendError);
@@ -80,7 +90,7 @@ const row = (over: Row = {}): Row => ({
 });
 
 beforeEach(() => {
-  h.rows = []; h.messages = {}; h.sends = []; h.sendError = null; h.rpcCalls = []; h.rpcError = null; h.contacts = new Map(); h.lookups = [];
+  h.rows = []; h.messages = {}; h.sends = []; h.sendError = null; h.rpcCalls = []; h.rpcError = null; h.contacts = new Map(); h.lookups = []; h.readId = null; h.readError = null; h.readHang = false;
 });
 
 describe("executeApproval", () => {
@@ -135,6 +145,35 @@ describe("executeApproval", () => {
     expect(mid).toMatch(/^<[0-9a-f-]{36}@rosably\.com>$/);
     expect(h.sends[0].raw).toContain(`Message-ID: ${mid}`);
     expect(h.sends[0].raw).toMatch(/^Date: /m);
+  });
+
+  it("stores_gmail_assigned_message_id_when_readable", async () => {
+    h.rows.push(row());
+    h.readId = "<CAF123@mail.gmail.com>";
+    expect((await executeApproval("a1")).status).toBe("done");
+    expect((h.rpcCalls[0].args.p.message as Row).rfc_message_id).toBe("<CAF123@mail.gmail.com>");
+  });
+
+  it("message_id_readback_failure_falls_back_to_generated", async () => {
+    h.rows.push(row());
+    h.readError = "gmail 503";
+    const r = await executeApproval("a1");
+    expect(r.status).toBe("done");
+    expect((h.rpcCalls[0].args.p.message as Row).rfc_message_id).toMatch(/^<[0-9a-f-]{36}@rosably\.com>$/);
+  });
+
+  it("message_id_readback_timeout_falls_back_to_generated", async () => {
+    vi.useFakeTimers();
+    try {
+      h.rows.push(row());
+      h.readHang = true;
+      const p = executeApproval("a1");
+      await vi.advanceTimersByTimeAsync(5001);
+      expect((await p).status).toBe("done");
+      expect((h.rpcCalls[0].args.p.message as Row).rfc_message_id).toMatch(/^<[0-9a-f-]{36}@rosably\.com>$/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("skips pending (unapproved) rows", async () => {
