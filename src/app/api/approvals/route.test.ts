@@ -26,6 +26,10 @@ vi.mock("@/lib/supabase-admin", () => ({
             rec.filters.push([col, val]);
             return chain;
           },
+          in: (col: string, val: unknown) => {
+            rec.filters.push([col, val]);
+            return chain;
+          },
           select: () => chain,
           then: (resolve: (v: unknown) => void) => resolve({ data: s.updated, error: null }),
         };
@@ -113,17 +117,32 @@ describe("PATCH /api/approvals - non-pickle rows", () => {
     s.row = { id: "a1", agent: "jordan", action_type: "x", title: "t", payload: {}, status: "pending" };
   });
 
-  it("ignores a forged header: reviewed_by comes from the session, no status filter", async () => {
-    s.session = { username: "casey_regression", role: "viewer", permissions: [] };
+  it("ignores a forged header: reviewed_by comes from the session, status-guarded update", async () => {
+    s.session = { username: "casey_regression", role: "viewer", permissions: ["manage_approvals"] };
     const res = await patch({ "x-user-name": "brian" });
     expect(res.status).toBe(200);
     expect(s.updates[0].payload).toMatchObject({ reviewed_by: "casey_regression" });
-    expect(s.updates[0].filters).not.toContainEqual(["status", "pending"]);
+    expect(s.updates[0].filters).toContainEqual(["status", ["pending", "revision_requested"]]);
   });
 
-  it("records null reviewer when there is no session, ignoring the header", async () => {
+  it("viewer_without_manage_approvals_gets_403_on_patch", async () => {
+    s.session = { username: "v", role: "viewer", permissions: ["view_crm"] };
+    expect((await patch()).status).toBe(403);
+    expect(s.updates).toHaveLength(0);
+  });
+
+  it("double_click_approve_second_patch_409", async () => {
+    s.session = { username: "v", role: "viewer", permissions: ["manage_approvals"] };
+    expect((await patch()).status).toBe(200);
+    s.updated = []; // the row is no longer pending/revision_requested
+    const res = await patch();
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "Approval is no longer pending" });
+  });
+
+  it("403s with no session and does not update", async () => {
     s.session = null;
-    await patch({ "x-user-name": "brian" });
-    expect(s.updates[0].payload).toMatchObject({ reviewed_by: null });
+    expect((await patch({ "x-user-name": "brian" })).status).toBe(403);
+    expect(s.updates).toHaveLength(0);
   });
 });

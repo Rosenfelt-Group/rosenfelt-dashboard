@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { verifySessionToken, COOKIE_NAME } from "@/lib/session";
+import { requirePermission } from "@/lib/requirePermission";
 
 export const maxDuration = 60;
 
@@ -34,6 +35,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const auth = await requirePermission(req, "manage_approvals");
+  if (!auth.ok) return auth.response;
   try {
     const body = await req.json();
     const { id, status, revision_notes } = body;
@@ -98,11 +101,18 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: "Approval is no longer pending" }, { status: 409 });
       }
     } else {
-      const { error: updateError } = await supabaseAdmin
+      // Conditional: a row can only be decided while it is pending (or sent back for revision), so a
+      // double click or a re-flip of a finished row can never re-approve it (R33).
+      const { data: updated, error: updateError } = await supabaseAdmin
         .from("pending_approvals")
         .update(updatePayload)
-        .eq("id", id);
+        .eq("id", id)
+        .in("status", ["pending", "revision_requested"])
+        .select("id");
       if (updateError) throw updateError;
+      if (!updated || updated.length === 0) {
+        return NextResponse.json({ error: "Approval is no longer pending" }, { status: 409 });
+      }
     }
 
     // ── APPROVED → publish ───────────────────────────────────────────────────

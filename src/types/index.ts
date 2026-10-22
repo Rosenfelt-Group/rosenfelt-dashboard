@@ -36,6 +36,8 @@ export interface PendingApproval {
   status: "pending" | "approved" | "rejected" | "revision_requested" | "expired" | "executing" | "done" | "failed";
   reviewed_by?: string | null;
   reviewed_at?: string | null;
+  /** Set once an email_send row was executed (sent); null/absent = never executed. */
+  executed_at?: string | null;
 }
 
 export interface Lead {

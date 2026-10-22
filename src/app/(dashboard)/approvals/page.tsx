@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PendingApproval } from "@/types";
 import { can } from "@/lib/permissions";
@@ -8,7 +8,8 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import clsx from "clsx";
 import { usePolling } from "@/lib/use-polling";
-import { EmptyState, ErrorState, LoadingState, PageHeader, Tabs } from "@/components/ui";
+import { canSendApproval, executeFailureMessage } from "@/lib/approvals-send";
+import { Button, EmptyState, ErrorState, LoadingState, PageHeader, Tabs } from "@/components/ui";
 
 const STATUS_STYLES = {
   approved:            "bg-green-50 text-green-700",
@@ -32,7 +33,34 @@ const STATUS_LABELS: Record<string, string> = {
   failed:             "Failed",
 };
 
-function HistoryRow({ item }: { item: PendingApproval }) {
+// R38: an approved email_send that was never executed (e.g. the send failed or was interrupted) can be sent from here.
+function SendButton({ item, onDone }: { item: PendingApproval; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function send() {
+    if (busy) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/approvals/${item.id}/execute`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body?.status === "done") { setMsg({ ok: true, text: "Email sent." }); onDone(); }
+      else setMsg({ ok: false, text: executeFailureMessage(body, res.status) });
+    } catch (e) {
+      setMsg({ ok: false, text: `Email NOT sent: ${e instanceof Error ? e.message : "request failed"}` });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="px-4 pb-3 flex items-center gap-3">
+      <Button size="sm" onClick={send} disabled={busy}>{busy ? "Sending…" : "Send"}</Button>
+      {msg && <span role="status" className={clsx("text-xs", msg.ok ? "text-green-700" : "text-red-700")}>{msg.text}</span>}
+    </div>
+  );
+}
+
+function HistoryRow({ item, canSend, onSent }: { item: PendingApproval; canSend: boolean; onSent: () => void }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="border-b border-brand-border last:border-0">
@@ -71,6 +99,7 @@ function HistoryRow({ item }: { item: PendingApproval }) {
           )}
         </div>
       )}
+      {canSend && canSendApproval(item) && <SendButton item={item} onDone={onSent} />}
     </div>
   );
 }
@@ -97,6 +126,7 @@ function ApprovalsContent() {
   const agentFilter = searchParams.get("agent") || "all";
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [permissions, setPermissions] = useState<string[]>([]);
+  const inFlight = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -131,6 +161,22 @@ function ApprovalsContent() {
     revisionNotes?: string,
     selectedItems?: string[],
   ) {
+    // Re-entrancy guard: the card also disables its buttons while this promise is pending.
+    if (inFlight.current.has(id)) return;
+    inFlight.current.add(id);
+    try {
+      await decide(id, status, revisionNotes, selectedItems);
+    } finally {
+      inFlight.current.delete(id);
+    }
+  }
+
+  async function decide(
+    id: string,
+    status: "approved" | "rejected" | "revision_requested",
+    revisionNotes?: string,
+    selectedItems?: string[],
+  ) {
     const res = await fetch("/api/approvals", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -142,7 +188,21 @@ function ApprovalsContent() {
       return;
     }
     // Remove from pending immediately; Realtime UPDATE will add it to history
+    const approved = pending.find(a => a.id === id);
     setPending(prev => prev.filter(a => a.id !== id));
+
+    // An approved email_send is sent by the executor, not by the PATCH above.
+    if (status === "approved" && approved?.action_type === "email_send") {
+      try {
+        const er = await fetch(`/api/approvals/${id}/execute`, { method: "POST" });
+        const eb = await er.json().catch(() => ({}));
+        if (er.ok && eb?.status === "done") alert("Email sent.");
+        else alert(executeFailureMessage(eb, er.status));
+      } catch (e) {
+        alert(`Email NOT sent: ${e instanceof Error ? e.message : "request failed"}`);
+      }
+      load(true);
+    }
   }
 
   function setAgentFilter(agent: string) {
@@ -256,7 +316,7 @@ function ApprovalsContent() {
             <EmptyState title="No history yet" />
           ) : (
             <div className="card p-0 overflow-hidden">
-              {filteredHistory.map(item => <HistoryRow key={item.id} item={item} />)}
+              {filteredHistory.map(item => <HistoryRow key={item.id} item={item} canSend={can(permissions, "manage_approvals")} onSent={() => load(true)} />)}
             </div>
           )}
           <p className="text-xs text-brand-muted text-right">

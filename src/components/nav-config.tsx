@@ -1,12 +1,22 @@
 import React from "react";
-import { activeSubPageHref, pathMatches } from "@/lib/nav-match";
+import { activeSubPageHref, matchingItems } from "@/lib/nav-match";
 
 // ── Nav data ───────────────────────────────────────────────────────────────────
 //
-// Grouped by frequency of use, not by category:
-//   - "operations" and "growth" render flat at the top of the sidebar.
-//   - "workspace" is anchored to the bottom, styled de-emphasized (lower-frequency
-//     tools/finance/admin-ish pages). See Sidebar.tsx.
+// Rosably 3.0 (R52): four primary areas for the daily work, in this order:
+// CRM, Research, Content, Calendar. Everything else that exists today lives in
+// the de-emphasised "secondary" group anchored to the bottom (Sidebar.tsx).
+//
+// Research, Content and Calendar link to the current pages until phase 3:
+//   Research -> /content/research (the existing research page)
+//   Content  -> /content          (ideas, keywords)
+//   Calendar -> /marketing        (no calendar page exists yet; Marketing, the
+//                                  directory listings/submissions planner, is
+//                                  the closest existing page)
+//
+// Permission-hidden items: this config has no permission gating. Visibility is
+// enforced inside the pages (e.g. Tools tabs) and by requirePermission on APIs;
+// the nav only links to pages and does not change that.
 //
 // SUB_PAGES is keyed by NavItem.id and is the only section sub-nav: the sidebar
 // shows it under the active item on desktop, and SectionSubNav shows it as a
@@ -17,36 +27,31 @@ export interface NavItem {
   label: string;
   href: string;
   icon: string;
-  /** Path prefixes that count as "this section is active" for nav highlighting. */
+  /** Path prefixes this item owns; the longest matching prefix across all items wins. */
   active: string[];
 }
 
-export const NAV_GROUPS: { operations: NavItem[]; growth: NavItem[]; workspace: NavItem[] } = {
-  operations: [
-    { id: "overview", label: "Overview",  href: "/overview",  icon: "grid",   active: ["/overview"] },
-    { id: "work",     label: "Work",      href: "/work",      icon: "kanban", active: ["/work"] },
-    { id: "approvals",label: "Approvals", href: "/approvals", icon: "check",  active: ["/approvals"] },
-    { id: "agents",   label: "Agents",    href: "/agents",    icon: "brain",  active: ["/agents"] },
+export const NAV_GROUPS: { primary: NavItem[]; secondary: NavItem[] } = {
+  primary: [
+    { id: "crm",      label: "CRM",      href: "/crm",              icon: "users",      active: ["/crm", "/engagements"] },
+    { id: "research", label: "Research", href: "/content/research", icon: "folder",     active: ["/content/research"] },
+    { id: "content",  label: "Content",  href: "/content",          icon: "edit",       active: ["/content"] },
+    { id: "calendar", label: "Calendar", href: "/marketing",        icon: "trendingUp", active: ["/marketing"] },
   ],
-  growth: [
-    { id: "crm",      label: "CRM",     href: "/crm",       icon: "users",    active: ["/crm", "/engagements"] },
-    { id: "content",  label: "Content", href: "/content",   icon: "edit",     active: ["/content"] },
-    { id: "reports",  label: "Reports", href: "/analytics", icon: "barChart", active: ["/analytics"] },
-  ],
-  workspace: [
-    { id: "documents", label: "Documents", href: "/documents", icon: "folder",     active: ["/documents"] },
-    { id: "finance",   label: "Finance",   href: "/finance",   icon: "dollar",     active: ["/finance"] },
-    { id: "marketing", label: "Marketing", href: "/marketing", icon: "trendingUp", active: ["/marketing"] },
-    { id: "admin",     label: "Admin",     href: "/tools",     icon: "wrench",     active: ["/tools"] },
-    { id: "status",    label: "Status",    href: "/status",    icon: "shield",     active: ["/status"] },
+  secondary: [
+    { id: "approvals", label: "Approvals", href: "/approvals", icon: "check",  active: ["/approvals"] },
+    { id: "agents",    label: "Agents",    href: "/agents",    icon: "brain",  active: ["/agents"] },
+    { id: "system",    label: "System",    href: "/status",    icon: "shield", active: ["/status"] },
+    { id: "admin",     label: "Tools",     href: "/tools",     icon: "wrench", active: ["/tools"] },
+    { id: "overview",  label: "Overview",  href: "/overview",  icon: "grid",   active: ["/overview"] },
+    { id: "work",      label: "Work",      href: "/work",      icon: "kanban", active: ["/work"] },
+    { id: "reports",   label: "Reports",   href: "/analytics", icon: "barChart", active: ["/analytics"] },
+    { id: "documents", label: "Documents", href: "/documents", icon: "folder", active: ["/documents"] },
+    { id: "finance",   label: "Finance",   href: "/finance",   icon: "dollar", active: ["/finance"] },
   ],
 };
 
-export const ALL_NAV_ITEMS: NavItem[] = [
-  ...NAV_GROUPS.operations,
-  ...NAV_GROUPS.growth,
-  ...NAV_GROUPS.workspace,
-];
+export const ALL_NAV_ITEMS: NavItem[] = [...NAV_GROUPS.primary, ...NAV_GROUPS.secondary];
 
 export interface SubPage {
   label: string;
@@ -59,27 +64,33 @@ export interface SubPage {
 export const SUB_PAGES: Record<string, SubPage[]> = {
   crm: [
     { label: "Pipeline",   href: "/crm",                 icon: "kanban" },
-    { label: "Contacts",   href: "/crm/contacts",        icon: "users"  },
+    { label: "People",     href: "/crm/contacts",        icon: "users",  match: ["/crm/people"] },
+    { label: "Inbox",      href: "/crm/inbox",           icon: "edit"   },
+    { label: "Discovery",  href: "/crm/discovery",       icon: "edit"   },
+    { label: "Scope",      href: "/crm/scope",           icon: "folder" },
+    { label: "Rooms",      href: "/crm/rooms",           icon: "folder", match: ["/engagements"] },
     { label: "Businesses", href: "/crm/businesses",      icon: "folder" },
     { label: "Clients",    href: "/crm/clients",         icon: "users"  },
-    { label: "Discovery",  href: "/crm/discovery",       icon: "edit"   },
-    { label: "Rooms",      href: "/crm/rooms",           icon: "folder", match: ["/engagements"] },
     { label: "Services",   href: "/crm/admin/services",  icon: "package" },
   ],
   content: [
     { label: "Ideas",    href: "/content",          icon: "edit"     },
     { label: "Keywords", href: "/content/keywords", icon: "barChart" },
-    { label: "Research", href: "/content/research", icon: "folder"   },
+  ],
+  system: [
+    { label: "Health", href: "/status",             icon: "activity" },
+    { label: "Email",  href: "/status?tab=email",   icon: "chat"     },
+    { label: "Cost",   href: "/finance?tab=cost",   icon: "dollar"   },
   ],
 };
 
 export function isActiveSection(item: NavItem, pathname: string): boolean {
-  return item.active.some(r => pathMatches(r, pathname));
+  return matchingItems(ALL_NAV_ITEMS, pathname).includes(item);
 }
 
 /** The nav item whose section contains `pathname`, if any. */
 export function activeNavItem(pathname: string): NavItem | undefined {
-  return ALL_NAV_ITEMS.find(item => isActiveSection(item, pathname));
+  return matchingItems(ALL_NAV_ITEMS, pathname)[0];
 }
 
 export { activeSubPageHref };

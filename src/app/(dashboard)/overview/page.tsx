@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { AgentBadge } from "@/components/AgentBadge";
 import { AgentStatusCard, deriveAgentStatus, type AgentHealth } from "@/components/AgentStatusCard";
+import { withoutEmailSend } from "@/lib/approvalFilters";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import { StatCard } from "@/components/StatCard";
 import { EmailHealthCard } from "@/components/EmailHealthCard";
@@ -71,7 +72,7 @@ export default function OverviewPage() {
     ]);
     setStats(s);
     setActivity(Array.isArray(a) ? a : []);
-    setApprovals(Array.isArray(ap) ? ap : []);
+    setApprovals(Array.isArray(ap) ? withoutEmailSend(ap) : []); // email_send is reviewed on /approvals only (R37)
     setAgentStatus(Array.isArray(ag) ? ag : []);
     if (usage?.agents) {
       const total = (usage.agents as { todayCost: number }[]).reduce((sum, ag) => sum + ag.todayCost, 0);
@@ -113,11 +114,16 @@ export default function OverviewPage() {
     : 0;
 
   async function handleApproval(id: string, status: "approved" | "rejected" | "revision_requested", revisionNotes?: string) {
-    await fetch("/api/approvals", {
+    const res = await fetch("/api/approvals", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, status, revision_notes: revisionNotes }),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(`Failed: ${body?.error ?? `HTTP ${res.status}`}`);
+      return; // keep the card; the server refused
+    }
     setApprovals(prev => prev.filter(a => a.id !== id));
     setStats(prev => prev
       ? { ...prev, pending_approvals: Math.max(0, prev.pending_approvals - 1) }

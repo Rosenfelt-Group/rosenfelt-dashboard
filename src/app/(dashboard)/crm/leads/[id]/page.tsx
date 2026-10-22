@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { ScopeLink } from "@/components/crm/scope/ScopeLink";
 import { fetchJson } from "@/lib/fetch-json";
 import { useParams, useRouter } from "next/navigation";
 import { CRMLead, CRMActivity, CRMAssessmentResult, CRMStage, CRMServiceTier } from "@/types";
@@ -217,6 +218,11 @@ export default function LeadDetailPage() {
             {lead.contact?.email && (
               <p className="text-sm text-brand-orange mt-0.5">{lead.contact.email}</p>
             )}
+            {lead.contact_id && (
+              <Link href={`/crm/people/${lead.contact_id}`} className="text-sm text-brand-orange hover:underline mt-0.5 block">
+                Full history with this person →
+              </Link>
+            )}
             {quizUrl && (
               <a href={quizUrl} target="_blank" rel="noopener noreferrer"
                 className="text-sm text-brand-orange hover:underline mt-0.5 block">
@@ -225,6 +231,7 @@ export default function LeadDetailPage() {
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <ScopeLink leadId={lead.id} />
             {stageMeta && (
               <span className={clsx("badge", stageMeta.color)}>{stageMeta.label}</span>
             )}
