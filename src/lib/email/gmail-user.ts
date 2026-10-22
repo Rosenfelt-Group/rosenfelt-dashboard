@@ -126,7 +126,7 @@ function subjectHeader(subject: string): string {
   return `Subject:${encodeWords(subject).map((w) => `\r\n ${w}`).join("")}`;
 }
 
-/** buildRfc822 plus the Message-ID it generated, so callers can store it at send time. */
+/** buildRfc822 plus the Message-ID it generated, so callers can store it at send time. Gmail replaces this id with its own on send, so treat it as a provisional fallback. */
 export function buildRfc822Message(input: Rfc822Input): { raw: RfcMessage; messageId: string } {
   const list = (label: string, xs: MailAddress[]) => fold(label, xs.map((a) => formatAddress(label, a)).join(", "));
   const headers: string[] = [fold("From", formatAddress("From", input.from)), list("To", input.to)];
@@ -313,6 +313,11 @@ export function gmailRead() {
     },
     async getMessage(id: string): Promise<GmailMessage> {
       return parseMessage(await call<RawMessage>(getToken, `/messages/${encodeURIComponent(id)}?format=full`));
+    },
+    /** Metadata-only read of the RFC Message-ID header Gmail assigned (Gmail replaces the one we send). null if absent. */
+    async getRfcMessageId(id: string): Promise<string | null> {
+      const raw = await call<RawMessage>(getToken, `/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=Message-ID`);
+      return parseMessage(raw).headers["message-id"]?.trim() || null;
     },
     async watch(topic: string): Promise<{ historyId: string; expiration: string }> {
       return call(getToken, "/watch", { method: "POST", body: { topicName: topic, labelIds: ["INBOX", "SENT"], labelFilterBehavior: "include" } });

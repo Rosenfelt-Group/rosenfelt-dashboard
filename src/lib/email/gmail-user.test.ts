@@ -180,6 +180,21 @@ describe("clients", () => {
     expect(JSON.parse(String(calls[1].init?.body)).threadId).toBe("tid");
   });
 
+  it("getRfcMessageId reads only the Message-ID header (metadata format)", async () => {
+    vi.stubEnv("GMAIL_READ_REFRESH_TOKEN", "rt-read");
+    vi.stubEnv("GOOGLE_OAUTH_CLIENT_ID", "cid");
+    vi.stubEnv("GOOGLE_OAUTH_CLIENT_SECRET", "sec");
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("oauth2.googleapis.com/token")) return new Response(JSON.stringify({ access_token: "at", expires_in: 3600 }), { status: 200 });
+      urls.push(url);
+      return new Response(JSON.stringify({ id: "m1", threadId: "t1", payload: { headers: [{ name: "Message-Id", value: " <abc@mail.gmail.com> " }] } }), { status: 200 });
+    }));
+    expect(await gmailRead().getRfcMessageId("m1")).toBe("<abc@mail.gmail.com>");
+    expect(urls[0]).toContain("format=metadata");
+    expect(urls[0]).toContain("metadataHeaders=Message-ID");
+  });
+
   it("getHistory maps pages and tolerates empty history", async () => {
     vi.stubEnv("GMAIL_READ_REFRESH_TOKEN", "rt-read");
     vi.stubEnv("GOOGLE_OAUTH_CLIENT_ID", "cid");
