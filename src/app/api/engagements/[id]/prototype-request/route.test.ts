@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   insertResult: { data: { id: "x" }, error: null } as { data: { id: string } | null; error: { message: string } | null },
   deliverableKind: "prototype",
   workItemInserts: 0,
+  openBuilds: [] as Array<{ work_item_id: string; ref: number | null; stalled: boolean }> | null,
 }));
 
 // Chainable stub: every filter returns the same builder; single/maybeSingle/insert resolve per table.
@@ -46,6 +47,8 @@ vi.mock("@/lib/rooms/dispatch", async (importOriginal) => ({
   dispatchBeginWork: vi.fn(),
 }));
 
+vi.mock("@/lib/rooms/open-builds", () => ({ findOpenBuilds: async () => state.openBuilds }));
+
 import { POST } from "./route";
 import { dispatchBeginWork } from "@/lib/rooms/dispatch";
 
@@ -70,6 +73,7 @@ beforeEach(() => {
   state.insertResult = { data: { id: ITEM }, error: null };
   state.deliverableKind = "prototype";
   state.workItemInserts = 0;
+  state.openBuilds = [];
   process.env.DASHBOARD_BASE_URL = "https://dash.example.com";
 });
 
@@ -109,15 +113,44 @@ describe("POST prototype-request", () => {
     expect(mockDispatch).not.toHaveBeenCalled();
   });
 
-  it("returns 409 and creates no work item when the deliverable is a document", async () => {
-    state.deliverableKind = "document";
-    const res = await POST(
+  const callExisting = () =>
+    POST(
       new NextRequest(`https://evil.example/api/engagements/${ENG}/prototype-request`, {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ agent: "casey", brief: "Make it", deliverable_id: "55555555-5555-4555-8555-555555555555" }),
       }),
       { params: Promise.resolve({ id: ENG }) },
     );
+
+  it("returns 409 and creates no work item while a build for the deliverable is running", async () => {
+    state.openBuilds = [{ work_item_id: ITEM, ref: 1374, stalled: false }];
+    const res = await callExisting();
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toContain("#1374");
+    expect(body.work_item_id).toBe(ITEM);
+    expect(state.workItemInserts).toBe(0);
+    expect(mockDispatch).not.toHaveBeenCalled();
+  });
+
+  it("allows a new request when the open build has stalled", async () => {
+    state.openBuilds = [{ work_item_id: ITEM, ref: 1369, stalled: true }];
+    mockDispatch.mockResolvedValue({ dispatched: true });
+    const res = await callExisting();
+    expect(res.status).toBe(201);
+    expect(state.workItemInserts).toBe(1);
+  });
+
+  it("returns 500 and creates no work item when the running-build check fails", async () => {
+    state.openBuilds = null;
+    const res = await callExisting();
+    expect(res.status).toBe(500);
+    expect(state.workItemInserts).toBe(0);
+  });
+
+  it("returns 409 and creates no work item when the deliverable is a document", async () => {
+    state.deliverableKind = "document";
+    const res = await callExisting();
     expect(res.status).toBe(409);
     expect(state.workItemInserts).toBe(0);
     expect(mockDispatch).not.toHaveBeenCalled();

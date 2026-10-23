@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { PrototypeRequestSchema } from "@/lib/rooms/schemas";
 import { buildPrototypeBrief } from "@/lib/rooms/brief";
 import { dispatchBeginWork, dispatchBaseUrl } from "@/lib/rooms/dispatch";
+import { findOpenBuilds } from "@/lib/rooms/open-builds";
 import { requirePermission } from "@/lib/requirePermission";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -36,6 +37,17 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     if (!d) return NextResponse.json({ error: "Deliverable not found in this engagement" }, { status: 404 });
     if (d.kind !== "prototype") return NextResponse.json({ error: "That deliverable is a document; Casey only builds prototypes." }, { status: 409 });
     deliverableTitle = d.title;
+    // One build per deliverable: two parallel requests publish two drafts. A stalled build doesn't block.
+    const open = await findOpenBuilds(new Set([d.id]), Date.now());
+    if (open === null) return NextResponse.json({ error: "Could not check for a running build." }, { status: 500 });
+    const running = open.find(x => !x.stalled);
+    if (running) {
+      const label = running.ref !== null ? `#${running.ref}` : "another request";
+      return NextResponse.json(
+        { error: `A build for this deliverable is already running (${label}). Wait for it to finish.`, work_item_id: running.work_item_id },
+        { status: 409 },
+      );
+    }
   } else {
     const { data: d, error } = await rooms.from("deliverables")
       .insert({ engagement_id: id, title: deliverableTitle }).select("id").single();
