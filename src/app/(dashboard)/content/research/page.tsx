@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
+import Link from "next/link";
 import { fetchJson } from "@/lib/fetch-json";
 import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
 import clsx from "clsx";
@@ -14,6 +15,12 @@ interface Brief {
   storage_path: string | null;
   query_count: number | null;
   created_at: string;
+  links: { business_id: string; name: string }[];
+}
+
+interface Org {
+  id: string;
+  name: string;
 }
 
 interface Category {
@@ -39,12 +46,19 @@ export default function ResearchPage() {
 
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Organization briefs (Avery's per-organization research) live on the organization page; hidden by default.
+  const [showOrgBriefs, setShowOrgBriefs] = useState(false);
+  const [linkFor, setLinkFor] = useState<string | null>(null);
+  const [orgs, setOrgs] = useState<Org[] | null>(null);
+  const [orgQuery, setOrgQuery] = useState("");
+  const [linkErr, setLinkErr] = useState<string | null>(null);
+
   useEffect(() => {
     Promise.all([
       fetchJson<unknown>("/api/research/briefs"),
       fetchJson<unknown>("/api/research/categories"),
     ]).then(([briefsRes, catsRes]) => {
-      if (briefsRes.ok) setBriefs(Array.isArray(briefsRes.data) ? briefsRes.data : []);
+      if (briefsRes.ok) setBriefs(Array.isArray(briefsRes.data) ? briefsRes.data.map((b: Brief) => ({ ...b, links: b.links ?? [] })) : []);
       if (catsRes.ok) setCategories(Array.isArray(catsRes.data) ? catsRes.data : []);
       const failed = [briefsRes, catsRes].find(r => !r.ok);
       if (failed && !failed.ok) setLoadError(failed.error);
@@ -117,15 +131,48 @@ export default function ResearchPage() {
     }
   }
 
+  async function openLinkPicker(briefId: string) {
+    setLinkErr(null);
+    setOrgQuery("");
+    setLinkFor(cur => (cur === briefId ? null : briefId));
+    if (orgs) return;
+    const r = await fetchJson<unknown>("/api/crm/businesses");
+    if (r.ok && Array.isArray(r.data)) {
+      setOrgs((r.data as Org[]).map(o => ({ id: o.id, name: o.name })).sort((a, b) => a.name.localeCompare(b.name)));
+    } else setLinkErr(r.ok ? "Couldn't load organizations" : r.error);
+  }
+
+  async function setBriefLink(brief: Brief, org: Org, link: boolean) {
+    setLinkErr(null);
+    const r = await fetchJson(`/api/research/briefs/${brief.id}/links`, {
+      method: link ? "POST" : "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ business_id: org.id }),
+    });
+    if (!r.ok) { setLinkErr(r.error); return; }
+    setBriefs(prev => prev.map(b => b.id !== brief.id ? b : {
+      ...b,
+      links: link
+        ? [...b.links, { business_id: org.id, name: org.name }].sort((x, y) => x.name.localeCompare(y.name))
+        : b.links.filter(l => l.business_id !== org.id),
+    }));
+    if (link) setLinkFor(null);
+  }
+
   const filteredBriefs = briefs.filter(
     b =>
       (!catFilter || b.category === catFilter) &&
-      (!typeFilter || b.research_type === typeFilter)
+      (!typeFilter || b.research_type === typeFilter) &&
+      (showOrgBriefs || typeFilter === "business" || b.research_type !== "business")
   );
+  const hiddenOrgBriefs = showOrgBriefs ? 0 : briefs.filter(b => b.research_type === "business").length;
 
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8 max-w-5xl">
-      <PageHeader title="Research" description="Research briefs from Avery, by category." />
+      <PageHeader
+        title="Research"
+        description="Avery's briefs on products, competitors and trends. Research about one organization lives on that organization's page."
+      />
       {loadError && <ErrorState message={`Couldn't load research: ${loadError}`} className="mb-4" />}
       <div className="space-y-4">
         {/* Run research form */}
@@ -173,7 +220,17 @@ export default function ResearchPage() {
               <option value="competitor">Competitor</option>
               <option value="tool">Tool</option>
               <option value="trend">Trend</option>
+              <option value="business">Organization</option>
             </select>
+            <label className="flex items-center gap-1.5 text-xs text-brand-muted cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showOrgBriefs}
+                onChange={e => setShowOrgBriefs(e.target.checked)}
+                className="accent-brand-orange"
+              />
+              Show organization briefs{hiddenOrgBriefs ? ` (${hiddenOrgBriefs})` : ""}
+            </label>
             <div className="flex-1" />
             <button
               onClick={() => setShowManage(v => !v)}
@@ -194,7 +251,7 @@ export default function ResearchPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr>
-                  {["Topic", "Category", "Type", "Queries", "Date", "Doc"].map(h => (
+                  {["Topic", "Category", "Type", "Queries", "Date", "Doc", ""].map(h => (
                     <th
                       key={h}
                       className="text-left text-xs font-semibold text-brand-muted uppercase tracking-wider px-3 py-2.5 whitespace-nowrap"
@@ -206,9 +263,31 @@ export default function ResearchPage() {
               </thead>
               <tbody>
                 {filteredBriefs.map(b => (
-                  <tr key={b.id} className="border-t border-brand-border">
+                  <Fragment key={b.id}>
+                  <tr className="border-t border-brand-border">
                     <td className="px-3 py-2.5 text-sm text-brand-black font-medium max-w-xs">
                       {b.topic}
+                      {b.links.length > 0 && (
+                        <span className="block text-xs font-normal text-brand-muted mt-0.5">
+                          Linked to{" "}
+                          {b.links.map((l, i) => (
+                            <span key={l.business_id}>
+                              {i > 0 && ", "}
+                              <Link href={`/crm/organizations/${l.business_id}?tab=research`} className="text-brand-orange hover:underline">
+                                {l.name}
+                              </Link>
+                              <button
+                                onClick={() => setBriefLink(b, { id: l.business_id, name: l.name }, false)}
+                                className="ml-0.5 text-brand-muted hover:text-red-500"
+                                aria-label={`Unlink ${l.name}`}
+                                title="Unlink"
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          ))}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5">
                       <select
@@ -250,7 +329,52 @@ export default function ResearchPage() {
                         <span className="text-xs text-brand-muted">—</span>
                       )}
                     </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <button onClick={() => openLinkPicker(b.id)} className="text-xs text-brand-orange hover:underline">
+                        {linkFor === b.id ? "Cancel" : "Link to organization…"}
+                      </button>
+                    </td>
                   </tr>
+                  {linkFor === b.id && (
+                    <tr>
+                      <td colSpan={7} className="px-3 pb-3">
+                        <div className="border border-brand-border rounded-lg p-3 space-y-2 bg-white">
+                          <input
+                            type="text"
+                            value={orgQuery}
+                            onChange={e => setOrgQuery(e.target.value)}
+                            placeholder="Search organizations…"
+                            autoFocus
+                            className="w-full px-3 py-1.5 text-sm border border-brand-border rounded-lg focus:outline-none focus:border-brand-orange"
+                          />
+                          {linkErr && <p className="text-xs text-red-600">{linkErr}</p>}
+                          {!orgs ? (
+                            !linkErr && <p className="text-xs text-brand-muted">Loading…</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+                              {orgs
+                                .filter(o => !b.links.some(l => l.business_id === o.id))
+                                .filter(o => !orgQuery.trim() || o.name.toLowerCase().includes(orgQuery.trim().toLowerCase()))
+                                .slice(0, 60)
+                                .map(o => (
+                                  <button
+                                    key={o.id}
+                                    onClick={() => setBriefLink(b, o, true)}
+                                    className="text-xs px-2.5 py-1 rounded-full border border-brand-border hover:border-brand-orange hover:text-brand-orange"
+                                  >
+                                    {o.name}
+                                  </button>
+                                ))}
+                            </div>
+                          )}
+                          <p className="text-xs text-brand-muted">
+                            Linking a brief puts it on that organization&apos;s Research tab, where you can choose to use it in the scope.
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
