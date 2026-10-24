@@ -31,7 +31,7 @@ function useSystemAlerts(): Alert[] {
 
         for (const h of health) {
           if (h.status === "down") {
-            next.push({ level: "error", label: `${h.agent} agent is down` });
+            next.push({ level: "error", label: h.agent === "checks" ? "checks service is down" : `${h.agent} agent is down` });
           }
         }
 

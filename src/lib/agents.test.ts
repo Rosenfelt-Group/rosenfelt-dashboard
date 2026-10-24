@@ -18,6 +18,10 @@ describe("getAgentInfo", () => {
   it("returns metadata for an agent", () => {
     expect(getAgentInfo("sam").label).toBe("Sam");
   });
+  it("Casey is the prototype builder, with no chat", () => {
+    expect(getAgentInfo("casey")).toMatchObject({ role: "Design and prototypes", chat: false });
+    for (const a of ["jordan", "riley", "avery", "sam"] as const) expect(getAgentInfo(a).chat).toBe(true);
+  });
 });
 
 describe("parseTab", () => {

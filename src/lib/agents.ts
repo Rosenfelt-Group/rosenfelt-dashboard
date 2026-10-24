@@ -9,14 +9,16 @@ export type AgentInfo = {
   role: string;
   port: number;
   tools: number;
+  /** Has a dashboard chat. Casey does not: it only builds prototypes. */
+  chat: boolean;
 };
 
 export const AGENT_LIST: readonly AgentInfo[] = [
-  { name: "jordan", label: "Jordan", role: "Deploy · SSH · WordPress · n8n",     port: 8001, tools: 61 },
-  { name: "riley",  label: "Riley",  role: "Tasks · Memory · Weekly digest",     port: 8002, tools: 30 },
-  { name: "avery",  label: "Avery",  role: "Content · Audits · Research",        port: 8003, tools: 32 },
-  { name: "casey",  label: "Casey",  role: "Audit · Regression · Health checks", port: 8004, tools: 36 },
-  { name: "sam",    label: "Sam",    role: "Accounting · Legal · HR",            port: 8005, tools: 25 },
+  { name: "jordan", label: "Jordan", role: "Deploy · SSH · WordPress · n8n",     port: 8001, tools: 61, chat: true },
+  { name: "riley",  label: "Riley",  role: "Tasks · Memory · Weekly digest",     port: 8002, tools: 30, chat: true },
+  { name: "avery",  label: "Avery",  role: "Content · Audits · Research",        port: 8003, tools: 32, chat: true },
+  { name: "casey",  label: "Casey",  role: "Design and prototypes",              port: 8004, tools: 51, chat: false },
+  { name: "sam",    label: "Sam",    role: "Accounting · Legal · HR",            port: 8005, tools: 25, chat: true },
 ];
 
 export const AGENT_NAMES: readonly AgentName[] = AGENT_LIST.map(a => a.name);

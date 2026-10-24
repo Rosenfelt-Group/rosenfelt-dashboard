@@ -30,7 +30,7 @@ function AgentDetailInner({ agent }: { agent: AgentName }) {
   const canChat = permissions?.includes("use_chat") ?? false;
   const canViewIntel = permissions?.includes("view_intelligence") ?? false;
   const canManageIntel = permissions?.includes("manage_intelligence") ?? false;
-  const allowed: Partial<Record<AgentDetailTab, boolean>> = { chat: canChat, prompts: canViewIntel };
+  const allowed: Partial<Record<AgentDetailTab, boolean>> = { chat: canChat && info.chat, prompts: canViewIntel };
 
   const requested = parseTab(searchParams.get("tab"), AGENT_DETAIL_TABS);
   // Until permissions load, a ?tab=chat / ?tab=prompts link shows a loader
@@ -69,7 +69,7 @@ function AgentDetailInner({ agent }: { agent: AgentName }) {
       {tab === "status" && <AgentStatusPanel agent={agent} />}
       {tab === "history" && <AgentHistory agent={agent} />}
       {(tab === "chat" || tab === "prompts") && permissions === null && <LoadingState />}
-      {canChat && visited.has("chat") && (
+      {canChat && info.chat && visited.has("chat") && (
         <div hidden={tab !== "chat"}><AgentChat agent={agent} /></div>
       )}
       {canViewIntel && visited.has("prompts") && (

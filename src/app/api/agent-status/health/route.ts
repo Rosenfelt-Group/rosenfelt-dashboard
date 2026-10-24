@@ -8,13 +8,16 @@ const AGENTS = [
   { name: "avery",  urlVar: "AVERY_AGENT_URL",  secretVar: "AVERY_WEBHOOK_SECRET"  },
   { name: "casey",  urlVar: "CASEY_AGENT_URL",  secretVar: "CASEY_WEBHOOK_SECRET"  },
   { name: "sam",    urlVar: "SAM_AGENT_URL",    secretVar: "SAM_WEBHOOK_SECRET"    },
+  // Not an agent: the scheduled checks service. Its /health needs no secret.
+  { name: "checks", urlVar: "CHECKS_URL",       secretVar: "CHECKS_WEBHOOK_SECRET" },
 ] as const;
 
 export async function GET() {
   const results = await Promise.all(
     AGENTS.map(async ({ name, urlVar, secretVar }) => {
       const baseUrl = process.env[urlVar];
-      const secret  = process.env[secretVar] ?? process.env.JORDAN_WEBHOOK_SECRET ?? "";
+      // No Jordan fallback for checks: it has its own secret (and /health ignores it anyway).
+      const secret  = process.env[secretVar] ?? (name === "checks" ? "" : process.env.JORDAN_WEBHOOK_SECRET ?? "");
       if (!baseUrl) {
         return { agent: name, status: "unknown", latency_ms: null, detail: null, error: "URL not configured" };
       }

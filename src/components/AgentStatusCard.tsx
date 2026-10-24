@@ -7,7 +7,7 @@ const AGENT_META: Partial<Record<Agent, { name: string; role: string }>> = {
   jordan: { name: "Jordan", role: "Dev & Infra" },
   riley:  { name: "Riley",  role: "Operations" },
   avery:  { name: "Avery",  role: "Content & SEO" },
-  casey:  { name: "Casey",  role: "Audit & Integrity" },
+  casey:  { name: "Casey",  role: "Design and prototypes" },
   sam:    { name: "Sam",    role: "Accounting & Legal" },
 };
 
