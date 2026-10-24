@@ -170,7 +170,7 @@ export default function LeadDetailPage() {
     });
     setShowConvert(false);
     setSaving(false);
-    router.push("/crm/clients");
+    router.push(lead?.business_id ? `/crm/organizations/${lead.business_id}?tab=billing` : "/crm/organizations?status=client");
   }
 
   if (loading) {
@@ -209,7 +209,7 @@ export default function LeadDetailPage() {
           <div>
             <h1 className="text-lg font-semibold text-brand-black">
               {lead.business_id && lead.business ? (
-                <Link href={`/crm/businesses/${lead.business_id}`} className="hover:text-brand-orange hover:underline">
+                <Link href={`/crm/organizations/${lead.business_id}`} className="hover:text-brand-orange hover:underline">
                   {lead.business.name}
                 </Link>
               ) : (lead.business?.name ?? "—")}

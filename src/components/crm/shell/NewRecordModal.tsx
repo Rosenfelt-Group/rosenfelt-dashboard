@@ -7,7 +7,7 @@ import { Button, ErrorState, Modal } from "@/components/ui";
 import { CreateLeadModal } from "@/components/crm/CreateLeadModal";
 import { NewDiscoveryModal } from "@/components/crm/NewDiscoveryModal";
 import { NewRoomForm } from "@/components/crm/NewRoomForm";
-import { LogHoursModal } from "@/app/(dashboard)/crm/clients/[id]/_components/LogHoursModal";
+import { LogHoursModal } from "@/components/crm/client/LogHoursModal";
 import type { ClientService, CRMBusiness, CRMClient, CRMContact } from "@/types";
 import type { NewKind } from "./palette";
 

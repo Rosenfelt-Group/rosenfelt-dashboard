@@ -15,7 +15,7 @@ export function BusinessCard({ business }: { business: NonNullable<CRMLead["busi
   return (
     <div className="card">
       <h3 className="text-xs font-medium text-brand-muted uppercase tracking-wide mb-3">Business</h3>
-      <Link href={`/crm/businesses/${business.id}`} className="text-sm font-medium text-brand-orange hover:underline">
+      <Link href={`/crm/organizations/${business.id}`} className="text-sm font-medium text-brand-orange hover:underline">
         {business.name}
       </Link>
       {business.industry && (
