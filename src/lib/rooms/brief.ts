@@ -22,7 +22,7 @@ const CONTRACT = `PROTOTYPE CONTRACT (v1)
 - Limits: 10 MB total, 200 files. Semantic HTML, visible focus, readable at 375 px wide.
 - manifest.json fields: contract_version (1), title, summary, entry ("index.html"), screens [{id, name}], change_summary, addressed_comment_ids [uuid], data.
 - Build with write_bundle_file (at most 12,000 characters per call; use append=true to continue a file), then call publish_prototype_version(work_item_id, deliverable_id) — leave bundle_path empty. If it returns errors, fix them and call it again.
-- Use fetch_prior_version(work_item_id, storage_prefix) first when the request below says it is an iteration.`;
+- Use fetch_prior_version(work_item_id, storage_prefix) first when the request below says it is an iteration, then change files with edit_bundle_file(work_item_id, path, old_str, new_str) instead of rewriting them. Rewrite a whole file only when it is under 12,000 characters.`;
 
 const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const PREFIX_RE = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\/v[1-9][0-9]{0,5}$/;
