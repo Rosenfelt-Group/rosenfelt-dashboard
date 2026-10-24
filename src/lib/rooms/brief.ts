@@ -1,3 +1,4 @@
+import type { ScopeForBrief } from "./scope-for-brief";
 export interface BriefInput {
   engagementTitle: string;
   orgName: string;
@@ -7,8 +8,16 @@ export interface BriefInput {
   deliverableTitle: string;
   brief: string;
   discovery?: Record<string, unknown> | null;
+  /** The current scope document, already filtered for the builder (scope-for-brief.ts). Replaces discovery. */
+  scope?: ScopeForBrief | null;
   prior?: { versionNo: number; storagePrefix: string } | null;
   comments?: { id: string; screen_id: string; pin_x: number | null; pin_y: number | null; body: string }[];
+}
+
+function scopeText(s: ScopeForBrief): string {
+  const meta = [`version ${s.versionNo}`, s.engagementType, s.deliveryModel].filter(Boolean).join(", ");
+  const sections = s.sections.map(x => `## ${x.title}\n${x.body_md}`);
+  return [`${s.title} (${meta})`, ...sections].join("\n\n");
 }
 
 export const PROTOTYPE_REQUEST_MARKER = "ROOMS_PROTOTYPE_REQUEST v1";
@@ -72,7 +81,10 @@ export function buildPrototypeBrief(i: BriefInput): string {
     block("brian_brief", i.brief),
   ];
 
-  if (i.discovery && Object.keys(i.discovery).length > 0) {
+  // The scope document is the design input when there is one; discovery answers are the fallback.
+  if (i.scope && i.scope.sections.length > 0) {
+    parts.push("", block("scope_document", scopeText(i.scope)));
+  } else if (i.discovery && Object.keys(i.discovery).length > 0) {
     parts.push("", block("discovery_answers", JSON.stringify(i.discovery, null, 2)));
   }
 
