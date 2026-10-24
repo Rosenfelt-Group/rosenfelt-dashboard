@@ -157,7 +157,7 @@ export default function DiscoveryDetailPage() {
           actions={
             <>
               {(d.business_id ?? d.business?.id) && (
-                <Link href={`/crm/businesses/${d.business_id ?? d.business?.id}`} className="btn-ghost text-xs px-2 py-1">Business</Link>
+                <Link href={`/crm/organizations/${d.business_id ?? d.business?.id}`} className="btn-ghost text-xs px-2 py-1">Organization</Link>
               )}
               <Link href={`/crm/leads/${d.lead_id}`} className="btn-ghost text-xs px-2 py-1">Open lead</Link>
               <ScopeLink leadId={d.lead_id} />
@@ -208,7 +208,7 @@ export default function DiscoveryDetailPage() {
               <span className={clsx("badge", st.color)}>{st.label}</span>
               {expired && <span className="badge badge-error">Link expired</span>}
               {(d.business_id ?? d.business?.id) && (
-                <Link href={`/crm/businesses/${d.business_id ?? d.business?.id}`} className="btn-ghost text-xs px-2 py-1">Business</Link>
+                <Link href={`/crm/organizations/${d.business_id ?? d.business?.id}`} className="btn-ghost text-xs px-2 py-1">Organization</Link>
               )}
               <Link href={`/crm/leads/${d.lead_id}`} className="btn-ghost text-xs px-2 py-1">Open lead</Link>
               <ScopeLink leadId={d.lead_id} />

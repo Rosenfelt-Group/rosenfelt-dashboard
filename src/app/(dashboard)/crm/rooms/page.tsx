@@ -74,7 +74,7 @@ function NewRoomPanel({ onCancel }: { onCancel: () => void }) {
         ) : orgs.length === 0 ? (
           <p className="text-sm text-brand-muted">
             Add a business first.{" "}
-            <Link href="/crm/businesses" className="text-brand-orange underline">Go to Businesses</Link>
+            <Link href="/crm/organizations" className="text-brand-orange underline">Go to Organizations</Link>
           </p>
         ) : (
           <select id="room-org" value={businessId} onChange={e => setBusinessId(e.target.value)}
@@ -163,7 +163,7 @@ export default function RoomsPage() {
                   </td>
                   <td className="px-4 py-3">
                     {r.business
-                      ? <Link href={`/crm/businesses/${r.business_id}`} className="text-brand-black hover:text-brand-orange">{r.business.name}</Link>
+                      ? <Link href={`/crm/organizations/${r.business_id}?tab=engagement`} className="text-brand-black hover:text-brand-orange">{r.business.name}</Link>
                       : <span className="text-brand-muted">—</span>}
                   </td>
                   <td className="px-4 py-3 text-brand-muted">{relLabel(r.relationship)}</td>

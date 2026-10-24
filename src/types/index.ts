@@ -199,6 +199,8 @@ export interface CRMBusiness {
   email?: string;
   source?: CRMSource;
   notes?: string;
+  /** Manual relationship status override (2026-10-25_e_organizations.sql); null = derived. */
+  relationship?: string | null;
   created_at: string;
   updated_at: string;
 }
