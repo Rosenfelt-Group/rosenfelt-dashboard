@@ -4,10 +4,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import clsx from "clsx";
 import NotificationBell from "./NotificationBell";
+import { usePolling } from "@/lib/use-polling";
 import {
   Icon,
   RosablyIcon,
   NavItem,
+  SubPage,
   NAV_GROUPS,
   ALL_NAV_ITEMS,
   SUB_PAGES,
@@ -42,6 +44,40 @@ function usePendingApprovalsCount(): number {
   return count;
 }
 
+// Sub-page badges (SubPage.badge). The desktop sidebar and the mobile sub-nav
+// both show them, so the count is cached here and fetched at most every 10s.
+const inboxCount = { value: 0, at: 0, inflight: null as Promise<number> | null };
+
+function fetchInboxCount(): Promise<number> {
+  if (Date.now() - inboxCount.at < 10_000) return Promise.resolve(inboxCount.value);
+  inboxCount.inflight ??= fetch("/api/crm/inbox?count=1")
+    .then(r => (r.ok ? r.json() : null))
+    .then(j => {
+      if (typeof j?.count === "number") inboxCount.value = j.count;
+      inboxCount.at = Date.now();
+      return inboxCount.value;
+    })
+    .catch(() => inboxCount.value)
+    .finally(() => { inboxCount.inflight = null; });
+  return inboxCount.inflight;
+}
+
+type SubPageBadges = Partial<Record<NonNullable<SubPage["badge"]>, number>>;
+
+/** Badge counts for the sub-pages of the section at `pathname`. Only the CRM has any. */
+function useSubPageBadges(pathname: string): SubPageBadges {
+  const enabled = activeNavItem(pathname)?.id === "crm";
+  const [inbox, setInbox] = useState(0);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    fetchInboxCount().then(n => { if (!cancelled) setInbox(n); });
+    return () => { cancelled = true; };
+  }, [enabled, pathname]);
+  usePolling(() => { fetchInboxCount().then(setInbox); }, 60_000, enabled);
+  return { inbox };
+}
+
 function NavBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
@@ -57,11 +93,13 @@ function DesktopGroup({
   items,
   pathname,
   approvalsCount,
+  badges = {},
   muted,
 }: {
   items: NavItem[];
   pathname: string;
   approvalsCount: number;
+  badges?: SubPageBadges;
   muted?: boolean;
 }) {
   return (
@@ -95,13 +133,14 @@ function DesktopGroup({
                       key={page.href}
                       href={page.href}
                       className={clsx(
-                        "px-2.5 h-7 flex items-center rounded-md text-[12px] transition-colors",
+                        "px-2.5 h-7 flex items-center gap-1.5 rounded-md text-[12px] transition-colors",
                         subActive
                           ? "text-brand-orange font-medium"
                           : "text-brand-muted hover:text-brand-black"
                       )}
                     >
                       {page.label}
+                      {page.badge && <NavBadge count={badges[page.badge] ?? 0} />}
                     </Link>
                   );
                 })}
@@ -114,9 +153,10 @@ function DesktopGroup({
   );
 }
 
-function DesktopSidebar({ pathname, approvalsCount, onLogout }: {
+function DesktopSidebar({ pathname, approvalsCount, badges, onLogout }: {
   pathname: string;
   approvalsCount: number;
+  badges: SubPageBadges;
   onLogout: () => void;
 }) {
   return (
@@ -130,7 +170,7 @@ function DesktopSidebar({ pathname, approvalsCount, onLogout }: {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 flex flex-col gap-4 min-h-0">
-        <DesktopGroup items={NAV_GROUPS.primary} pathname={pathname} approvalsCount={approvalsCount} />
+        <DesktopGroup items={NAV_GROUPS.primary} pathname={pathname} approvalsCount={approvalsCount} badges={badges} />
       </nav>
 
       {/* Secondary — anchored to bottom, de-emphasized (lower-frequency pages) */}
@@ -220,6 +260,7 @@ function NavStrip({ pathname, approvalsCount, onLogout }: {
  * Below 900px only; the desktop sidebar lists them under the active item. */
 export function SectionSubNav() {
   const pathname = usePathname();
+  const badges = useSubPageBadges(pathname);
   const item = activeNavItem(pathname);
   const pages = item ? SUB_PAGES[item.id] : undefined;
   if (!pages) return null;
@@ -235,13 +276,14 @@ export function SectionSubNav() {
           href={page.href}
           aria-current={page.href === current ? "page" : undefined}
           className={clsx(
-            "px-3 h-8 flex items-center rounded-md text-[13px] whitespace-nowrap shrink-0 transition-colors",
+            "px-3 h-8 flex items-center gap-1.5 rounded-md text-[13px] whitespace-nowrap shrink-0 transition-colors",
             page.href === current
               ? "bg-orange-50 text-brand-orange font-medium"
               : "text-brand-muted hover:text-brand-black"
           )}
         >
           {page.label}
+          {page.badge && <NavBadge count={badges[page.badge] ?? 0} />}
         </Link>
       ))}
     </nav>
@@ -254,6 +296,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const approvalsCount = usePendingApprovalsCount();
+  const badges = useSubPageBadges(pathname);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -262,7 +305,7 @@ export function Sidebar() {
 
   return (
     <>
-      <DesktopSidebar pathname={pathname} approvalsCount={approvalsCount} onLogout={handleLogout} />
+      <DesktopSidebar pathname={pathname} approvalsCount={approvalsCount} badges={badges} onLogout={handleLogout} />
       <NavStrip pathname={pathname} approvalsCount={approvalsCount} onLogout={handleLogout} />
     </>
   );

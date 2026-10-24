@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
 import { fetchJson } from "@/lib/fetch-json";
-import { Button, EmptyState, ErrorState, LoadingState, Modal, PageHeader } from "@/components/ui";
+import { Button, EmptyState, ErrorState, LoadingState, Modal } from "@/components/ui";
+import { SettingsSection } from "./SettingsSection";
 import type { ServiceTemplate, ServiceBillingType, ServiceBillingInterval } from "@/types";
 
 const BILLING_TYPES: ServiceBillingType[] = ["recurring", "one_time", "tm"];
@@ -16,7 +17,8 @@ const BLANK_FORM = {
   is_taxable: false,
 };
 
-export default function ServiceCatalogPage() {
+/** CRM settings → Service catalog (was /crm/admin/services). */
+export function ServiceCatalog() {
   const [templates, setTemplates] = useState<ServiceTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -96,9 +98,7 @@ export default function ServiceCatalogPage() {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <PageHeader
-        title="Service catalog"
+    <SettingsSection
         description={`Service templates available for client billing. ${templates.length} defined.`}
         actions={
           isAdmin && (
@@ -107,7 +107,7 @@ export default function ServiceCatalogPage() {
             </Button>
           )
         }
-      />
+    >
 
       {err && !showAdd && (
         <div className="text-xs text-red-700 bg-red-50 border border-red-100 rounded px-3 py-2 mb-3">
@@ -237,6 +237,6 @@ export default function ServiceCatalogPage() {
           {err && <div className="text-xs text-red-700">{err}</div>}
         </div>
       </Modal>
-    </div>
+    </SettingsSection>
   );
 }

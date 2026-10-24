@@ -6,6 +6,7 @@ import { fetchJson } from "@/lib/fetch-json";
 import { usePolling } from "@/lib/use-polling";
 import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui";
 import type { InboxItem } from "@/lib/crm/inbox";
+import { ContactPicker } from "./_components/ContactPicker";
 
 type Resolve = { contact_id: string };
 
@@ -16,7 +17,6 @@ export default function InboxPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [rowErr, setRowErr] = useState<Record<string, string>>({});
   const [picking, setPicking] = useState<string | null>(null);
-  const [pickId, setPickId] = useState("");
   const [done, setDone] = useState<Record<string, string>>({}); // unmatched id -> contact id
 
   const load = useCallback(async (silent = false) => {
@@ -28,7 +28,7 @@ export default function InboxPage() {
   useEffect(() => { load().finally(() => setLoading(false)); }, [load]);
   usePolling(() => load(true), 20_000, !busy);
 
-  async function resolve(item: InboxItem, body: { contact_id?: string; create?: { email: string; name?: string } }) {
+  async function resolve(item: InboxItem, body: { contact_id?: string; create?: { email: string; name?: string; org?: string } }) {
     if (busy) return;
     setBusy(item.id);
     setRowErr((e) => ({ ...e, [item.id]: "" }));
@@ -75,21 +75,17 @@ export default function InboxPage() {
                 <Button size="sm" variant="secondary" disabled={busy === it.id} onClick={() => resolve(it, { create: { email: it.contact_email, name: it.from_name ?? undefined } })}>
                   Create new person
                 </Button>
-                <Button size="sm" variant="ghost" disabled={busy === it.id} onClick={() => { setPicking(picking === it.id ? null : it.id); setPickId(""); }}>
+                <Button size="sm" variant="ghost" disabled={busy === it.id} aria-expanded={picking === it.id} onClick={() => setPicking(picking === it.id ? null : it.id)}>
                   Link to existing…
                 </Button>
               </div>
               {picking === it.id && (
-                <div className="flex gap-2 items-center">
-                  <input
-                    className="flex-1 border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                    placeholder="Contact id (from the person page URL)"
-                    aria-label="Contact id"
-                    value={pickId}
-                    onChange={(e) => setPickId(e.target.value.trim())}
-                  />
-                  <Button size="sm" disabled={!pickId || busy === it.id} onClick={() => resolve(it, { contact_id: pickId })}>Link</Button>
-                </div>
+                <ContactPicker
+                  disabled={busy === it.id}
+                  createAt={it.suggested_org?.name ?? null}
+                  onPick={(contactId) => resolve(it, { contact_id: contactId })}
+                  onCreateAt={() => resolve(it, { create: { email: it.contact_email, name: it.from_name ?? undefined, org: it.suggested_org!.name } })}
+                />
               )}
               {rowErr[it.id] && <p role="alert" className="text-xs text-red-700">{rowErr[it.id]}</p>}
             </div>

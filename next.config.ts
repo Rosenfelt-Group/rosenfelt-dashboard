@@ -21,6 +21,11 @@ const nextConfig: NextConfig = {
       { source: "/rbac",                destination: "/tools?tab=roles",           permanent: false },
       { source: "/sql",                 destination: "/tools?tab=sql",             permanent: false },
       { source: "/engineering",         destination: "/tools?tab=terminal",        permanent: false },
+      // 2026-10-24 CRM refresh: setup pages moved into CRM settings. Exact paths
+      // only, so /crm/discovery/templates/[id] (the template editor) still works.
+      { source: "/crm/admin/services",       destination: "/crm/settings?tab=services",  permanent: false },
+      { source: "/crm/discovery/questions",  destination: "/crm/settings?tab=questions", permanent: false },
+      { source: "/crm/discovery/templates",  destination: "/crm/settings?tab=templates", permanent: false },
     ];
   },
   experimental: {

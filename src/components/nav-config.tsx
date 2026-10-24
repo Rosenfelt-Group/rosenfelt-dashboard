@@ -33,7 +33,7 @@ export interface NavItem {
 
 export const NAV_GROUPS: { primary: NavItem[]; secondary: NavItem[] } = {
   primary: [
-    { id: "crm",      label: "CRM",      href: "/crm",              icon: "users",      active: ["/crm", "/engagements"] },
+    { id: "crm",      label: "CRM",      href: "/crm/today",        icon: "users",      active: ["/crm", "/engagements"] },
     { id: "research", label: "Research", href: "/content/research", icon: "folder",     active: ["/content/research"] },
     { id: "content",  label: "Content",  href: "/content",          icon: "edit",       active: ["/content"] },
     { id: "calendar", label: "Calendar", href: "/marketing",        icon: "trendingUp", active: ["/marketing"] },
@@ -57,21 +57,24 @@ export interface SubPage {
   label: string;
   href: string;
   icon: string;
-  /** Extra path prefixes that highlight this sub-page (e.g. Rooms for /engagements). */
+  /** Extra path prefixes that highlight this sub-page (e.g. /crm/people for People). */
   match?: string[];
+  /** A live count shown next to the label (Sidebar.tsx loads it). */
+  badge?: "inbox";
 }
 
+// CRM refresh (2026-10-24): Today · Pipeline · Organizations · People · Inbox,
+// plus CRM settings. Discovery, Scope and Rooms left the nav: they are reached
+// from a deal or an organization, so their pages light up the sub-page they
+// belong to. Pipeline (/crm) is the fallback for any other /crm page.
 export const SUB_PAGES: Record<string, SubPage[]> = {
   crm: [
-    { label: "Pipeline",   href: "/crm",                 icon: "kanban" },
-    { label: "People",     href: "/crm/contacts",        icon: "users",  match: ["/crm/people"] },
-    { label: "Inbox",      href: "/crm/inbox",           icon: "edit"   },
-    { label: "Discovery",  href: "/crm/discovery",       icon: "edit"   },
-    { label: "Scope",      href: "/crm/scope",           icon: "folder" },
-    { label: "Rooms",      href: "/crm/rooms",           icon: "folder", match: ["/engagements"] },
-    { label: "Businesses", href: "/crm/businesses",      icon: "folder" },
-    { label: "Clients",    href: "/crm/clients",         icon: "users"  },
-    { label: "Services",   href: "/crm/admin/services",  icon: "package" },
+    { label: "Today",         href: "/crm/today",         icon: "check"  },
+    { label: "Pipeline",      href: "/crm",               icon: "kanban", match: ["/crm/leads", "/crm/discovery", "/crm/scope"] },
+    { label: "Organizations", href: "/crm/organizations", icon: "folder", match: ["/crm/businesses", "/crm/clients", "/crm/rooms", "/engagements"] },
+    { label: "People",        href: "/crm/contacts",      icon: "users",  match: ["/crm/people"] },
+    { label: "Inbox",         href: "/crm/inbox",         icon: "chat",   badge: "inbox" },
+    { label: "CRM settings",  href: "/crm/settings",      icon: "wrench", match: ["/crm/admin/services", "/crm/discovery/questions", "/crm/discovery/templates"] },
   ],
   content: [
     { label: "Ideas",    href: "/content",          icon: "edit"     },

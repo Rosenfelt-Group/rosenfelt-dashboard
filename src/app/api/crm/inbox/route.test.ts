@@ -45,7 +45,7 @@ vi.mock("@/lib/supabase-admin", () => ({
             if (Array.isArray(data())) for (const r of data() as Record<string, unknown>[]) if (ids.includes(r.id as string)) Object.assign(r, patch);
             return res({ data: s.updateRows, error: null });
           }
-          return res({ data: Array.isArray(data()) ? data() : [], error: null });
+          return res({ data: Array.isArray(data()) ? data() : [], error: null, count: Array.isArray(data()) ? (data() as unknown[]).length : 0 });
         };
         return b;
       },
@@ -81,6 +81,22 @@ describe("GET /api/crm/inbox", () => {
     expect(s.calls[upd].args[0]).toMatchObject({ suggested_contact_id: C1 });
     expect((s.calls[upd].args[0] as Record<string, unknown>).suggestion_checked_at).toEqual(expect.any(String));
     expect(s.calls.filter((c) => c.table === "unmatched_email_log" && c.op === "is").map((c) => c.args)).toContainEqual(["suggestion_checked_at", null]);
+  });
+
+  it("?count=1 returns the unresolved count without computing suggestions", async () => {
+    s.tables.unmatched_email_log = [{ id: U1 }, { id: U2 }];
+    const res = await GET(new NextRequest("http://x/api/crm/inbox?count=1"));
+    expect(await res.json()).toEqual({ count: 2 });
+    expect(s.calls.find((c) => c.op === "select")?.args).toEqual(["id", { count: "exact", head: true }]);
+    expect(s.calls.filter((c) => c.op === "is").map((c) => c.args)).toEqual([["resolved_at", null]]);
+    expect(s.calls.some((c) => c.table === "contacts" || c.op === "update")).toBe(false);
+  });
+
+  it("includes the suggested contact's organization", async () => {
+    s.tables.unmatched_email_log = [{ id: U1, email_message_id: MSG, contact_email: "new@acme.org", direction: "received", subject: "Hello", snippet: "snip", timestamp: "2026-01-01T00:00:00Z", suggested_contact_id: null, suggestion_checked_at: null, message: null }];
+    s.tables.contacts = [{ id: C1, first_name: "Pat", last_name: "Lee", email_norm: "pat@acme.org", business: { id: L1, name: "Acme" } }];
+    const body = await (await GET(new NextRequest("http://x/api/crm/inbox"))).json();
+    expect(body.items[0]).toMatchObject({ suggested_contact: { id: C1 }, suggested_org: { id: L1, name: "Acme" } });
   });
 
   it("suggestions_not_recomputed_on_second_fetch (also when nothing was found)", async () => {
