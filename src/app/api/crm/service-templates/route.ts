@@ -6,7 +6,7 @@ import { requirePermission } from "@/lib/requirePermission";
 
 // GET /api/crm/service-templates
 // Lists all service templates ordered by name. Used by admin services page +
-// the "Add Service to Client" modal on /crm/clients/[id].
+// the "Add service" modal on the organization Billing tab.
 export async function GET(req: NextRequest) {
   const guard = await requirePermission(req, "view_crm");
   if (!guard.ok) return guard.response;

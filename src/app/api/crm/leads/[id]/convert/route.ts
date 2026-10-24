@@ -10,7 +10,7 @@ export async function POST(
   if (!guard.ok) return guard.response;
 
   const { id } = await params;
-  const { service_tier, contract_start, monthly_value } = await req.json();
+  const { service_tier, contract_start } = await req.json().catch(() => ({}));
 
   const { data: lead, error: leadError } = await supabaseAdmin
     .schema("crm")
@@ -28,9 +28,9 @@ export async function POST(
       lead_id: lead.id,
       business_id: lead.business_id,
       contact_id: lead.contact_id,
-      service_tier,
+      // service_tier and monthly_value were dropped from crm.clients (2026-05-26); services and rates live
+      // in crm.client_services, added on the organization's Billing tab.
       contract_start: contract_start || null,
-      monthly_value: monthly_value || null,
       billing_status: "active",
     })
     .select()
