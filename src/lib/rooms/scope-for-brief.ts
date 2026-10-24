@@ -62,7 +62,8 @@ export async function findScopeForEngagement(eng: EngagementRef): Promise<ScopeF
   for (const filters of lookups) {
     let q = crm.from("scope_documents")
       .select("title, engagement_type, delivery_model, current_version_id")
-      .not("current_version_id", "is", null);
+      .not("current_version_id", "is", null)
+      .is("deleted_at", null);
     for (const [col, val] of filters) q = q.eq(col, val);
     const { data: doc, error } = await q.order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (error) throw error;

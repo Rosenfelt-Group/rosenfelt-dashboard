@@ -173,6 +173,14 @@ describe("POST /api/crm/inbox", () => {
     expect((await res.json()).error).toMatch(/already resolved/i);
   });
 
+  it("409 when the chosen contact is in Trash, and nothing is stored", async () => {
+    s.tables.unmatched_email_log = { id: U1, email_message_id: MSG, contact_email: "new@acme.org", resolved_at: null };
+    s.tables.email_messages = message;
+    s.tables.contacts = { id: C1, email_norm: "pat@acme.org", deleted_at: "2026-10-25T00:00:00Z" };
+    expect((await post({ unmatched_id: U1, contact_id: C1 })).status).toBe(409);
+    expect(s.rpcs).toEqual([]);
+  });
+
   it("409 when already resolved, 404 when missing", async () => {
     s.tables.unmatched_email_log = { id: U1, email_message_id: MSG, contact_email: "x@y.co", resolved_at: "2026-01-01T00:00:00Z" };
     expect((await post({ unmatched_id: U1, contact_id: C1 })).status).toBe(409);

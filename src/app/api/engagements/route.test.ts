@@ -13,7 +13,7 @@ function chain(schema: string, table: string) {
   state.calls.push(call);
   const result = () => (table === "engagements" ? state.engagements : state.businesses);
   const b: Record<string, unknown> = {};
-  for (const m of ["select", "order", "eq", "in", "limit"]) {
+  for (const m of ["select", "order", "eq", "in", "limit", "is"]) {
     b[m] = (...args: unknown[]) => { call.ops.push([m, args]); return b; };
   }
   b.then = (res: (v: Result) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(result()).then(res, rej);

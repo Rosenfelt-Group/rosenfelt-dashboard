@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { requirePermission } from "@/lib/requirePermission";
+import { parseTrashTarget } from "@/lib/crm/trash";
+import { softDelete } from "@/lib/crm/trash-server";
 import { parseNextStep } from "@/lib/crm/next-step";
 
 export async function GET(
@@ -56,12 +58,10 @@ export async function DELETE(
   const guard = await requirePermission(req, "manage_crm");
   if (!guard.ok) return guard.response;
 
+  // Soft delete: the deal and its discovery invites go to Trash (restorable for 30 days).
   const { id } = await params;
-  const { error } = await supabaseAdmin
-    .schema("crm")
-    .from("leads")
-    .delete()
-    .eq("id", id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return new NextResponse(null, { status: 204 });
+  const parsed = parseTrashTarget({ kind: "lead", id });
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const res = await softDelete("lead", parsed.value.id, guard.username);
+  return res.ok ? new NextResponse(null, { status: 204 }) : res;
 }

@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
   const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 1000) : 200;
   let q = rooms().from("engagements")
     .select("id, business_id, relationship, title, status, modules, created_by, created_at")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(limit);
   if (businessId) q = q.eq("business_id", businessId);

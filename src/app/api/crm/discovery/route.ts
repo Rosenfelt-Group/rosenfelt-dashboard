@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
   const leadId = req.nextUrl.searchParams.get("lead_id");
   const businessId = req.nextUrl.searchParams.get("business_id");
-  let q = supabaseAdmin.schema("crm").from("discovery_invites").select(LIST_SELECT).order("created_at", { ascending: false });
+  let q = supabaseAdmin.schema("crm").from("discovery_invites").select(LIST_SELECT).is("deleted_at", null).order("created_at", { ascending: false });
   if (leadId) q = q.eq("lead_id", leadId);
   if (businessId) q = q.eq("business_id", businessId);
   const { data, error } = await q;
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
   let contactId: string | undefined;
 
   if (leadId) {
-    const { data: lead, error } = await crm.from("leads").select("id, business_id, contact_id").eq("id", leadId).single();
+    const { data: lead, error } = await crm.from("leads").select("id, business_id, contact_id").eq("id", leadId).is("deleted_at", null).single();
     if (error || !lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     businessId = lead.business_id ?? undefined;
     contactId = lead.contact_id ?? undefined;
