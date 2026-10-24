@@ -69,3 +69,21 @@ BEGIN
   ASSERT (b->>'created_lead')::boolean, 'lost-only contact gets a new lead';
   ASSERT NOT (b->>'existing_client')::boolean, 'existing_client false';
 END $$;
+
+-- intake_existing_client_org_name_alone_not_trusted
+DO $$
+DECLARE a jsonb; b jsonb; c jsonb;
+BEGIN
+  a := crm.intake_lead('{"channel":"manual","email":"ed@client-six.org","name":"Ed","org":"Client Six"}'::jsonb);
+  UPDATE crm.leads SET stage = 'won' WHERE id = (a->>'lead_id')::uuid;
+  -- a new address on another domain that only names the org
+  b := crm.intake_lead('{"channel":"contact_form","email":"someone@elsewhere.example","org":"Client Six","summary":"hi"}'::jsonb);
+  ASSERT b->>'business_id' = a->>'business_id', 'org name still matches the business (unchanged)';
+  ASSERT b->>'lead_id' <> a->>'lead_id', 'must not land on the client''s won lead';
+  ASSERT (b->>'created_lead')::boolean, 'opens a new lead instead';
+  ASSERT NOT (b->>'existing_client')::boolean, 'existing_client false';
+  -- free-mail with the org name is not trusted either
+  c := crm.intake_lead('{"channel":"ebook","email":"six.fan@gmail.com","org":"Client Six"}'::jsonb);
+  ASSERT c->>'lead_id' <> a->>'lead_id', 'free-mail + org name must not land on the won lead';
+  ASSERT NOT (c->>'existing_client')::boolean, 'existing_client false for free-mail';
+END $$;
