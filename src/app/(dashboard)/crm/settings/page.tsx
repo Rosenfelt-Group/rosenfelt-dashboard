@@ -1,6 +1,6 @@
 "use client";
 import { Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { EmptyState, LoadingState, PageHeader, Tabs } from "@/components/ui";
 import { ServiceCatalog } from "@/components/crm/settings/ServiceCatalog";
 import { QuestionBank } from "@/components/crm/settings/QuestionBank";
@@ -20,13 +20,15 @@ function parseTab(raw: string | null): Tab {
 
 function CrmSettings() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const tab = parseTab(searchParams.get("tab"));
 
+  // The native history API (which Next keeps useSearchParams in sync with) rather than
+  // router.replace: switching tabs needs no server round trip, and router.replace with only a new
+  // query stayed on the old URL after a page was loaded with ?tab= (seen on Next 16.2.4).
   function setTab(id: Tab) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", id);
-    router.replace(`?${params.toString()}`);
+    window.history.replaceState(null, "", `?${params.toString()}`);
   }
 
   return (

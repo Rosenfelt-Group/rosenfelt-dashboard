@@ -1,9 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui";
-import { CommandPalette } from "./CommandPalette";
-import { NewRecordModal } from "./NewRecordModal";
 import { NEW_ITEMS, type NewKind } from "./palette";
+
+// Loaded on first use, so every CRM page doesn't ship the palette and all the create dialogs.
+const CommandPalette = dynamic(() => import("./CommandPalette").then(m => m.CommandPalette), { ssr: false });
+const NewRecordModal = dynamic(() => import("./NewRecordModal").then(m => m.NewRecordModal), { ssr: false });
 
 /** The bar above every CRM page: ⌘K search and the + New menu. */
 export function CrmToolbar() {
