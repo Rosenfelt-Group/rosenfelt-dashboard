@@ -1,10 +1,10 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { DiscoveryNav } from "@/components/crm/discovery/DiscoveryNav";
 import { EMPTY_QUESTION, INPUT, QuestionDraft, QuestionForm, TYPE_LABEL } from "@/components/crm/discovery/QuestionForm";
 import { fetchJson } from "@/lib/fetch-json";
-import { Button, EmptyState, ErrorState, LoadingState, Modal, PageHeader } from "@/components/ui";
+import { Button, EmptyState, ErrorState, LoadingState, Modal } from "@/components/ui";
+import { SettingsSection } from "./SettingsSection";
 import { DiscoveryQuestion } from "@/types";
 import { questionSearchText } from "@/lib/discovery/bank";
 
@@ -12,7 +12,8 @@ function toDraft(q: DiscoveryQuestion): QuestionDraft {
   return { label: q.label, help: q.help ?? "", type: q.type, required: q.required, options: q.options ?? [], config: q.config ?? {}, section: q.section };
 }
 
-export default function QuestionBankPage() {
+/** CRM settings → Question bank (was /crm/discovery/questions). */
+export function QuestionBank() {
   const [rows, setRows] = useState<DiscoveryQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -63,13 +64,10 @@ export default function QuestionBankPage() {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <PageHeader
-        title="Question bank"
+    <SettingsSection
         description={`Reusable questions for templates and drafts · ${rows.filter(r => !r.archived_at).length} active`}
-        actions={<Button onClick={() => { setError(""); setEditing("new"); }}>+ New question</Button>}
-      />
-      <DiscoveryNav />
+        actions={<Button size="sm" onClick={() => { setError(""); setEditing("new"); }}>+ New question</Button>}
+    >
 
       <div className="flex gap-3 items-center mb-4 flex-wrap">
         <input className={clsx(INPUT, "max-w-sm")} placeholder="Search questions…" value={search} onChange={e => setSearch(e.target.value)} />
@@ -123,6 +121,6 @@ export default function QuestionBankPage() {
           />
         </Modal>
       )}
-    </div>
+    </SettingsSection>
   );
 }

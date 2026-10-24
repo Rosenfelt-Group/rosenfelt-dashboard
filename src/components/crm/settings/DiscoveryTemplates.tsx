@@ -4,13 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
-import { DiscoveryNav } from "@/components/crm/discovery/DiscoveryNav";
 import { INPUT, LABEL } from "@/components/crm/discovery/QuestionForm";
 import { fetchJson } from "@/lib/fetch-json";
-import { Button, EmptyState, ErrorState, LoadingState, Modal, PageHeader } from "@/components/ui";
+import { Button, EmptyState, ErrorState, LoadingState, Modal } from "@/components/ui";
+import { SettingsSection } from "./SettingsSection";
 import { DiscoveryTemplate } from "@/types";
 
-export default function TemplatesPage() {
+/** CRM settings → Discovery templates (was /crm/discovery/templates). Each template opens
+ * in its editor at /crm/discovery/templates/[id]. */
+export function DiscoveryTemplates() {
   const router = useRouter();
   const [rows, setRows] = useState<DiscoveryTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,13 +46,10 @@ export default function TemplatesPage() {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <PageHeader
-        title="Templates"
+    <SettingsSection
         description="Starting points for new discovery questionnaires"
-        actions={<Button onClick={() => { setName(""); setCopyFrom(""); setError(""); setCreating(true); }}>+ New template</Button>}
-      />
-      <DiscoveryNav />
+        actions={<Button size="sm" onClick={() => { setName(""); setCopyFrom(""); setError(""); setCreating(true); }}>+ New template</Button>}
+    >
 
       <label className="flex items-center gap-2 text-xs text-brand-muted mb-4">
         <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} /> Show archived
@@ -106,6 +105,6 @@ export default function TemplatesPage() {
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
       </Modal>
-    </div>
+    </SettingsSection>
   );
 }

@@ -5,8 +5,8 @@ import clsx from "clsx";
 
 const LINKS = [
   { href: "/crm/discovery", label: "Questionnaires" },
-  { href: "/crm/discovery/templates", label: "Templates" },
-  { href: "/crm/discovery/questions", label: "Question bank" },
+  { href: "/crm/settings?tab=templates", label: "Templates" },
+  { href: "/crm/settings?tab=questions", label: "Question bank" },
 ];
 
 export function DiscoveryNav() {

@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/requirePermission";
-import { InboxError, listInbox, resolveUnmatched } from "@/lib/crm/inbox";
+import { countInbox, InboxError, listInbox, resolveUnmatched } from "@/lib/crm/inbox";
 
 export async function GET(req: NextRequest) {
   const guard = await requirePermission(req, "view_crm");
   if (!guard.ok) return guard.response;
   try {
+    // ?count=1 is the cheap nav-badge query; the full list also computes suggestions.
+    if (new URL(req.url).searchParams.get("count") === "1") return NextResponse.json({ count: await countInbox() });
     return NextResponse.json({ items: await listInbox() });
   } catch (e) {
     console.error("inbox list failed:", e);

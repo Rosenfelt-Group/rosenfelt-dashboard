@@ -80,7 +80,7 @@ export default function PersonPage() {
     <div className="p-4 md:p-8 max-w-4xl pb-24 md:pb-8 space-y-4">
       <div className="card">
         <h1 className="text-lg font-semibold text-brand-black">{name}</h1>
-        {contact.business && <p className="text-sm text-brand-muted"><Link href={`/crm/businesses/${contact.business.id}`} className="hover:text-brand-orange hover:underline">{contact.business.name}</Link></p>}
+        {contact.business && <p className="text-sm text-brand-muted"><Link href={`/crm/organizations/${contact.business.id}`} className="hover:text-brand-orange hover:underline">{contact.business.name}</Link></p>}
         {contact.email && <p className="text-sm text-brand-orange">{contact.email}</p>}
       </div>
       {isAdmin && (

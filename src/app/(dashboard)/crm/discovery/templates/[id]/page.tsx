@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import clsx from "clsx";
-import { DiscoveryNav } from "@/components/crm/discovery/DiscoveryNav";
 import { INPUT, LABEL } from "@/components/crm/discovery/QuestionForm";
 import { QuestionnaireOutline } from "@/components/crm/discovery/QuestionnaireOutline";
 import { BankPicker } from "@/components/crm/discovery/BankPicker";
@@ -128,7 +127,7 @@ export default function TemplateEditorPage() {
     return (
       <div className="p-8">
         <ErrorState message={`Couldn't load the template: ${loadError}`} />
-        <Link href="/crm/discovery/templates" className="text-brand-orange text-sm mt-2 block">← Templates</Link>
+        <Link href="/crm/settings?tab=templates" className="text-brand-orange text-sm mt-2 block">← Templates</Link>
       </div>
     );
   }
@@ -136,7 +135,7 @@ export default function TemplateEditorPage() {
     return (
       <div className="p-8">
         <p className="text-brand-muted">Template not found.</p>
-        <Link href="/crm/discovery/templates" className="text-brand-orange text-sm mt-2 block">← Templates</Link>
+        <Link href="/crm/settings?tab=templates" className="text-brand-orange text-sm mt-2 block">← Templates</Link>
       </div>
     );
   }
@@ -145,8 +144,7 @@ export default function TemplateEditorPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl pb-24 md:pb-8">
-      <DiscoveryNav />
-      <Link href="/crm/discovery/templates" className="text-xs text-brand-muted hover:text-brand-black">← Templates</Link>
+      <Link href="/crm/settings?tab=templates" className="text-xs text-brand-muted hover:text-brand-black">← Templates</Link>
 
       <div className="card mt-2 mb-4 space-y-4">
         <PageHeader

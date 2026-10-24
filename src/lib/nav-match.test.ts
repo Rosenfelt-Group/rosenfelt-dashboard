@@ -74,21 +74,101 @@ describe("nav covers every dashboard route", () => {
       for (const p of pages) expect(patterns.some(re => re.test(p.href.split("?")[0])), p.href).toBe(true);
   });
 
-  it("sub-pages map people, scope and engagements into the CRM", () => {
-    const crm = SUB_PAGES.crm;
-    expect(activeSubPageHref(crm, "/crm/people/abc")).toBe("/crm/contacts");
-    expect(activeSubPageHref(crm, "/crm/scope/abc")).toBe("/crm/scope");
-    expect(activeSubPageHref(crm, "/engagements/abc")).toBe("/crm/rooms");
+});
+
+describe("CRM sub-pages after the 2026-10-24 refresh", () => {
+  const crm = SUB_PAGES.crm;
+  const at = (path: string) => activeSubPageHref(crm, path);
+
+  it("lists Today, Pipeline, Organizations, People, Inbox and CRM settings", () => {
+    expect(crm.map(p => [p.label, p.href])).toEqual([
+      ["Today", "/crm/today"],
+      ["Pipeline", "/crm"],
+      ["Organizations", "/crm/organizations"],
+      ["People", "/crm/contacts"],
+      ["Inbox", "/crm/inbox"],
+      ["CRM settings", "/crm/settings"],
+    ]);
+  });
+
+  it("the CRM nav item lands on Today", () => {
+    expect(ALL_NAV_ITEMS.find(i => i.id === "crm")?.href).toBe("/crm/today");
+  });
+
+  it.each([
+    ["/crm/today", "/crm/today"],
+    ["/crm", "/crm"],
+    ["/crm/leads/abc", "/crm"],
+    ["/crm/discovery", "/crm"],
+    ["/crm/discovery/abc", "/crm"],
+    ["/crm/scope", "/crm"],
+    ["/crm/scope/abc", "/crm"],
+    ["/crm/organizations", "/crm/organizations"],
+    ["/crm/organizations/abc", "/crm/organizations"],
+    ["/crm/businesses", "/crm/organizations"],
+    ["/crm/businesses/abc", "/crm/organizations"],
+    ["/crm/clients", "/crm/organizations"],
+    ["/crm/clients/abc", "/crm/organizations"],
+    ["/crm/rooms", "/crm/organizations"],
+    ["/engagements/abc", "/crm/organizations"],
+    ["/crm/contacts", "/crm/contacts"],
+    ["/crm/people/abc", "/crm/contacts"],
+    ["/crm/inbox", "/crm/inbox"],
+    ["/crm/settings", "/crm/settings"],
+    ["/crm/admin/services", "/crm/settings"],
+    ["/crm/discovery/questions", "/crm/settings"],
+    ["/crm/discovery/templates", "/crm/settings"],
+    ["/crm/discovery/templates/abc", "/crm/settings"],
+  ])("%s highlights %s", (path, href) => {
+    expect(at(path)).toBe(href);
+    expect(matchingItems(ALL_NAV_ITEMS, path).map(i => i.id)).toEqual(["crm"]);
+  });
+
+  it("Discovery, Scope and Rooms are no longer in the nav", () => {
+    for (const l of ["Discovery", "Scope", "Rooms", "Businesses", "Clients", "Services"]) {
+      expect(crm.map(p => p.label)).not.toContain(l);
+    }
+  });
+
+  it("Inbox carries the unsorted-count badge", () => {
+    expect(crm.find(p => p.href === "/crm/inbox")?.badge).toBe("inbox");
   });
 });
+
+describe("redirects for pages moved into CRM settings", async () => {
+  const { default: config } = await import("../../next.config");
+  const redirects = await config.redirects!();
+  const find = (source: string) => redirects.find(r => r.source === source);
+
+  it.each([
+    ["/crm/admin/services", "/crm/settings?tab=services"],
+    ["/crm/discovery/questions", "/crm/settings?tab=questions"],
+    ["/crm/discovery/templates", "/crm/settings?tab=templates"],
+  ])("%s → %s", (source, destination) => {
+    expect(find(source)).toMatchObject({ destination, permanent: false });
+  });
+
+  it("only exact paths redirect, so the template editor still opens", () => {
+    for (const r of redirects) expect(r.source).not.toMatch(/[:*(]/);
+    expect(find("/crm/discovery/templates/:id")).toBeUndefined();
+    expect(routesUnder("/crm/discovery/templates")).toContain("/crm/discovery/templates/__id__");
+  });
+
+  it("the moved pages no longer exist as routes", () => {
+    for (const p of ["/crm/admin/services", "/crm/discovery/questions", "/crm/discovery/templates"]) {
+      expect(pageRoutes()).not.toContain(p);
+    }
+    expect(pageRoutes()).toContain("/crm/settings");
+  });
+});
+
+function routesUnder(prefix: string) {
+  return pageRoutes().filter(r => r.startsWith(prefix));
+}
 
 describe("nav_has_four_primary_areas", () => {
   it("lists CRM, Research, Content, Calendar in order", () => {
     expect(NAV_GROUPS.primary.map(i => i.label)).toEqual(["CRM", "Research", "Content", "Calendar"]);
-  });
-
-  it("CRM children are Pipeline, People, Inbox, Discovery, Scope, Rooms first", () => {
-    expect(SUB_PAGES.crm.slice(0, 6).map(p => p.label)).toEqual(["Pipeline", "People", "Inbox", "Discovery", "Scope", "Rooms"]);
   });
 
   it("secondary keeps Approvals, Agents, System, Tools and nothing is lost", () => {

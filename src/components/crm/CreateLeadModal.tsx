@@ -7,6 +7,8 @@ import { Button, ErrorState, Modal } from "@/components/ui";
 interface Props {
   onClose: () => void;
   onCreate: (lead: CRMLead) => void;
+  /** Preselects the business (the organization page's "+ New deal"). */
+  initialBusiness?: Pick<CRMBusiness, "id" | "name">;
 }
 
 const SOURCE_OPTIONS: { value: CRMSource; label: string }[] = [
@@ -17,13 +19,13 @@ const SOURCE_OPTIONS: { value: CRMSource; label: string }[] = [
   { value: "website_assessment", label: "Assessment" },
 ];
 
-export function CreateLeadModal({ onClose, onCreate }: Props) {
+export function CreateLeadModal({ onClose, onCreate, initialBusiness }: Props) {
   const [businesses, setBusinesses] = useState<CRMBusiness[]>([]);
   const [allContacts, setAllContacts] = useState<CRMContact[]>([]);
 
   // Business combobox
-  const [bizQuery, setBizQuery] = useState("");
-  const [bizSelected, setBizSelected] = useState<CRMBusiness | null>(null);
+  const [bizQuery, setBizQuery] = useState(initialBusiness?.name ?? "");
+  const [bizSelected, setBizSelected] = useState<CRMBusiness | null>(initialBusiness ? (initialBusiness as CRMBusiness) : null);
   const [bizOpen, setBizOpen] = useState(false);
 
   // Contact fields

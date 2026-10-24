@@ -19,10 +19,12 @@ export type InboxItem = {
   id: string; email_message_id: string | null; contact_email: string; direction: string | null; subject: string | null;
   snippet: string | null; timestamp: string | null; from_name: string | null; sent_at: string | null;
   suggested_contact: { id: string; name: string; email: string | null } | null;
+  /** The suggested contact's organization, offered as "Create new person at …". */
+  suggested_org: { id: string; name: string } | null;
 };
 
 const LIMIT = 200;
-const CONTACT_COLS = "id, first_name, last_name, email_norm";
+const CONTACT_COLS = "id, first_name, last_name, email_norm, business:businesses(id, name)";
 const SAFE_DOMAIN = /^[a-z0-9.-]+$/;
 const SAFE_NAME = /^[\p{L}'.-]+$/u; // safe inside a PostgREST or() filter: no commas, parens or wildcards
 const toSuggest = (c: Record<string, unknown>): SuggestContact => ({
@@ -48,7 +50,14 @@ export async function listInbox(): Promise<InboxItem[]> {
   // R41: each row is looked at once. suggestion_checked_at is set whether or not a suggestion was found.
   const need = rows.filter((r) => !r.suggestion_checked_at && !r.suggested_contact_id);
   const pool = new Map<string, SuggestContact>();
-  const addAll = (list: unknown) => { for (const c of (list ?? []) as Record<string, unknown>[]) pool.set(c.id as string, toSuggest(c)); };
+  const orgOf = new Map<string, { id: string; name: string }>(); // contact id -> business
+  const addAll = (list: unknown) => {
+    for (const c of (list ?? []) as Record<string, unknown>[]) {
+      pool.set(c.id as string, toSuggest(c));
+      const b = c.business as { id: string; name: string } | null;
+      if (b) orgOf.set(c.id as string, { id: b.id, name: b.name });
+    }
+  };
   const suggested = new Map<string, string>(); // unmatched id -> contact id
 
   if (need.length) {
@@ -91,6 +100,7 @@ export async function listInbox(): Promise<InboxItem[]> {
       subject: r.subject ?? r.message?.subject ?? null, snippet: r.snippet ?? r.message?.snippet ?? null, timestamp: r.timestamp,
       from_name: r.message?.from_name ?? null, sent_at: r.message?.sent_at ?? null,
       suggested_contact: c ? { id: c.id, name: nameOf(c), email: c.email } : null,
+      suggested_org: c ? orgOf.get(c.id) ?? null : null,
     };
   });
 }
@@ -145,4 +155,12 @@ export async function resolveUnmatched(input: ResolveInput): Promise<{ contact_i
   if (uErr) throw new Error(uErr.message);
   if (!upd || upd.length === 0) throw new InboxError("Already resolved", 409);
   return { contact_id: ref.contact_id, lead_id: ref.lead_id, created_contact: created };
+}
+
+/** How many queued emails are waiting to be sorted (the Inbox nav badge). */
+export async function countInbox(): Promise<number> {
+  const { count, error } = await supabaseAdmin.schema("crm").from("unmatched_email_log")
+    .select("id", { count: "exact", head: true }).is("resolved_at", null);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
 }

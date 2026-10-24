@@ -243,7 +243,7 @@ export default function EngagementPage() {
         description={
           <>
             {business ? (
-              <Link href={`/crm/businesses/${business.id}`} className="text-brand-orange hover:underline">{business.name}</Link>
+              <Link href={`/crm/organizations/${business.id}`} className="text-brand-orange hover:underline">{business.name}</Link>
             ) : "—"}
             {" · "}{engagement.relationship} · {engagement.status}
           </>

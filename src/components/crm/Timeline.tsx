@@ -3,14 +3,18 @@ import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { fetchJson } from "@/lib/fetch-json";
 import { Button } from "@/components/ui";
-import type { EmailItem, TimelineItem } from "@/lib/crm/timeline";
+import type { ActivityItem, EmailItem, TimelineItem } from "@/lib/crm/timeline";
 
 const ICONS: Record<string, string> = { note: "📝", email_sent: "📤", email_received: "📥", stage_change: "🔀", assessment: "📊", system: "⚙️" };
 
 /**
  * Email content is untrusted. Everything here is rendered as React text (escaped); never as HTML.
  */
-function EmailCard({ contactId, item, onReply }: { contactId: string; item: EmailItem; onReply?: (m: EmailItem) => void }) {
+export function EmailCard({ contactId, item, onReply, bodyUrl }: {
+  contactId?: string; item: EmailItem; onReply?: (m: EmailItem) => void;
+  /** Where the full body comes from; defaults to the contact timeline's include_body. */
+  bodyUrl?: string;
+}) {
   const [full, setFull] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -20,7 +24,7 @@ function EmailCard({ contactId, item, onReply }: { contactId: string; item: Emai
     setLoading(true);
     setErr(null);
     // The timeline pages carry previews only; the full body is looked up by message id.
-    const r = await fetchJson<{ body: { body_text: string } }>(`/api/crm/contacts/${contactId}/timeline?include_body=${item.id}`);
+    const r = await fetchJson<{ body: { body_text: string } }>(bodyUrl ?? `/api/crm/contacts/${contactId}/timeline?include_body=${item.id}`);
     setLoading(false);
     if (!r.ok) return setErr(r.error);
     setFull(r.data.body.body_text);
@@ -57,6 +61,22 @@ function EmailCard({ contactId, item, onReply }: { contactId: string; item: Emai
   );
 }
 
+export function ActivityRow({ item: it }: { item: ActivityItem }) {
+  return (
+    <div className="flex gap-3 text-sm">
+      <span className="text-base mt-0.5 shrink-0">{ICONS[it.activity_type] ?? "•"}</span>
+      <div className="flex-1 min-w-0">
+        {it.email_subject && <span className="font-medium text-brand-black break-words">{it.email_subject}</span>}
+        {it.content && <p className="text-brand-muted text-xs mt-0.5 break-words whitespace-pre-wrap">{it.content}</p>}
+        <p className="text-xs text-brand-muted mt-1">
+          {it.logged_by && <span className="capitalize">{it.logged_by} · </span>}
+          {formatDistanceToNow(new Date(it.ts), { addSuffix: true })}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function Timeline({ contactId, items, onReply }: { contactId: string; items: TimelineItem[]; onReply?: (m: EmailItem) => void }) {
   if (items.length === 0) return <p className="text-xs text-brand-muted">No history yet.</p>;
   return (
@@ -65,17 +85,7 @@ export function Timeline({ contactId, items, onReply }: { contactId: string; ite
         it.kind === "email" ? (
           <EmailCard key={`e-${it.id}`} contactId={contactId} item={it} onReply={onReply} />
         ) : (
-          <div key={`a-${it.id}`} className="flex gap-3 text-sm">
-            <span className="text-base mt-0.5 shrink-0">{ICONS[it.activity_type] ?? "•"}</span>
-            <div className="flex-1 min-w-0">
-              {it.email_subject && <span className="font-medium text-brand-black break-words">{it.email_subject}</span>}
-              {it.content && <p className="text-brand-muted text-xs mt-0.5 break-words whitespace-pre-wrap">{it.content}</p>}
-              <p className="text-xs text-brand-muted mt-1">
-                {it.logged_by && <span className="capitalize">{it.logged_by} · </span>}
-                {formatDistanceToNow(new Date(it.ts), { addSuffix: true })}
-              </p>
-            </div>
-          </div>
+          <ActivityRow key={`a-${it.id}`} item={it} />
         ),
       )}
     </div>
