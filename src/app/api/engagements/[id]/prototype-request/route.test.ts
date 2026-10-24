@@ -11,6 +11,8 @@ const state = vi.hoisted(() => ({
   deliverableKind: "prototype",
   workItemInserts: 0,
   openBuilds: [] as Array<{ work_item_id: string; ref: number | null; stalled: boolean }> | null,
+  scope: null as unknown,                 // value returned by findScopeForEngagement, or an Error to throw
+  description: "" as string,              // the work item description the route stored
 }));
 
 // Chainable stub: every filter returns the same builder; single/maybeSingle/insert resolve per table.
@@ -24,8 +26,8 @@ function table(name: string) {
     return { data: null, error: null };
   };
   b.maybeSingle = async () => ({ data: null, error: null });
-  b.insert = () => {
-    if (name === "work_items") state.workItemInserts++;
+  b.insert = (row: Record<string, unknown>) => {
+    if (name === "work_items") { state.workItemInserts++; state.description = String(row.description ?? ""); }
     return {
       select: () => ({
         single: async () =>
@@ -48,6 +50,9 @@ vi.mock("@/lib/rooms/dispatch", async (importOriginal) => ({
 }));
 
 vi.mock("@/lib/rooms/open-builds", () => ({ findOpenBuilds: async () => state.openBuilds }));
+vi.mock("@/lib/rooms/scope-for-brief", () => ({
+  findScopeForEngagement: async () => { if (state.scope instanceof Error) throw state.scope; return state.scope; },
+}));
 
 import { POST } from "./route";
 import { dispatchBeginWork } from "@/lib/rooms/dispatch";
@@ -74,6 +79,8 @@ beforeEach(() => {
   state.deliverableKind = "prototype";
   state.workItemInserts = 0;
   state.openBuilds = [];
+  state.scope = null;
+  state.description = "";
   process.env.DASHBOARD_BASE_URL = "https://dash.example.com";
 });
 
@@ -154,5 +161,24 @@ describe("POST prototype-request", () => {
     expect(res.status).toBe(409);
     expect(state.workItemInserts).toBe(0);
     expect(mockDispatch).not.toHaveBeenCalled();
+  });
+
+  it("puts the engagement's scope document in the brief", async () => {
+    mockDispatch.mockResolvedValue({ dispatched: true });
+    state.scope = { title: "Scope", engagementType: "assessment", deliveryModel: "fixed", versionNo: 2,
+                    sections: [{ key: "proposed_scope", title: "Proposed scope", body_md: "PROPOSED-BODY" }] };
+    const res = await call();
+    expect(res.status).toBe(201);
+    expect(state.description).toContain('<quoted_data source="scope_document">');
+    expect(state.description).toContain("PROPOSED-BODY");
+  });
+
+  it("still creates the request (without a scope block) when the scope lookup fails", async () => {
+    mockDispatch.mockResolvedValue({ dispatched: true });
+    state.scope = new Error("db down");
+    const res = await call();
+    expect(res.status).toBe(201);
+    expect(state.workItemInserts).toBe(1);
+    expect(state.description).not.toContain("scope_document");
   });
 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { PrototypeRequestSchema } from "@/lib/rooms/schemas";
 import { buildPrototypeBrief } from "@/lib/rooms/brief";
+import { findScopeForEngagement, type ScopeForBrief } from "@/lib/rooms/scope-for-brief";
 import { dispatchBeginWork, dispatchBaseUrl } from "@/lib/rooms/dispatch";
 import { findOpenBuilds } from "@/lib/rooms/open-builds";
 import { requirePermission } from "@/lib/requirePermission";
@@ -55,7 +56,16 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     deliverableId = d.id;
   }
 
-  // Context for the agent: discovery answers (if any) and the latest version (if any).
+  // Context for the agent: the current scope document (filtered for the builder), discovery answers as the
+  // fallback, and the latest version (if any). A failed scope lookup falls back rather than blocking the request.
+  let scope: ScopeForBrief | null = null;
+  try {
+    scope = await findScopeForEngagement({
+      id: eng.id, business_id: eng.business_id, lead_id: eng.lead_id ?? null, client_id: eng.client_id ?? null,
+    });
+  } catch (e) {
+    console.error("prototype-request: scope lookup failed, using discovery answers:", e);
+  }
   let discovery: Record<string, unknown> | null = null;
   if (eng.discovery_invite_id) {
     const { data: r } = await supabaseAdmin.schema("crm").from("discovery_responses")
@@ -77,6 +87,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       deliverableTitle,
       brief: b.brief,
       discovery,
+      scope,
       prior: latest ? { versionNo: latest.version_no, storagePrefix: latest.storage_prefix } : null,
     });
   } catch (e) {
