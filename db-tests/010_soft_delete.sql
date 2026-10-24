@@ -238,6 +238,26 @@ BEGIN
   ASSERT NOT EXISTS (SELECT 1 FROM rooms.engagement_access WHERE id = (x->>'a')::uuid), 'access gone';
 END $$;
 
+-- intake_restored_contact_is_left_alone
+-- Stream A2's intake restores a contact in Trash on a new signup and relinks it away from a business
+-- in Trash. Simulated here: restore and purge of the old business must not touch that contact.
+DO $$
+DECLARE x jsonb; other uuid;
+BEGIN
+  x := pg_temp.seed('relink');
+  PERFORM crm.soft_delete('business', (x->>'b')::uuid, 'brian');
+  INSERT INTO crm.businesses (name) VALUES ('Org relink new') RETURNING id INTO other;
+  UPDATE crm.contacts SET business_id = other, deleted_at = null, deleted_by = null WHERE id = (x->>'c1')::uuid;
+  ASSERT (SELECT group_count FROM crm.trash_items() t WHERE t.id = (x->>'b')::uuid) = 8, 'relinked contact left the group';
+  PERFORM crm.restore_deleted('business', (x->>'b')::uuid);
+  ASSERT (SELECT business_id FROM crm.contacts WHERE id = (x->>'c1')::uuid) = other, 'restore keeps the new link';
+  ASSERT (SELECT deleted_at FROM crm.contacts WHERE id = (x->>'c2')::uuid) IS NULL, 'the rest of the group is back';
+  PERFORM crm.soft_delete('business', (x->>'b')::uuid, 'brian');
+  PERFORM crm.purge_deleted('business', (x->>'b')::uuid);
+  ASSERT EXISTS (SELECT 1 FROM crm.contacts WHERE id = (x->>'c1')::uuid AND deleted_at IS NULL), 'purge keeps the relinked contact';
+  ASSERT NOT EXISTS (SELECT 1 FROM crm.contacts WHERE id = (x->>'c2')::uuid), 'group contact purged';
+END $$;
+
 -- trash_functions_are_service_role_only
 DO $$
 BEGIN
