@@ -135,6 +135,7 @@ describe("prototype request marker", () => {
     expect(out).toContain("publish_prototype_version(work_item_id, deliverable_id)");
     expect(out).not.toContain("bundle_path, ");
     expect(out).toContain("fetch_prior_version(work_item_id, storage_prefix)");
+    expect(out).toContain("edit_bundle_file(work_item_id, path, old_str, new_str)");
     expect(out).toContain("at most 12,000 characters per call");
   });
 
