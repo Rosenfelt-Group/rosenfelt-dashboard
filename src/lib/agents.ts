@@ -1,24 +1,28 @@
 // Pure agent metadata + URL helpers for the /agents area. No env access, safe
 // to import from client components and tests.
 
-export type AgentName = "jordan" | "riley" | "avery" | "casey" | "sam";
+export type AgentName = "jordan" | "riley" | "avery" | "casey" | "sam" | "pickle";
 
 export type AgentInfo = {
   name: AgentName;
   label: string;
   role: string;
   port: number;
-  tools: number;
-  /** Has a dashboard chat. Casey does not: it only builds prototypes. */
+  /** LangGraph tool count; null for Dr. Pickle (headless Claude Code, no fixed tool list). */
+  tools: number | null;
+  /** Has a dashboard chat. Casey does not: it only builds prototypes. Pickle talks over Telegram. */
   chat: boolean;
+  /** Has agent_prompts / agent_memory rows. Pickle's rules live in the pickle-agent repo instead. */
+  prompts: boolean;
 };
 
 export const AGENT_LIST: readonly AgentInfo[] = [
-  { name: "jordan", label: "Jordan", role: "Deploy · SSH · WordPress · n8n",     port: 8001, tools: 61, chat: true },
-  { name: "riley",  label: "Riley",  role: "Tasks · Memory · Weekly digest",     port: 8002, tools: 30, chat: true },
-  { name: "avery",  label: "Avery",  role: "Content · Audits · Research",        port: 8003, tools: 32, chat: true },
-  { name: "casey",  label: "Casey",  role: "Design and prototypes",              port: 8004, tools: 51, chat: false },
-  { name: "sam",    label: "Sam",    role: "Accounting · Legal · HR",            port: 8005, tools: 25, chat: true },
+  { name: "jordan", label: "Jordan",     role: "Deploy · SSH · WordPress · n8n",   port: 8001, tools: 61,   chat: true,  prompts: true },
+  { name: "riley",  label: "Riley",      role: "Tasks · Memory · Weekly digest",   port: 8002, tools: 30,   chat: true,  prompts: true },
+  { name: "avery",  label: "Avery",      role: "Content · Audits · Research",      port: 8003, tools: 32,   chat: true,  prompts: true },
+  { name: "casey",  label: "Casey",      role: "Design and prototypes",            port: 8004, tools: 51,   chat: false, prompts: true },
+  { name: "sam",    label: "Sam",        role: "Accounting · Legal · HR",          port: 8005, tools: 25,   chat: true,  prompts: true },
+  { name: "pickle", label: "Dr. Pickle", role: "Infrastructure · Code fixes · PRs", port: 8095, tools: null, chat: false, prompts: false },
 ];
 
 export const AGENT_NAMES: readonly AgentName[] = AGENT_LIST.map(a => a.name);

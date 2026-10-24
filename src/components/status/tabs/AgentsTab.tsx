@@ -44,7 +44,7 @@ export function AgentsTab() {
   }, [load]);
 
   // "checks" is the scheduled checks service, not an agent: health only (its runs are not agent executions).
-  const combined = ["jordan","riley","avery","casey","sam","checks"].map(name => ({
+  const combined = ["jordan","riley","avery","casey","sam","pickle","checks"].map(name => ({
     health: health.find(h => h.agent === name),
     stat:   stats.find(s => s.agent === name),
     name,
@@ -66,7 +66,7 @@ export function AgentsTab() {
           </thead>
           <tbody>
             {loading ? (
-              [0,1,2,3,4,5].map(i => (
+              [0,1,2,3,4,5,6].map(i => (
                 <tr key={i} className="border-b border-brand-border last:border-0">
                   <td className="px-4 py-3"><div className="animate-pulse h-4 w-24 bg-brand-offwhite rounded"/></td>
                   <td className="px-4 py-3"><div className="animate-pulse h-4 w-12 bg-brand-offwhite rounded"/></td>
@@ -87,9 +87,9 @@ export function AgentsTab() {
                         {name === "checks" ? (
                           <span className="inline-flex items-center justify-center rounded-full font-medium w-5 h-5 text-xs bg-gray-100 text-gray-600">CK</span>
                         ) : (
-                          <AgentBadge agent={name as "jordan"|"riley"|"avery"|"casey"|"sam"} size="sm" />
+                          <AgentBadge agent={name as "jordan"|"riley"|"avery"|"casey"|"sam"|"pickle"} size="sm" />
                         )}
-                        <span className="font-medium text-brand-black capitalize">{name === "checks" ? "Checks service" : name}</span>
+                        <span className="font-medium text-brand-black capitalize">{name === "checks" ? "Checks service" : name === "pickle" ? "Dr. Pickle" : name}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3">

@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 
 export const maxDuration = 15;
 
-const AGENTS = [
+// secretVar null: never send a secret. Pickle's /health is a public read-only proxy on Hostinger
+// (pickle.rosably.com/health), so no agent secret may go there.
+const AGENTS: readonly { name: string; urlVar: string; secretVar: string | null }[] = [
   { name: "jordan", urlVar: "JORDAN_API_URL",  secretVar: "JORDAN_WEBHOOK_SECRET" },
   { name: "riley",  urlVar: "RILEY_AGENT_URL",  secretVar: "RILEY_WEBHOOK_SECRET"  },
   { name: "avery",  urlVar: "AVERY_AGENT_URL",  secretVar: "AVERY_WEBHOOK_SECRET"  },
@@ -10,21 +12,23 @@ const AGENTS = [
   { name: "sam",    urlVar: "SAM_AGENT_URL",    secretVar: "SAM_WEBHOOK_SECRET"    },
   // Not an agent: the scheduled checks service. Its /health needs no secret.
   { name: "checks", urlVar: "CHECKS_URL",       secretVar: "CHECKS_WEBHOOK_SECRET" },
-] as const;
+  { name: "pickle", urlVar: "PICKLE_URL",       secretVar: null },
+];
 
 export async function GET() {
   const results = await Promise.all(
     AGENTS.map(async ({ name, urlVar, secretVar }) => {
       const baseUrl = process.env[urlVar];
-      // No Jordan fallback for checks: it has its own secret (and /health ignores it anyway).
-      const secret  = process.env[secretVar] ?? (name === "checks" ? "" : process.env.JORDAN_WEBHOOK_SECRET ?? "");
+      // No Jordan fallback for checks (own secret) or pickle (no secret at all).
+      const secret  = secretVar === null ? ""
+        : process.env[secretVar] ?? (name === "checks" ? "" : process.env.JORDAN_WEBHOOK_SECRET ?? "");
       if (!baseUrl) {
         return { agent: name, status: "unknown", latency_ms: null, detail: null, error: "URL not configured" };
       }
       const start = Date.now();
       try {
         const res = await fetch(`${baseUrl}/health`, {
-          headers: { "X-Webhook-Secret": secret },
+          headers: secret ? { "X-Webhook-Secret": secret } : {},
           signal: AbortSignal.timeout(6000),
           cache: "no-store",
         });
