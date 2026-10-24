@@ -56,7 +56,7 @@ const STATUS_LABEL: Record<PatchStatus, string> = {
   error: "error",
 };
 
-// Mirrors _DEFER_PREFIXES in casey-agent/tools/patch_remediation_tools.py.
+// Mirrors _DEFER_PREFIXES in rosably-agents services/checks/checks/patch_remediation.py.
 // Packages matching these prefixes are never auto-applied (restart/reboot risk).
 const DEFER_PREFIXES = ["docker", "containerd", "linux-image", "linux-headers", "linux-generic"];
 

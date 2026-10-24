@@ -23,7 +23,6 @@ const AGENT_PROMPTS: Partial<Record<Agent, string>> = {
   jordan: "Ask about workflows, containers, VPS status, or tasks.",
   avery: "Ask Avery to draft blog posts, research topics, or manage content.",
   riley: "Ask Riley about CRM data, leads, or client activity.",
-  casey: "Ask Casey about audit findings, schema drift, or system health checks.",
   sam: "Ask Sam about invoices, financials, contracts, or HR — actions require your approval.",
 };
 

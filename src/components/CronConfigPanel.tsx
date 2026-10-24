@@ -19,6 +19,7 @@ interface CronRow {
 }
 
 interface JobRunInfo {
+  agent?: string;          // which scheduler reported it ("casey" | "checks")
   job_id: string;
   next_run_time: string | null;
 }
@@ -35,6 +36,8 @@ const CRON_LABELS: Record<string, string> = {
   "0 6 * * mon":  "Weekly Mon 6am ET",
   "0 6 * * tue":  "Weekly Tue 6am ET",
   "0 6 * * wed":  "Weekly Wed 6am ET",
+  "0 7 * * mon":  "Weekly Mon 7am ET",
+  "0 7 1 1,4,7,10 *": "Quarterly, 1st at 7am ET",
 };
 
 const JOB_LABELS: Record<string, string> = {
@@ -43,6 +46,8 @@ const JOB_LABELS: Record<string, string> = {
   daily_indexer_health_check: "Indexer health check",
   memory_maintenance:         "Memory maintenance",
   weekly_gsc_sync:            "GSC keyword sync",
+  patch_detection:            "Patch detection",
+  alignment_audit:            "Doc alignment audit",
 };
 
 const PRESETS = [
@@ -85,8 +90,9 @@ export function CronConfigPanel() {
     const jobs = jobsRes.ok ? jobsRes.data : { jobs: [] };
     setRows(Array.isArray(config) ? config : []);
     const runMap: Record<string, string | null> = {};
+    // Keyed by owner + job: Casey and the checks service share job ids.
     ((jobs?.jobs ?? []) as JobRunInfo[]).forEach(j => {
-      runMap[j.job_id] = j.next_run_time;
+      runMap[`${j.agent ?? "casey"}:${j.job_id}`] = j.next_run_time;
     });
     setJobRuns(runMap);
     setLoading(false);
@@ -194,14 +200,18 @@ export function CronConfigPanel() {
         {rows.map(row => {
           const key = `${row.agent}:${row.job_id}`;
           const isEditing = editKey === key;
-          const nextRun = jobRuns[row.job_id];
+          const nextRun = jobRuns[key];
 
           return (
             <div key={key}>
               {/* Job row */}
               <div className="flex items-center justify-between px-4 py-3 gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <AgentBadge agent={row.agent as Agent} size="sm" />
+                  {row.agent === "checks" ? (
+                    <span className="inline-flex items-center justify-center rounded-full font-medium w-5 h-5 text-xs bg-gray-100 text-gray-600" title="Checks service">CK</span>
+                  ) : (
+                    <AgentBadge agent={row.agent as Agent} size="sm" />
+                  )}
                   <div className="min-w-0">
                     <div className="text-sm text-brand-black truncate">
                       {JOB_LABELS[row.job_id] ?? row.job_id}

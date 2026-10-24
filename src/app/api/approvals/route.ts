@@ -332,7 +332,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     // ── PATCH REMEDIATION approved → Jordan /patch/apply (dry-run unless enabled on Jordan) ──
-    if (status === "approved" && approval?.agent === "casey" && approval?.action_type === "patch_remediation") {
+    // Filed by the checks service since 2026-10-24 (agent 'checks'); older rows were Casey's.
+    if (status === "approved" && (approval?.agent === "checks" || approval?.agent === "casey")
+        && approval?.action_type === "patch_remediation") {
       if (!reviewer) {
         return NextResponse.json({ error: "Patch apply blocked: no human reviewer on record" }, { status: 403 });
       }

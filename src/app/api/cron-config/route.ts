@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { AGENT_URLS, AGENT_SECRETS } from "@/lib/agent-urls";
+import { checksConfig } from "@/lib/checks";
 import { verifySessionToken, COOKIE_NAME } from "@/lib/session";
 
 // Validate a 5-field crontab expression. Returns error string or null.
@@ -108,10 +109,12 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
   }
 
-  // Ping agent's reschedule endpoint so changes apply live (no restart needed)
+  // Ping the owning scheduler's reschedule endpoint so changes apply live (no restart needed).
+  // agent='checks' rows belong to the checks service; every other row to its agent.
+  const checks = agent === "checks" ? checksConfig() : null;
   const agentKey = agent as keyof typeof AGENT_URLS;
-  const agentUrl = AGENT_URLS[agentKey];
-  const agentSecret = AGENT_SECRETS[agentKey];
+  const agentUrl = agent === "checks" ? checks?.url : AGENT_URLS[agentKey];
+  const agentSecret = agent === "checks" ? checks?.secret : AGENT_SECRETS[agentKey];
 
   if (agentUrl && agentSecret) {
     try {

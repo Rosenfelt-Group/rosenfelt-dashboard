@@ -13,6 +13,7 @@ type AgentConfig = {
   path: string;
 };
 
+// Casey has no chat since 2026-10-24: it only builds Engagement Rooms prototypes (dispatched from rooms).
 const AGENT_CONFIG: Record<string, AgentConfig> = {
   jordan: {
     urlEnv: "JORDAN_API_URL",
@@ -27,11 +28,6 @@ const AGENT_CONFIG: Record<string, AgentConfig> = {
   riley: {
     urlEnv: "RILEY_AGENT_URL",
     secretEnv: "RILEY_WEBHOOK_SECRET",
-    path: "/chat",
-  },
-  casey: {
-    urlEnv: "CASEY_AGENT_URL",
-    secretEnv: "CASEY_WEBHOOK_SECRET",
     path: "/chat",
   },
   sam: {
