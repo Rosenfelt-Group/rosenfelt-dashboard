@@ -9,6 +9,11 @@
 -- (manual, referral, pro_bono, taproot) still open a new lead, because those mean a real new deal.
 -- Lost leads still reopen as a new lead (unchanged).
 --
+-- Trust (revised the same day after a security review): intake is unauthenticated input, so
+-- falling back to the *business's* won lead requires evidence that the person belongs there:
+-- the contact was already linked to that business, or the email shares a non-freemail domain
+-- with another contact at it. A new address that only names the org gets a new lead as before.
+--
 -- The result gains `existing_client` (true when a won lead was reused). Supersedes the definition
 -- in 2026-10-22_crm_identity_intake.sql; the v_stages array must still match src/lib/crm/stages.ts
 -- (enforced by stages.sql-order.test.ts). Idempotent.
@@ -47,6 +52,8 @@ declare
   v_created_contact boolean := false;
   v_created_lead boolean := false;
   v_existing_client boolean := false;
+  v_business_from_contact boolean := false;
+  v_business_trusted boolean;
   v_cur_stage text;
   v_stage_ignored text;
   v_freemail_noorg boolean;
@@ -77,6 +84,7 @@ begin
   -- Contact
   select id, business_id into v_contact_id, v_business_id
   from contacts where email_norm = lower(v_email);
+  v_business_from_contact := v_business_id is not null;
 
   if v_contact_id is null then
     v_first := coalesce(split_part(v_name, ' ', 1), split_part(v_email, '@', 1));
@@ -134,10 +142,17 @@ begin
   for update;
 
   -- R11: an automated signup from an existing client lands on their won lead, not a new one.
+  -- The business's won lead is used only when the business match is trusted (see header).
   if v_lead_id is null and v_channel = any (v_auto_channels) then
+    v_business_trusted := v_business_from_contact
+      or (not (v_domain = any (v_freemail)) and exists (
+            select 1 from contacts c
+            where c.business_id = v_business_id and c.id <> v_contact_id
+              and split_part(c.email_norm, '@', 2) = v_domain));
     select id into v_lead_id
     from leads
-    where stage = 'won' and (contact_id = v_contact_id or business_id = v_business_id)
+    where stage = 'won'
+      and (contact_id = v_contact_id or (v_business_trusted and business_id = v_business_id))
     order by (contact_id is not distinct from v_contact_id) desc, created_at desc limit 1;
     v_existing_client := v_lead_id is not null;
   end if;
