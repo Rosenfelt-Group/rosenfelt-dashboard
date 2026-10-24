@@ -207,7 +207,9 @@ begin
    where p.prosecdef and n.nspname in ('crm', 'public')
      and has_function_privilege('riley_app', p.oid, 'EXECUTE')
      -- run_sql is revoked from PUBLIC in prod by 2026-10-17_revoke_run_sql_public.sql, which the harness does not apply
-     and p.proname not in ('create_initial_scope_from_brief', 'propose_scope_version', 'run_sql');
+     and p.proname not in ('create_initial_scope_from_brief', 'propose_scope_version', 'run_sql',
+                           -- 2026-10-25_c_research_scope_inputs.sql
+                           'scope_research_context', 'set_scope_version_research_used');
   assert bad is null, 'riley can execute other SECURITY DEFINER functions: ' || coalesce(bad, '');
 end $$;
 

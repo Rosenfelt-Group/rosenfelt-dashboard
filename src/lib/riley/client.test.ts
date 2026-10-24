@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { draftQuestionnaire, requestBrief, requestDraftReply, RileyNotConfiguredError } from "./client";
+import { draftQuestionnaire, requestBrief, requestDraftReply, requestScopeRevision, RileyNotConfiguredError } from "./client";
 
 const ID = "3e9c4f31-5a6d-4e8f-9aa1-2c3d4e5f6071";
 const fetchMock = vi.fn();
@@ -70,6 +70,19 @@ describe("riley discovery client", () => {
     fetchMock.mockResolvedValue(json(200, { status: "ready", brief_id: "b", scope_version_id: null, fit_verdict: null }));
     await requestBrief(ID);
     expect(spy.mock.calls.map(c => c[0])).toEqual([180_000, 280_000]);
+  });
+
+  it("scope revision posts the document id (and instructions when given) to /discovery/scope-revision", async () => {
+    const body = { status: "proposed", scope_version_id: "v2", change_note: "n", research_used: 1 };
+    fetchMock.mockResolvedValue(json(200, body));
+    expect(await requestScopeRevision(ID, "Focus on SMS")).toEqual({ ok: true, data: body });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://riley.example/discovery/scope-revision");
+    expect(JSON.parse(init.body)).toEqual({ scope_document_id: ID, instructions: "Focus on SMS" });
+    await requestScopeRevision(ID);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ scope_document_id: ID });
+    fetchMock.mockResolvedValue(json(409, { detail: "no research is selected" }));
+    expect(await requestScopeRevision(ID)).toEqual({ ok: false, kind: "conflict", status: 409 });
   });
 
   it("treats a 200 with an unexpected body as failed", async () => {

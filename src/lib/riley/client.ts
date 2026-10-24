@@ -1,4 +1,5 @@
-// Client for Riley's HTTP endpoints: POST /discovery/draft-questionnaire, /discovery/brief and /email/draft-reply.
+// Client for Riley's HTTP endpoints: POST /discovery/draft-questionnaire, /discovery/brief, /discovery/scope-revision
+// and /email/draft-reply.
 // Auth is X-Webhook-Secret = RILEY_DISCOVERY_SECRET (not the general agent webhook secret).
 // Fail closed: with either env var unset, nothing is requested. Riley's error text is logged here,
 // never returned, so it cannot reach the browser.
@@ -22,6 +23,14 @@ export type BriefResponse = {
   warning?: string;
 };
 
+export type ScopeRevisionResponse = {
+  status: "proposed";
+  scope_version_id: string;
+  change_note: string;
+  research_used: number;
+  warning?: string;
+};
+
 export type DraftReplyResponse =
   | { status: "drafted"; approval_id: string; summary: string }
   | { status: "no_reply"; summary: string }
@@ -31,6 +40,7 @@ export type DraftReplyResponse =
 export const DRAFT_REPLY_TIMEOUT_MS = 10_000;
 export const DRAFT_TIMEOUT_MS = 180_000;
 export const BRIEF_TIMEOUT_MS = 280_000;
+export const REVISION_TIMEOUT_MS = 280_000;
 
 function kindFor(status: number): RileyFailKind {
   if (status === 404) return "not_found";
@@ -85,6 +95,12 @@ export function draftQuestionnaire(inviteId: string): Promise<RileyResult<DraftR
 export function requestBrief(inviteId: string): Promise<RileyResult<BriefResponse>> {
   return call("/discovery/brief", { invite_id: inviteId }, BRIEF_TIMEOUT_MS,
     b => isObj(b) && typeof b.status === "string" && typeof b.brief_id === "string");
+}
+
+/** Asks Riley to propose a scope revision from the research Brian selected for the organization. */
+export function requestScopeRevision(scopeDocumentId: string, instructions?: string): Promise<RileyResult<ScopeRevisionResponse>> {
+  return call("/discovery/scope-revision", { scope_document_id: scopeDocumentId, ...(instructions ? { instructions } : {}) },
+    REVISION_TIMEOUT_MS, b => isObj(b) && b.status === "proposed" && typeof b.scope_version_id === "string");
 }
 
 /** Asks Riley to triage an inbound email and, if it needs a reply, create an approval-gated draft. */
