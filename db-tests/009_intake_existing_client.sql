@@ -87,3 +87,35 @@ BEGIN
   ASSERT c->>'lead_id' <> a->>'lead_id', 'free-mail + org name must not land on the won lead';
   ASSERT NOT (c->>'existing_client')::boolean, 'existing_client false for free-mail';
 END $$;
+
+-- intake_existing_client_saved_org_link_not_trusted
+DO $$
+DECLARE a jsonb; b jsonb; c jsonb;
+BEGIN
+  a := crm.intake_lead('{"channel":"manual","email":"ann@client-seven.org","name":"Ann","org":"Client Seven"}'::jsonb);
+  UPDATE crm.leads SET stage = 'won' WHERE id = (a->>'lead_id')::uuid;
+  -- first submission: a new outside address names the org; intake links the contact to the business
+  b := crm.intake_lead('{"channel":"contact_form","email":"x@outside.example","org":"Client Seven"}'::jsonb);
+  ASSERT b->>'business_id' = a->>'business_id', 'linked to the business by org name (unchanged)';
+  ASSERT b->>'lead_id' <> a->>'lead_id', 'first submission gets its own lead';
+  UPDATE crm.leads SET stage = 'lost' WHERE id = (b->>'lead_id')::uuid;
+  -- second submission from the same, now-linked address must still not reach the won lead
+  c := crm.intake_lead('{"channel":"ebook","email":"x@outside.example"}'::jsonb);
+  ASSERT c->>'lead_id' <> a->>'lead_id', 'saved org-name link must not unlock the won lead';
+  ASSERT NOT (c->>'existing_client')::boolean, 'existing_client false';
+END $$;
+
+-- intake_existing_client_consumer_domains_not_trusted
+DO $$
+DECLARE a jsonb; b jsonb; c jsonb;
+BEGIN
+  -- a client whose contact uses a consumer provider
+  a := crm.intake_lead('{"channel":"manual","email":"chair@aol.com","name":"Chair","org":"Client Eight"}'::jsonb);
+  UPDATE crm.leads SET stage = 'won' WHERE id = (a->>'lead_id')::uuid;
+  b := crm.intake_lead('{"channel":"ebook","email":"other@aol.com","org":"Client Eight"}'::jsonb);
+  ASSERT b->>'lead_id' <> a->>'lead_id', 'a shared aol.com domain is not evidence';
+  ASSERT NOT (b->>'existing_client')::boolean, 'existing_client false';
+  -- R10 now treats proton.me as free-mail: no org means a business named after the person
+  c := crm.intake_lead('{"channel":"ebook","email":"pat@proton.me","name":"Pat Proton"}'::jsonb);
+  ASSERT (SELECT name FROM crm.businesses WHERE id = (c->>'business_id')::uuid) = 'Pat Proton', 'proton.me is free-mail';
+END $$;
