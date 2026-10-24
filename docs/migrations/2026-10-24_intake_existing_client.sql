@@ -9,10 +9,12 @@
 -- (manual, referral, pro_bono, taproot) still open a new lead, because those mean a real new deal.
 -- Lost leads still reopen as a new lead (unchanged).
 --
--- Trust (revised the same day after a security review): intake is unauthenticated input, so
--- falling back to the *business's* won lead requires evidence that the person belongs there:
--- the contact was already linked to that business, or the email shares a non-freemail domain
--- with another contact at it. A new address that only names the org gets a new lead as before.
+-- Trust (revised twice the same day after security reviews): intake is unauthenticated input,
+-- so falling back to the *business's* won lead requires the email to share a non-freemail
+-- domain with another contact at that business, checked on every intake. A contact's saved
+-- business link is NOT evidence, because intake itself writes it from a bare org-name match.
+-- A new address that only names the org gets a new lead as before. The free-mail list was
+-- expanded at the same time (it also decides R10 business naming).
 --
 -- The result gains `existing_client` (true when a won lead was reused). Supersedes the definition
 -- in 2026-10-22_crm_identity_intake.sql; the v_stages array must still match src/lib/crm/stages.ts
@@ -31,7 +33,8 @@ declare
   v_channels constant text[] := array['website_contact','website_assessment','manual','referral','pro_bono','quiz','ebook','contact_form','calendly','stripe','typeform','taproot','email_inbound'];
   -- R11: channels that are signups or touches, not a decision to open a new deal.
   v_auto_channels constant text[] := array['website_contact','website_assessment','quiz','ebook','contact_form','calendly','stripe','typeform','email_inbound'];
-  v_freemail constant text[] := array['gmail.com','outlook.com','yahoo.com','icloud.com','hotmail.com'];
+  -- Must match FREE_MAIL_DOMAINS in src/lib/crm/suggest.ts (enforced by freemail.sql-sync.test.ts).
+  v_freemail constant text[] := array['gmail.com','googlemail.com','outlook.com','hotmail.com','live.com','msn.com','yahoo.com','ymail.com','rocketmail.com','icloud.com','me.com','mac.com','aol.com','proton.me','protonmail.com','pm.me','gmx.com','gmx.net','mail.com','zoho.com','zohomail.com','fastmail.com','hey.com','yandex.com','tutanota.com','comcast.net','verizon.net','att.net','sbcglobal.net','cox.net','charter.net','earthlink.net'];
 
   v_channel text := nullif(btrim(p->>'channel'), '');
   v_email   text := nullif(btrim(p->>'email'), '');
@@ -52,7 +55,6 @@ declare
   v_created_contact boolean := false;
   v_created_lead boolean := false;
   v_existing_client boolean := false;
-  v_business_from_contact boolean := false;
   v_business_trusted boolean;
   v_cur_stage text;
   v_stage_ignored text;
@@ -84,7 +86,6 @@ begin
   -- Contact
   select id, business_id into v_contact_id, v_business_id
   from contacts where email_norm = lower(v_email);
-  v_business_from_contact := v_business_id is not null;
 
   if v_contact_id is null then
     v_first := coalesce(split_part(v_name, ' ', 1), split_part(v_email, '@', 1));
@@ -144,8 +145,7 @@ begin
   -- R11: an automated signup from an existing client lands on their won lead, not a new one.
   -- The business's won lead is used only when the business match is trusted (see header).
   if v_lead_id is null and v_channel = any (v_auto_channels) then
-    v_business_trusted := v_business_from_contact
-      or (not (v_domain = any (v_freemail)) and exists (
+    v_business_trusted := (not (v_domain = any (v_freemail)) and exists (
             select 1 from contacts c
             where c.business_id = v_business_id and c.id <> v_contact_id
               and split_part(c.email_norm, '@', 2) = v_domain));

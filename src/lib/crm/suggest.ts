@@ -1,5 +1,12 @@
 // R17: suggest which existing contact an unmatched email's sender might be. Pure, no LLM.
-export const FREE_MAIL_DOMAINS = ["gmail.com", "outlook.com", "yahoo.com", "icloud.com", "hotmail.com"] as const;
+// Must match v_freemail in crm.intake_lead (enforced by freemail.sql-sync.test.ts).
+export const FREE_MAIL_DOMAINS = [
+  "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "msn.com", "yahoo.com",
+  "ymail.com", "rocketmail.com", "icloud.com", "me.com", "mac.com", "aol.com", "proton.me",
+  "protonmail.com", "pm.me", "gmx.com", "gmx.net", "mail.com", "zoho.com", "zohomail.com",
+  "fastmail.com", "hey.com", "yandex.com", "tutanota.com", "comcast.net", "verizon.net", "att.net",
+  "sbcglobal.net", "cox.net", "charter.net", "earthlink.net"
+] as const;
 
 export type SuggestCandidate = { email: string; name?: string | null };
 export type SuggestContact = { id: string; first_name: string | null; last_name: string | null; email: string | null };
