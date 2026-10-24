@@ -133,11 +133,13 @@ insert into crm.discovery_template_items (template_id, question_id, "position", 
     from crm.discovery_templates t, crm.discovery_questions q where q.key like 'seed_%';
 SQL
 
-# Apply every 2026-10-22_*.sql migration in filename order (they are idempotent). The
-# --no-privileges dump drops prod's REVOKEs/GRANTs; re-applying restores them.
+# Apply every 2026-10-22_*.sql migration in filename order (they are idempotent), then the later
+# migrations that redefine their functions. The --no-privileges dump drops prod's REVOKEs/GRANTs;
+# re-applying restores them.
 shopt -s nullglob
 MIGRATIONS=("$REPO"/docs/migrations/2026-10-22_*.sql)
 [ "${#MIGRATIONS[@]}" -gt 0 ] || { echo "no docs/migrations/2026-10-22_*.sql found" >&2; exit 1; }
+MIGRATIONS+=("$REPO"/docs/migrations/2026-10-24_intake_existing_client.sql)
 for m in "${MIGRATIONS[@]}"; do
   echo ">> applying migration $(basename "$m")"
   psqlc -v ON_ERROR_STOP=1 < "$m"
