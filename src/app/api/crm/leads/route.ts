@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { requirePermission } from "@/lib/requirePermission";
 import { intakeLead } from "@/lib/intake/client";
 import { IntakeSchema } from "@/lib/intake/schema";
+import { parseNextStep } from "@/lib/crm/next-step";
 
 export async function GET(req: NextRequest) {
   const guard = await requirePermission(req, "view_crm");
@@ -20,12 +21,12 @@ export async function GET(req: NextRequest) {
 const LEAD_SELECT = "*, business:businesses(*), contact:contacts(*)";
 
 // Lead columns a caller may set (stage is applied by intake, forward-only, on the intake path).
-const LEAD_COLUMNS = ["business_id", "contact_id", "stage", "entry_stage", "source", "quiz_url", "assigned_agent", "estimated_value", "close_date", "lost_reason"] as const;
+const LEAD_COLUMNS = ["business_id", "contact_id", "stage", "entry_stage", "source", "quiz_url", "assigned_agent", "estimated_value", "close_date", "lost_reason", "next_step", "next_step_due"] as const;
 // Contact fields for a new contact; these only work with an email, via intake.
 const CONTACT_FIELDS = ["email", "first_name", "last_name", "org", "phone"] as const;
 const ALLOWED = new Set<string>([...LEAD_COLUMNS, ...CONTACT_FIELDS]);
 // Applied to the lead after intake (stage, source and ids are owned by intake).
-const POST_INTAKE = ["quiz_url", "assigned_agent", "estimated_value", "close_date", "lost_reason"] as const;
+const POST_INTAKE = ["quiz_url", "assigned_agent", "estimated_value", "close_date", "lost_reason", "next_step", "next_step_due"] as const;
 
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
 
@@ -40,6 +41,9 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return fail("Invalid input", 400);
   const unknown = Object.keys(body).filter(k => !ALLOWED.has(k));
   if (unknown.length) return fail(`Unknown field(s): ${unknown.join(", ")}`, 400);
+  const nextStep = parseNextStep(body);
+  if (!nextStep.ok) return fail(nextStep.error, 400);
+  Object.assign(body, nextStep.patch);
 
   const crm = supabaseAdmin.schema("crm");
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);

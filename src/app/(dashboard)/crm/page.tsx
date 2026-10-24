@@ -1,11 +1,13 @@
 "use client";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { fetchJson } from "@/lib/fetch-json";
 import { CRMLead, CRMStage } from "@/types";
+import { isOpenDeal, money, type EngagementProgress, type PipelineLead } from "@/lib/crm/pipeline";
 import { CreateLeadModal } from "@/components/crm/CreateLeadModal";
-import { LeadsBoard } from "@/components/crm/leads/LeadsBoard";
 import { LeadsList } from "@/components/crm/leads/LeadsList";
+import { PipelineBoard } from "@/components/crm/pipeline/PipelineBoard";
+import { DealDrawer } from "@/components/crm/pipeline/DealDrawer";
 import { Button, ErrorState, LoadingState, PageHeader, Tabs } from "@/components/ui";
 
 const VIEWS = [
@@ -18,10 +20,14 @@ function CRMPipeline() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const view: View = searchParams.get("view") === "list" ? "list" : "board";
+  // ?deal=<lead id> opens the deal drawer (Today links here).
+  const dealId = searchParams.get("deal");
 
-  const [leads, setLeads] = useState<CRMLead[]>([]);
+  const [leads, setLeads] = useState<PipelineLead[]>([]);
+  const [progress, setProgress] = useState<Record<string, EngagementProgress>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
@@ -30,48 +36,66 @@ function CRMPipeline() {
       else setLoadError(r.error);
       setLoading(false);
     });
+    fetchJson<{ progress: Record<string, EngagementProgress> }>("/api/crm/pipeline").then(r => {
+      if (r.ok) setProgress(r.data.progress ?? {});
+    });
   }, []);
 
-  function setView(id: View) {
+  const setParam = useCallback((key: string, value: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (id === "board") params.delete("view");
-    else params.set("view", id);
+    if (value === null) params.delete(key);
+    else params.set(key, value);
     const qs = params.toString();
-    router.replace(qs ? `?${qs}` : "/crm");
-  }
+    router.replace(qs ? `?${qs}` : "/crm", { scroll: false });
+  }, [router, searchParams]);
+
+  const closeDrawer = useCallback(() => setParam("deal", null), [setParam]);
 
   async function moveStage(leadId: string, stage: CRMStage) {
-    await fetch(`/api/crm/leads/${leadId}`, {
+    setMoveError(null);
+    const r = await fetchJson<PipelineLead>(`/api/crm/leads/${leadId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ stage }),
     });
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, stage } : l));
+    if (!r.ok) { setMoveError(`Couldn't move the deal: ${r.error}`); return; }
+    setLeads(prev => prev.map(l => l.id === leadId ? r.data : l));
   }
 
-  const activeCount = leads.filter(l => l.stage !== "lost").length;
+  const replaceLead = (updated: CRMLead) => setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
+
+  const open = leads.filter(l => isOpenDeal(l.stage));
+  const openValue = open.reduce((a, l) => a + (l.estimated_value ?? 0), 0);
   const wonCount = leads.filter(l => l.stage === "won").length;
+  const selected = dealId ? leads.find(l => l.id === dealId) ?? null : null;
 
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8">
       <PageHeader
         title="Pipeline"
-        description={loading || loadError ? undefined : `${activeCount} active · ${wonCount} won`}
+        description={loading || loadError ? undefined : `${open.length} open · ${money(openValue)} · ${wonCount} won`}
         actions={<Button size="sm" onClick={() => setShowCreate(true)}>+ New lead</Button>}
       />
-      <Tabs tabs={VIEWS} value={view} onChange={setView} className="mb-4" />
+      <Tabs tabs={VIEWS} value={view} onChange={id => setParam("view", id === "board" ? null : id)} className="mb-4" />
+      {moveError && <ErrorState message={moveError} className="mb-4" />}
 
       {loading ? (
         <LoadingState />
       ) : loadError ? (
         <ErrorState message={`Couldn't load leads: ${loadError}`} />
       ) : view === "list" ? (
-        <LeadsList
-          leads={leads}
-          onLeadUpdated={updated => setLeads(prev => prev.map(l => l.id === updated.id ? updated : l))}
-        />
+        <LeadsList leads={leads} onLeadUpdated={replaceLead} />
       ) : (
-        <LeadsBoard leads={leads} onMoveStage={moveStage} />
+        <PipelineBoard leads={leads} progress={progress} onMoveStage={moveStage} onOpen={l => setParam("deal", l.id)} />
+      )}
+
+      {selected && (
+        <DealDrawer
+          lead={selected}
+          progress={progress[selected.id]}
+          onClose={closeDrawer}
+          onUpdated={replaceLead}
+        />
       )}
 
       {showCreate && (

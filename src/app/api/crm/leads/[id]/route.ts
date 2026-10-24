@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { requirePermission } from "@/lib/requirePermission";
+import { parseNextStep } from "@/lib/crm/next-step";
 
 export async function GET(
   req: NextRequest,
@@ -28,11 +29,19 @@ export async function PATCH(
   if (!guard.ok) return guard.response;
 
   const { id } = await params;
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  }
+  const nextStep = parseNextStep(body);
+  if (!nextStep.ok) return NextResponse.json({ error: nextStep.error }, { status: 400 });
+  // stage_entered_at is kept by a trigger (docs/migrations/2026-10-25_d_leads_next_step.sql).
+  const rest: Record<string, unknown> = { ...body };
+  delete rest.stage_entered_at;
   const { data, error } = await supabaseAdmin
     .schema("crm")
     .from("leads")
-    .update(body)
+    .update({ ...rest, ...nextStep.patch })
     .eq("id", id)
     .select("*, business:businesses(*), contact:contacts(*)")
     .single();
