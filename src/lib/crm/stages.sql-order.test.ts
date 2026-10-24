@@ -8,6 +8,7 @@ describe("crm.intake_lead stage order", () => {
   it.each([
     "2026-10-22_crm_identity_intake.sql",
     "2026-10-24_intake_existing_client.sql",
+    "2026-10-25_b_crm_merge_dedupe.sql",
   ])("hardcoded SQL stage array in %s matches STAGES order", (name) => {
     const file = path.resolve(__dirname, "../../../docs/migrations", name);
     const sql = readFileSync(file, "utf8");

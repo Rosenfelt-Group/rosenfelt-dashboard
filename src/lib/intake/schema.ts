@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Keep in sync with crm.intake_lead (latest definition: docs/migrations/2026-10-24_intake_existing_client.sql).
+// Keep in sync with crm.intake_lead (latest definition: docs/migrations/2026-10-25_b_crm_merge_dedupe.sql).
 export const CHANNELS = [
   "website_contact", "website_assessment", "manual", "referral", "pro_bono", "quiz", "ebook",
   "contact_form", "calendly", "stripe", "typeform", "taproot", "email_inbound",
@@ -47,6 +47,11 @@ export interface IntakeResult {
   created_lead: boolean;
   /** True when the contact or business already had a won lead and this signup was logged on it (R11). */
   existing_client: boolean;
+  /**
+   * How the business was found: the contact's own, an exact org-name match, a work-domain match
+   * (colleague email, business email or website; only when no org was given), or newly created.
+   */
+  business_match: "contact" | "name" | "domain" | "created";
 }
 
 /** Channels each caller identity may submit. */
