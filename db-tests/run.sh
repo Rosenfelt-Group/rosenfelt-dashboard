@@ -140,6 +140,7 @@ shopt -s nullglob
 MIGRATIONS=("$REPO"/docs/migrations/2026-10-22_*.sql)
 [ "${#MIGRATIONS[@]}" -gt 0 ] || { echo "no docs/migrations/2026-10-22_*.sql found" >&2; exit 1; }
 MIGRATIONS+=("$REPO"/docs/migrations/2026-10-24_intake_existing_client.sql)
+MIGRATIONS+=("$REPO"/docs/migrations/2026-10-25_*.sql)
 for m in "${MIGRATIONS[@]}"; do
   echo ">> applying migration $(basename "$m")"
   psqlc -v ON_ERROR_STOP=1 < "$m"
