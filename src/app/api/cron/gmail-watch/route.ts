@@ -3,6 +3,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { gmailRead } from "@/lib/email/gmail-user";
 import { sweepStaleExecuting } from "@/lib/email/executor";
 import { getSyncState, updateSyncState, advanceCursor, logWorkflow } from "@/lib/email/gmail-sync";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+import { TRASH_RETENTION_DAYS } from "@/lib/crm/trash";
 
 const RENEW_WITHIN_MS = 48 * 3600_000;
 
@@ -33,9 +35,19 @@ async function staleApprovalSweepJob(): Promise<JobResult> {
   return { name: "stale-approval-sweep", ok: true, swept: await sweepStaleExecuting() };
 }
 
+// Removes CRM Trash older than the retention window for good (crm.purge_trash; pg_cron is not
+// installed). Items it cannot purge are reported in `skipped` and stay in Trash.
+async function purgeTrashJob(): Promise<JobResult> {
+  const { data, error } = await supabaseAdmin.schema("crm").rpc("purge_trash", { p_older_than: `${TRASH_RETENTION_DAYS} days` });
+  if (error) throw new Error(`purge_trash failed: ${error.message}`);
+  const r = data as { purged: number; skipped: unknown[] };
+  return { name: "purge-trash", ok: true, purged: r.purged, skipped: r.skipped };
+}
+
 const JOBS: { name: string; run: () => Promise<JobResult> }[] = [
   { name: "gmail-watch", run: gmailWatchJob },
   { name: "stale-approval-sweep", run: staleApprovalSweepJob },
+  { name: "purge-trash", run: purgeTrashJob },
 ];
 
 export async function GET(request: NextRequest) {

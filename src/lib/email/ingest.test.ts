@@ -28,7 +28,7 @@ vi.mock("@/lib/supabase-admin", () => ({
       from: (table: string) => {
         let out: unknown = [];
         const b: Record<string, unknown> = {};
-        for (const m of ["select", "in", "or", "neq", "order"]) {
+        for (const m of ["select", "in", "or", "neq", "order", "is"]) {
           b[m] = (...a: unknown[]) => {
             db.calls.push([`${table}.${m}`, ...a]);
             if (m === "select") out = db.results[table] ?? [];
@@ -365,6 +365,8 @@ describe("loadContactsByEmail", () => {
     expect(froms).toEqual(["contacts.select", "leads.select", "clients.select"]);
     expect(db.calls).toContainEqual(["contacts.in", "email_norm", ["a@x.com", "b@x.com"]]);
     expect(db.calls).toContainEqual(["clients.neq", "billing_status", "cancelled"]);
+    // rows in Trash never match
+    for (const t of ["contacts", "leads", "clients"]) expect(db.calls).toContainEqual([`${t}.is`, "deleted_at", null]);
   });
   it("chunks lookups into batches of 50 addresses", async () => {
     const emails = Array.from({ length: 120 }, (_, i) => `u${i}@x.com`);

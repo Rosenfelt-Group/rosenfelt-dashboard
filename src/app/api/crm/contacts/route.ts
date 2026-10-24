@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     .schema("crm")
     .from("contacts")
     .select("*, business:businesses(*)")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (error) return NextResponse.json([], { status: 500 });
   return NextResponse.json(data ?? []);
@@ -29,10 +30,15 @@ export async function POST(req: NextRequest) {
   if (error) {
     if (error.code === "23505" && /email_norm/.test(`${error.message} ${error.details ?? ""}`)) {
       const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+      // email_norm stays unique across Trash, so the match may be a deleted contact.
       const { data: existing } = await supabaseAdmin.schema("crm").from("contacts")
-        .select("id").eq("email_norm", email).maybeSingle();
+        .select("id, deleted_at").eq("email_norm", email).maybeSingle();
       return NextResponse.json(
-        { error: "A contact with this email already exists", existing_contact_id: existing?.id ?? null },
+        {
+          error: existing?.deleted_at ? "A contact with this email is in Trash. Restore it instead." : "A contact with this email already exists",
+          existing_contact_id: existing?.id ?? null,
+          existing_in_trash: !!existing?.deleted_at,
+        },
         { status: 409 },
       );
     }

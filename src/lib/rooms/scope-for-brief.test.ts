@@ -14,12 +14,14 @@ vi.mock("@/lib/supabase-admin", () => ({
         s.queries.push({ table, filters });
         const chain: Record<string, unknown> = {};
         const rows = () => table === "scope_documents"
-          ? s.docs.filter(d => Object.entries(filters).every(([k, v]) => k === "not_null" ? d[v as string] != null : d[k] === v))
+          ? s.docs.filter(d => Object.entries(filters).every(([k, v]) =>
+            k === "not_null" ? d[v as string] != null : k.startsWith("is:") ? (d[k.slice(3)] ?? null) === v : d[k] === v))
           : Object.values(s.versions).filter(v => v.id === filters.id);
         Object.assign(chain, {
           select: () => chain,
           eq: (k: string, v: unknown) => { filters[k] = v; return chain; },
           not: (k: string) => { filters.not_null = k; return chain; },
+          is: (k: string, v: unknown) => { filters[`is:${k}`] = v; return chain; },
           order: () => chain,
           limit: () => chain,
           maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
@@ -93,6 +95,12 @@ describe("findScopeForEngagement", () => {
     const r = await findScopeForEngagement(ENG);
     expect(r).toMatchObject({ title: "by client", versionNo: 1, engagementType: "assessment" });
     expect(r!.sections.map(x => x.key)).not.toContain("fit_assessment");
+  });
+
+  it("skips a scope document that is in Trash", async () => {
+    s.versions = { v: { id: "v", version_no: 1, sections: realSections() } };
+    s.docs = [doc({ engagement_id: "e1", current_version_id: "v", deleted_at: "2026-10-25T00:00:00Z" })];
+    expect(await findScopeForEngagement(ENG)).toBeNull();
   });
 
   it("a lead or client match must be the same business", async () => {

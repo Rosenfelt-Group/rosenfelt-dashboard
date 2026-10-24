@@ -9,6 +9,7 @@ export async function GET() {
     .schema("crm")
     .from("clients")
     .select("id, businesses(name)")
+    .is("deleted_at", null)
     .order("id");
 
   if (error) {

@@ -6,6 +6,8 @@ import { snapshotFromTemplate } from "@/lib/discovery/server";
 import { DraftSnapshotSchema } from "@/lib/discovery/snapshot";
 import { DiscoveryProjectType } from "@/types";
 import { requirePermission } from "@/lib/requirePermission";
+import { parseTrashTarget } from "@/lib/crm/trash";
+import { softDelete } from "@/lib/crm/trash-server";
 
 const DETAIL_SELECT =
   "*, business:businesses(id, name, website), contact:contacts(id, first_name, last_name, email)," +
@@ -93,13 +95,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   return GET(req, { params });
 }
 
-// DELETE /api/crm/discovery/:id — any status. Responses and briefs cascade; a linked
-// room keeps going without the link. The prospect's link stops working immediately.
+// DELETE /api/crm/discovery/:id — any status. Moves the invite to Trash (restorable for 30 days);
+// responses and briefs stay with it, and a linked room keeps going.
 export async function DELETE(req: NextRequest, { params }: Ctx) {
   const guard = await requirePermission(req, "manage_crm");
   if (!guard.ok) return guard.response;
 
-  const { id } = await params;
+  const parsed = parseTrashTarget({ kind: "discovery_invite", id: (await params).id });
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const id = parsed.value.id;
   const crm = supabaseAdmin.schema("crm");
   const { data: invite, error: le } = await crm.from("discovery_invites")
     .select("id, lead_id, project_title, status, response:discovery_responses(id)")
@@ -109,9 +113,8 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
   const response = (invite as { response?: unknown }).response;
   const hadResponse = Array.isArray(response) ? response.length > 0 : !!response;
 
-  const { data, error } = await crm.from("discovery_invites").delete().eq("id", id).select("id");
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data?.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const res = await softDelete("discovery_invite", id, guard.username);
+  if (!res.ok) return res;
 
   // Not `discovery_invite_id`: that key marks timeline entries for a live invite.
   const { error: ae } = await crm.from("lead_activities").insert({
