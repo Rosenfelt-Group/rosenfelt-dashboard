@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Keep in sync with crm.intake_lead (docs/migrations/2026-10-22_crm_identity_intake.sql).
+// Keep in sync with crm.intake_lead (latest definition: docs/migrations/2026-10-24_intake_existing_client.sql).
 export const CHANNELS = [
   "website_contact", "website_assessment", "manual", "referral", "pro_bono", "quiz", "ebook",
   "contact_form", "calendly", "stripe", "typeform", "taproot", "email_inbound",
@@ -45,6 +45,8 @@ export interface IntakeResult {
   lead_id: string;
   created_contact: boolean;
   created_lead: boolean;
+  /** True when the contact or business already had a won lead and this signup was logged on it (R11). */
+  existing_client: boolean;
 }
 
 /** Channels each caller identity may submit. */
