@@ -5,6 +5,7 @@ import { AgentBadge } from "@/components/AgentBadge";
 import { ErrorState } from "@/components/ui";
 import { AGENT_LIST } from "@/lib/agents";
 import { AgentHealthPill } from "./AgentHealthPill";
+import { PickleWorkLine } from "./PickleWork";
 import { useAgentOverview, type AgentHealthRow } from "./use-agent-overview";
 
 const UNKNOWN_HEALTH = (agent: string): AgentHealthRow =>
@@ -40,13 +41,16 @@ export function AgentCards() {
                     <AgentBadge agent={a.name} />
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-brand-black">{a.label}</p>
-                      <p className="text-xs text-brand-muted">port {a.port} · {a.tools} tools</p>
+                      <p className="text-xs text-brand-muted">
+                        port {a.port} · {a.tools === null ? "Claude Code" : `${a.tools} tools`}
+                      </p>
                     </div>
                   </div>
                   <AgentHealthPill health={h} />
                 </div>
 
                 <p className="text-xs text-brand-muted">{a.role}</p>
+                {a.name === "pickle" && <PickleWorkLine />}
 
                 <div className="flex gap-4 text-xs flex-wrap">
                   <span className="text-brand-muted">

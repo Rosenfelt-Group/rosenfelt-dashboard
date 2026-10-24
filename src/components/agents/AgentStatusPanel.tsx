@@ -8,6 +8,7 @@ import type { AgentName } from "@/lib/agents";
 import { AgentHealthPill } from "./AgentHealthPill";
 import { LogRow, type WorkflowLogExtended } from "./AgentHistory";
 import { useAgentOverview, type AgentHealthRow } from "./use-agent-overview";
+import { PickleWorkPanel } from "./PickleWork";
 
 const RECENT_RUNS = 10;
 
@@ -64,6 +65,8 @@ export function AgentStatusPanel({ agent }: { agent: AgentName }) {
           {h?.error ? <span className="text-red-600">{h.error}</span> : h ? "Responding to /health" : "Checking…"}
         </div>
       </div>
+
+      {agent === "pickle" && <PickleWorkPanel />}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Latency" value={h?.latency_ms != null ? `${h.latency_ms}ms` : "—"} />

@@ -11,13 +11,15 @@ const STYLES = {
 /** Up / Down / Unknown badge for an agent's /health probe. Omit `health` while it loads. */
 export function AgentHealthPill({ health }: { health?: AgentHealthRow | null }) {
   const s = health ? STYLES[health.status] ?? STYLES.unknown : STYLES.pending;
+  // Dr. Pickle's /health reports whether a job is running.
+  const busy = health?.status === "up" && (health.detail as { busy?: unknown } | null)?.busy === true;
   return (
     <span
       className={clsx("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0", s.className)}
       title={health?.error ?? undefined}
     >
       <span className={clsx("w-1.5 h-1.5 rounded-full", s.dot)} aria-hidden="true" />
-      {s.label}
+      {s.label}{busy ? " · busy" : ""}
     </span>
   );
 }
