@@ -14,7 +14,7 @@ vi.mock("@/lib/supabase-admin", () => ({
     schema: () => ({
       from: () => {
         const b: Record<string, unknown> = {};
-        for (const op of ["select", "order"]) b[op] = (...args: unknown[]) => { s.calls.push({ op, args }); return b; };
+        for (const op of ["select", "order", "is"]) b[op] = (...args: unknown[]) => { s.calls.push({ op, args }); return b; };
         b.limit = async (...args: unknown[]) => { s.calls.push({ op: "limit", args }); return { data: s.rows, error: null }; };
         return b;
       },
@@ -43,6 +43,7 @@ describe("GET /api/crm/scope?list=1", () => {
     expect(await res.json()).toEqual({ documents: [{ id: "d1", title: "Scope A" }] });
     expect(s.calls.find(c => c.op === "order")?.args[0]).toBe("created_at");
     expect(s.calls.find(c => c.op === "limit")?.args[0]).toBe(200);
+    expect(s.calls.find(c => c.op === "is")?.args).toEqual(["deleted_at", null]);
   });
 
   it("still requires lead_id or client_id without list", async () => {

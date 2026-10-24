@@ -268,7 +268,8 @@ export async function loadContactsByEmail(emails: string[]): Promise<Map<string,
 async function loadBatch(norm: string[], out: Map<string, ContactRef>): Promise<void> {
   const db = supabaseAdmin.schema("crm");
 
-  const { data: contacts, error: cErr } = await db.from("contacts").select("id, email_norm, business_id").in("email_norm", norm);
+  // Deleted (Trash) rows never match: mail from a deleted contact goes to the unmatched queue.
+  const { data: contacts, error: cErr } = await db.from("contacts").select("id, email_norm, business_id").in("email_norm", norm).is("deleted_at", null);
   if (cErr) throw new Error(`contacts lookup failed: ${cErr.message}`);
   if (!contacts?.length) return;
   const ids = contacts.map((c) => c.id as string);
@@ -278,6 +279,7 @@ async function loadBatch(norm: string[], out: Map<string, ContactRef>): Promise<
     .from("leads")
     .select("id, contact_id, stage, created_at")
     .in("contact_id", ids)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (lErr) throw new Error(`leads lookup failed: ${lErr.message}`);
 
@@ -287,6 +289,7 @@ async function loadBatch(norm: string[], out: Map<string, ContactRef>): Promise<
     .select("id, contact_id, business_id, created_at")
     .or(filter)
     .neq("billing_status", "cancelled")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (kErr) throw new Error(`clients lookup failed: ${kErr.message}`);
 

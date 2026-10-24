@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
     .schema("crm")
     .from("clients")
     .select("*, business:businesses(*), contact:contacts(*)")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (cErr) {
     console.error("clients list:", cErr);

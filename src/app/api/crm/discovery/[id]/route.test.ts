@@ -3,22 +3,25 @@ import { NextRequest } from "next/server";
 
 const s = vi.hoisted(() => ({
   invite: null as Record<string, unknown> | null,
-  deleted: [] as { id: string }[],
-  deleteCalls: [] as [string, unknown][][],
+  rpcs: [] as { fn: string; args: Record<string, unknown> }[],
+  rpcError: null as { code: string; message: string } | null,
+  deleteCalls: 0,
   inserts: [] as { table: string; row: Record<string, unknown> }[],
 }));
 
 vi.mock("@/lib/supabase-admin", () => ({
   supabaseAdmin: {
     schema: () => ({
+      rpc: async (fn: string, args: Record<string, unknown>) => {
+        s.rpcs.push({ fn, args });
+        return { data: s.rpcError ? null : { kind: args.p_kind, id: args.p_id }, error: s.rpcError };
+      },
       from: (table: string) => {
-        const eqs: [string, unknown][] = [];
-        let deleting = false;
         const b: Record<string, unknown> = {};
-        b.select = () => (deleting ? Promise.resolve({ data: s.deleted, error: null }) : b);
-        b.eq = (k: string, v: unknown) => { eqs.push([k, v]); return b; };
+        b.select = () => b;
+        b.eq = () => b;
         b.maybeSingle = async () => ({ data: s.invite, error: null });
-        b.delete = () => { deleting = true; s.deleteCalls.push(eqs); return b; };
+        b.delete = () => { s.deleteCalls++; return b; };
         b.insert = (row: Record<string, unknown>) => {
           s.inserts.push({ table, row });
           return Promise.resolve({ error: null });
@@ -41,16 +44,18 @@ const req = () => new NextRequest(`http://x/api/crm/discovery/${ID}`, { method: 
 
 beforeEach(() => {
   s.inserts = [];
-  s.deleteCalls = [];
-  s.deleted = [{ id: ID }];
+  s.deleteCalls = 0;
+  s.rpcs = [];
+  s.rpcError = null;
   s.invite = { id: ID, lead_id: "lead1", project_title: "Intake", status: "submitted", response: [{ id: "r1" }] };
 });
 
 describe("DELETE /api/crm/discovery/:id", () => {
-  it("deletes a sent invite with answers and logs it on the lead", async () => {
+  it("moves a sent invite with answers to Trash and logs it on the lead", async () => {
     const res = await DELETE(req(), ctx);
     expect(res.status).toBe(200);
-    expect(s.deleteCalls).toEqual([[["id", ID]]]);  // no status filter: any status can be deleted
+    expect(s.deleteCalls).toBe(0); // soft delete only
+    expect(s.rpcs).toEqual([{ fn: "soft_delete", args: { p_kind: "discovery_invite", p_id: ID, p_by: "brian" } }]);
     expect(s.inserts).toEqual([{
       table: "lead_activities",
       row: expect.objectContaining({
@@ -74,7 +79,20 @@ describe("DELETE /api/crm/discovery/:id", () => {
     s.invite = null;
     const res = await DELETE(req(), ctx);
     expect(res.status).toBe(404);
-    expect(s.deleteCalls).toEqual([]);
+    expect(s.rpcs).toEqual([]);
     expect(s.inserts).toEqual([]);
+  });
+
+  it("409s when it is already in Trash and logs nothing", async () => {
+    s.rpcError = { code: "TR003", message: "discovery_invite x is already in Trash" };
+    const res = await DELETE(req(), ctx);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "TR003", error: "Already in Trash" });
+    expect(s.inserts).toEqual([]);
+  });
+
+  it("400s for a non-uuid id", async () => {
+    expect((await DELETE(req(), { params: Promise.resolve({ id: "nope" }) })).status).toBe(400);
+    expect(s.rpcs).toEqual([]);
   });
 });
