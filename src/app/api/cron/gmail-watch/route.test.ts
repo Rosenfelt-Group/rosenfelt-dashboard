@@ -17,6 +17,7 @@ beforeEach(() => {
   vi.stubEnv("GMAIL_WATCH_TOPIC", "projects/p/topics/t");
   db.state.row = { history_id: "100", watch_expiration: null, last_full_sync_at: null };
   db.state.logs = [];
+  db.state.purgeCalls = [];
   gm.watch.mockResolvedValue({ historyId: "555", expiration: String(Date.now() + 7 * 24 * H) });
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -59,5 +60,11 @@ describe("GET /api/cron/gmail-watch", () => {
     const body = await res.json();
     expect(body.jobs[0]).toMatchObject({ name: "gmail-watch", ok: false });
     expect(db.state.logs[0]).toMatchObject({ workflow_name: "gmail-watch", status: "error" });
+  });
+
+  it("purges Trash older than 30 days", async () => {
+    const body = await (await GET(req("Bearer s3cret"))).json();
+    expect(db.state.purgeCalls).toEqual([{ p_older_than: "30 days" }]);
+    expect(body.jobs.find((j: { name: string }) => j.name === "purge-trash")).toEqual({ name: "purge-trash", ok: true, purged: 2, skipped: [] });
   });
 });

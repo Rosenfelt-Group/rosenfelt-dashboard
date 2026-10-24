@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     .schema("crm")
     .from("businesses")
     .select("*")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (error) return NextResponse.json([], { status: 500 });
   return NextResponse.json(data ?? []);

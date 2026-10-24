@@ -56,8 +56,8 @@ export async function listInbox(): Promise<InboxItem[]> {
     const firsts = [...new Set(need.map(nameFor).filter((n): n is string => !!n).map((n) => n.trim().split(/\s+/)[0]).filter((f) => SAFE_NAME.test(f)))];
     // One query per rule (not per row), in parallel.
     const lookups = [];
-    if (domains.length) lookups.push(db.from("contacts").select(CONTACT_COLS).or(domains.map((d) => `email_norm.ilike.%@${d}`).join(",")).limit(1000));
-    if (firsts.length) lookups.push(db.from("contacts").select(CONTACT_COLS).or(firsts.map((f) => `first_name.ilike.${f}`).join(",")).limit(1000));
+    if (domains.length) lookups.push(db.from("contacts").select(CONTACT_COLS).or(domains.map((d) => `email_norm.ilike.%@${d}`).join(",")).is("deleted_at", null).limit(1000));
+    if (firsts.length) lookups.push(db.from("contacts").select(CONTACT_COLS).or(firsts.map((f) => `first_name.ilike.${f}`).join(",")).is("deleted_at", null).limit(1000));
     for (const r of await Promise.all(lookups)) {
       if (r.error) throw new Error(r.error.message);
       addAll(r.data);
@@ -78,7 +78,8 @@ export async function listInbox(): Promise<InboxItem[]> {
 
   const wantIds = [...new Set(rows.map((r) => r.suggested_contact_id ?? suggested.get(r.id)).filter((x): x is string => !!x && !pool.has(x)))];
   if (wantIds.length) {
-    const r = await db.from("contacts").select(CONTACT_COLS).in("id", wantIds);
+    // A stored suggestion that has since gone to Trash is not shown.
+    const r = await db.from("contacts").select(CONTACT_COLS).in("id", wantIds).is("deleted_at", null);
     if (r.error) throw new Error(r.error.message);
     addAll(r.data);
   }
@@ -121,9 +122,10 @@ export async function resolveUnmatched(input: ResolveInput): Promise<{ contact_i
     created = r.created_contact;
     ref = (await loadContactsByEmail([input.create.email])).get(normalizeEmail(input.create.email)) ?? { contact_id: r.contact_id, lead_id: r.lead_id, client_id: null };
   } else {
-    const { data: c, error: cErr } = await db.from("contacts").select("id, email_norm").eq("id", input.contact_id!).maybeSingle();
+    const { data: c, error: cErr } = await db.from("contacts").select("id, email_norm, deleted_at").eq("id", input.contact_id!).maybeSingle();
     if (cErr) throw new Error(cErr.message);
     if (!c) throw new InboxError("Contact not found", 404);
+    if (c.deleted_at) throw new InboxError("That contact is in Trash", 409);
     ref = (c.email_norm ? (await loadContactsByEmail([c.email_norm as string])).get(c.email_norm as string) : undefined) ?? { contact_id: c.id as string, lead_id: null, client_id: null };
   }
 
